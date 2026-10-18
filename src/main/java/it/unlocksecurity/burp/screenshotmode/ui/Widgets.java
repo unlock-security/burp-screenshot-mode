@@ -16,6 +16,8 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.geom.Line2D;
+import java.awt.geom.Path2D;
 import java.util.function.Consumer;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -25,6 +27,7 @@ import javax.swing.JColorChooser;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTextField;
 import javax.swing.Scrollable;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -147,6 +150,38 @@ final class Widgets {
     static JButton primary(JButton button) {
         button.putClientProperty("FlatLaf.styleClass", "primary");
         return button;
+    }
+
+    /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */
+    static JButton flatIconButton(Icon icon, String tooltip, Runnable action) {
+        JButton button = iconButton(icon, tooltip, action);
+        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        return button;
+    }
+
+    static boolean isFlatLaf() {
+        for (Class<?> c = UIManager.getLookAndFeel().getClass(); c != null; c = c.getSuperclass()) {
+            if (c.getName().equals("com.formdev.flatlaf.FlatLaf")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Puts {@code component} inside the right end of {@code field}, like the regex toggle of a search box. FlatLaf
+     * (Burp) supports this natively; other look and feels get the component next to the field.
+     */
+    static JComponent withTrailing(JTextField field, JComponent component) {
+        if (isFlatLaf()) {
+            field.putClientProperty("JTextField.trailingComponent", component);
+            return field;
+        }
+        JPanel panel = new JPanel(new BorderLayout(4, 0));
+        panel.setOpaque(false);
+        panel.add(field, BorderLayout.CENTER);
+        panel.add(component, BorderLayout.EAST);
+        return panel;
     }
 
     /** A small rounded status label, such as "Modified", in the theme's warning tones. */
@@ -322,23 +357,39 @@ final class Widgets {
     /** Vector icons drawn in the component's foreground color, so they follow Burp's light and dark themes. */
     enum Glyph implements Icon {
         PLUS,
-        DELETE;
+        /** Neutral, red while the pointer is over its button: destructive, but calm in a long list of rules. */
+        TRASH;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(this == DELETE ? errorColor() : c.getForeground());
-            g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            boolean hot = c instanceof AbstractButton button && button.getModel().isRollover() && button.isEnabled();
+            g.setColor(this == TRASH && hot ? errorColor() : c.getForeground());
             g.translate(x, y);
             switch (this) {
                 case PLUS -> {
+                    g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     g.drawLine(7, 2, 7, 12);
                     g.drawLine(2, 7, 12, 7);
                 }
-                case DELETE -> {
-                    g.drawLine(3, 3, 11, 11);
-                    g.drawLine(11, 3, 3, 11);
+                case TRASH -> {
+                    g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g.draw(new Line2D.Float(2, 3.5f, 12, 3.5f));
+                    Path2D handle = new Path2D.Float();
+                    handle.moveTo(5, 3.5f);
+                    handle.lineTo(5.5f, 1.5f);
+                    handle.lineTo(8.5f, 1.5f);
+                    handle.lineTo(9, 3.5f);
+                    g.draw(handle);
+                    Path2D can = new Path2D.Float();
+                    can.moveTo(3.2f, 3.5f);
+                    can.lineTo(4, 12.5f);
+                    can.lineTo(10, 12.5f);
+                    can.lineTo(10.8f, 3.5f);
+                    g.draw(can);
+                    g.draw(new Line2D.Float(6, 6, 6, 10.5f));
+                    g.draw(new Line2D.Float(8, 6, 8, 10.5f));
                 }
             }
             g.dispose();
