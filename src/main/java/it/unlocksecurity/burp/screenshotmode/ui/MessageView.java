@@ -18,13 +18,19 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JTextPane;
+import javax.swing.text.AbstractDocument;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultCaret;
 import javax.swing.text.DefaultStyledDocument;
+import javax.swing.text.Element;
 import javax.swing.text.Highlighter;
 import javax.swing.text.JTextComponent;
+import javax.swing.text.LabelView;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledEditorKit;
+import javax.swing.text.View;
+import javax.swing.text.ViewFactory;
 
 /**
  * Read-only, line-wrapping text view of one HTTP message with syntax colors and screenshot decorations.
@@ -42,6 +48,7 @@ final class MessageView extends JTextPane {
     private int blurRectsWidth = -1;
 
     MessageView() {
+        setEditorKit(new WrapAnywhereEditorKit());
         setEditable(false);
         setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
         if (getCaret() instanceof DefaultCaret caret) {
@@ -184,6 +191,36 @@ final class MessageView extends JTextPane {
             blurRectsWidth = getWidth();
         }
         return blurRects;
+    }
+
+    /**
+     * Wraps runs without break opportunities (tokens, base64, long URLs) at any character, like Burp's and Caido's
+     * editors. Swing only breaks a run at word boundaries when its minimum span fits the row, so the longest word
+     * would otherwise overflow the view and be clipped.
+     */
+    private static final class WrapAnywhereEditorKit extends StyledEditorKit {
+
+        private final ViewFactory factory = new ViewFactory() {
+            private final ViewFactory delegate = WrapAnywhereEditorKit.super.getViewFactory();
+
+            @Override
+            public View create(Element element) {
+                if (!AbstractDocument.ContentElementName.equals(element.getName())) {
+                    return delegate.create(element);
+                }
+                return new LabelView(element) {
+                    @Override
+                    public float getMinimumSpan(int axis) {
+                        return axis == View.X_AXIS ? 0 : super.getMinimumSpan(axis);
+                    }
+                };
+            }
+        };
+
+        @Override
+        public ViewFactory getViewFactory() {
+            return factory;
+        }
     }
 
     /** Paints highlight rules: a translucent fill with an underline, or an outline ({@code rectangle} mode). */

@@ -16,19 +16,18 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.geom.Arc2D;
+import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.util.function.Consumer;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
-import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JColorChooser;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JToggleButton;
+import javax.swing.JTextField;
 import javax.swing.Scrollable;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -66,6 +65,12 @@ final class Widgets {
         label.setFont(label.getFont().deriveFont(label.getFont().getSize2D() - 1));
         label.setForeground(mutedColor());
         return label;
+    }
+
+    /** A {@link #hint} that wraps at {@code width} pixels instead of being cut off in a narrow column. */
+    static JLabel wrappingHint(String text, int width) {
+        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return hint("<html><div style='width:" + width + "px'>" + escaped + "</div></html>");
     }
 
     /** A titled block of the settings form, with an optional hint and an optional button on the right. */
@@ -115,46 +120,110 @@ final class Widgets {
         return row;
     }
 
+    /**
+     * Burp's theme gives disabled buttons near-black bold text on a lighter background than enabled ones (Light
+     * theme: {@code #4B4B4B} on white vs {@code #2B2B2B} on {@code #EEEEEE}), so they look clickable. Fade text,
+     * background and border into the panel instead. A FlatLaf style is resolved against the current theme, so it
+     * follows Burp's light/dark switch; other look and feels ignore it.
+     */
+    private static final String DISABLED_STYLE =
+        "disabledText: mix($Button.foreground,$Panel.background,35%);" +
+        "disabledBackground: $Panel.background;" +
+        "disabledBorderColor: mix($Button.borderColor,$Panel.background,60%)";
+
+    static <B extends AbstractButton> B greyedWhenDisabled(B button) {
+        button.putClientProperty("FlatLaf.style", DISABLED_STYLE);
+        return button;
+    }
+
+    static JButton button(String text) {
+        return greyedWhenDisabled(new JButton(text));
+    }
+
     static JButton iconButton(Icon icon, String tooltip, Runnable action) {
-        JButton button = new JButton(icon);
+        JButton button = greyedWhenDisabled(new JButton(icon));
         button.setToolTipText(tooltip);
         button.setMargin(new Insets(4, 6, 4, 6));
         button.addActionListener(event -> action.run());
         return button;
     }
 
-    /** Mutually exclusive toggle buttons, the Swing take on PrimeVue's SelectButton. */
-    static <E> JPanel segmented(E[] values, E selected, Consumer<E> onChange) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        panel.setOpaque(false);
-        ButtonGroup group = new ButtonGroup();
-        // A FlowLayout gap would also pad the outer edges, so separate the buttons with struts instead.
-        int gap = 0;
-        for (E value : values) {
-            JToggleButton button = new JToggleButton(value.toString(), value.equals(selected));
-            button.setMargin(new Insets(3, 10, 3, 10));
-            button.addActionListener(event -> onChange.accept(value));
-            group.add(button);
-            if (gap > 0) {
-                panel.add(javax.swing.Box.createHorizontalStrut(gap));
+    static <E> SegmentedControl<E> segmented(E[] values, E selected, Consumer<E> onChange) {
+        return new SegmentedControl<>(values, selected, onChange);
+    }
+
+    /** Burp's orange call-to-action style ({@code [style]Button.primary} in its theme); one per view. */
+    static JButton primary(JButton button) {
+        button.putClientProperty("FlatLaf.styleClass", "primary");
+        return button;
+    }
+
+    /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */
+    static JButton flatIconButton(Icon icon, String tooltip, Runnable action) {
+        JButton button = iconButton(icon, tooltip, action);
+        button.putClientProperty("JButton.buttonType", "toolBarButton");
+        return button;
+    }
+
+    static boolean isFlatLaf() {
+        for (Class<?> c = UIManager.getLookAndFeel().getClass(); c != null; c = c.getSuperclass()) {
+            if (c.getName().equals("com.formdev.flatlaf.FlatLaf")) {
+                return true;
             }
-            panel.add(button);
-            gap = 6;
         }
+        return false;
+    }
+
+    /**
+     * Puts {@code component} inside the right end of {@code field}, like the regex toggle of a search box. FlatLaf
+     * (Burp) supports this natively; other look and feels get the component next to the field.
+     */
+    static JComponent withTrailing(JTextField field, JComponent component) {
+        if (isFlatLaf()) {
+            field.putClientProperty("JTextField.trailingComponent", component);
+            return field;
+        }
+        JPanel panel = new JPanel(new BorderLayout(4, 0));
+        panel.setOpaque(false);
+        panel.add(field, BorderLayout.CENTER);
+        panel.add(component, BorderLayout.EAST);
         return panel;
     }
 
-    /** Selects the button of a {@link #segmented} panel showing the given value, without firing listeners. */
-    static void selectSegment(JPanel segmented, Object value) {
-        for (Component component : segmented.getComponents()) {
-            if (component instanceof AbstractButton button && button.getText().equals(value.toString())) {
-                button.getModel().setSelected(true);
+    /** A small rounded status label, such as "Modified", in the theme's warning tones. */
+    static JLabel chip(String text) {
+        JLabel label = new JLabel(text) {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(themeColor("Colors.palette.warning.7", new Color(0xf3e2c9)));
+                g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+                g.dispose();
+                setForeground(themeColor("Colors.palette.warning.2", new Color(0x976a14)));
+                super.paintComponent(graphics);
             }
-        }
+        };
+        label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 1));
+        label.setBorder(BorderFactory.createEmptyBorder(2, 9, 2, 9));
+        return label;
+    }
+
+    /** A color of Burp's palette (theme JSON), resolved at paint time so it follows theme switches. */
+    static Color themeColor(String key, Color fallback) {
+        Color color = UIManager.getColor(key);
+        return color != null ? color : fallback;
+    }
+
+    /** A thin vertical rule separating groups of buttons in a toolbar. */
+    static JComponent separator() {
+        javax.swing.JSeparator separator = new javax.swing.JSeparator(javax.swing.SwingConstants.VERTICAL);
+        separator.setPreferredSize(new Dimension(9, 22));
+        return separator;
     }
 
     static JButton colorButton(String hex, Consumer<String> onChange) {
-        JButton button = new JButton();
+        JButton button = greyedWhenDisabled(new JButton());
         button.setMargin(new Insets(4, 6, 4, 6));
         button.setToolTipText("Choose color");
         button.setIcon(new SwatchIcon(RuleEngine.parseColor(hex, Color.YELLOW)));
@@ -301,32 +370,39 @@ final class Widgets {
     /** Vector icons drawn in the component's foreground color, so they follow Burp's light and dark themes. */
     enum Glyph implements Icon {
         PLUS,
-        DELETE,
-        RESET;
+        /** Neutral, red while the pointer is over its button: destructive, but calm in a long list of rules. */
+        TRASH;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(this == DELETE ? errorColor() : c.getForeground());
-            g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            boolean hot = c instanceof AbstractButton button && button.getModel().isRollover() && button.isEnabled();
+            g.setColor(this == TRASH && hot ? errorColor() : c.getForeground());
             g.translate(x, y);
             switch (this) {
                 case PLUS -> {
+                    g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     g.drawLine(7, 2, 7, 12);
                     g.drawLine(2, 7, 12, 7);
                 }
-                case DELETE -> {
-                    g.drawLine(3, 3, 11, 11);
-                    g.drawLine(11, 3, 3, 11);
-                }
-                case RESET -> {
-                    g.draw(new Arc2D.Double(2, 2, 10, 10, 90, 270, Arc2D.OPEN));
-                    Path2D arrow = new Path2D.Double();
-                    arrow.moveTo(5, 0);
-                    arrow.lineTo(7.5, 2);
-                    arrow.lineTo(5, 4.5);
-                    g.draw(arrow);
+                case TRASH -> {
+                    g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g.draw(new Line2D.Float(2, 3.5f, 12, 3.5f));
+                    Path2D handle = new Path2D.Float();
+                    handle.moveTo(5, 3.5f);
+                    handle.lineTo(5.5f, 1.5f);
+                    handle.lineTo(8.5f, 1.5f);
+                    handle.lineTo(9, 3.5f);
+                    g.draw(handle);
+                    Path2D can = new Path2D.Float();
+                    can.moveTo(3.2f, 3.5f);
+                    can.lineTo(4, 12.5f);
+                    can.lineTo(10, 12.5f);
+                    can.lineTo(10.8f, 3.5f);
+                    g.draw(can);
+                    g.draw(new Line2D.Float(6, 6, 6, 10.5f));
+                    g.draw(new Line2D.Float(8, 6, 8, 10.5f));
                 }
             }
             g.dispose();

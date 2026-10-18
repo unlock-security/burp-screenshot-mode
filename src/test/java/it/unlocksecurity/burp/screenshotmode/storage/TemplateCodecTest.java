@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -70,6 +71,7 @@ class TemplateCodecTest {
         assertTrue(settings.showTimestamp);
         assertFalse(settings.showResponseInfo);
         assertEquals(ThemeMode.AUTO, settings.theme);
+        assertEquals(ViewMode.RAW, settings.view, "Caido payloads have no view");
 
         HighlightRule highlight = settings.highlights.getFirst();
         assertEquals(HighlightMode.RECTANGLE, highlight.mode);
@@ -91,11 +93,28 @@ class TemplateCodecTest {
     void roundTripsThroughEncode() {
         StoredData original = TemplateCodec.decode(v2(V2_SETTINGS)).data();
         original.templates().getFirst().settings.theme = ThemeMode.LIGHT;
+        original.templates().getFirst().settings.view = ViewMode.PRETTY;
         String encoded = TemplateCodec.encode(original);
         StoredData decoded = TemplateCodec.decode(encoded).data();
         assertEquals(encoded, TemplateCodec.encode(decoded));
         assertEquals(ThemeMode.LIGHT, decoded.templates().getFirst().settings.theme);
+        assertEquals(ViewMode.PRETTY, decoded.templates().getFirst().settings.view);
         assertFalse(encoded.contains("\"color\": \"#000000\""), "mode-specific fields only for their mode");
+    }
+
+    @Test
+    void comparesSettingsByWhatWouldBeStored() {
+        Settings settings = decodeSettings(v2(V2_SETTINGS));
+        Settings copy = settings.copy();
+        assertTrue(TemplateCodec.sameSettings(settings, copy));
+
+        copy.redactions.getFirst().replacementText = "###";
+        assertFalse(TemplateCodec.sameSettings(settings, copy), "a rule edit counts");
+
+        Settings full = Settings.defaults();
+        Settings fullWithStalePixels = Settings.defaults();
+        fullWithStalePixels.widthPixels = 1234;
+        assertTrue(TemplateCodec.sameSettings(full, fullWithStalePixels), "pixels are not stored in full width");
     }
 
     @Test

@@ -10,8 +10,10 @@ import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.Insets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.JButton;
@@ -21,6 +23,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import javax.swing.JToggleButton;
 import javax.swing.UIManager;
 
 /** Editors for highlight and redaction rules. Edits mutate the rule in place and then call {@code onChange}. */
@@ -43,7 +46,7 @@ final class RuleCards {
         rebuild[0] = () -> {
             list.clear();
             if (rules.isEmpty()) {
-                list.addItem(Widgets.hint(emptyText));
+                list.addItem(Widgets.wrappingHint(emptyText, 260));
             }
             for (R rule : rules) {
                 list.addItem(
@@ -60,7 +63,9 @@ final class RuleCards {
         rebuild[0].run();
 
         JButton add = Widgets.iconButton(Widgets.Glyph.PLUS, "Add rule", () -> {
-            rules.add(factory.get());
+            // Caido appends new rules; we prepend so the new card shows up right below the button instead of at the
+            // bottom of a possibly long, scrolled-away list.
+            rules.addFirst(factory.get());
             rebuild[0].run();
             onChange.run();
         });
@@ -71,10 +76,17 @@ final class RuleCards {
         JComponent create(R rule, Runnable onChange, Runnable onDelete);
     }
 
+    /** Two rows: the pattern (with its regex toggle) and delete; then where and how it applies. */
     static JComponent highlightCard(HighlightRule rule, Runnable onChange, Runnable onDelete, Font mono) {
         JTextField pattern = patternField(rule.regex, rule.matchMode, mono);
         Widgets.onTextChange(pattern, text -> {
             rule.regex = text;
+            validate(pattern, rule.regex, rule.matchMode);
+            onChange.run();
+        });
+        JToggleButton regex = regexToggle(rule.matchMode, value -> {
+            rule.matchMode = value;
+            setPlaceholder(pattern, value);
             validate(pattern, rule.regex, rule.matchMode);
             onChange.run();
         });
@@ -91,30 +103,29 @@ final class RuleCards {
             rule.color = value;
             onChange.run();
         });
-        JPanel matchMode = Widgets.segmented(MatchMode.values(), rule.matchMode, value -> {
-            rule.matchMode = value;
-            setPlaceholder(pattern, value);
-            validate(pattern, rule.regex, rule.matchMode);
-            onChange.run();
-        });
 
-        JPanel card = Widgets.card(new BorderLayout(0, 8));
-        card.add(patternRow(pattern, onDelete), BorderLayout.NORTH);
-        card.add(Widgets.row(target, mode, color, matchMode), BorderLayout.CENTER);
+        JPanel card = Widgets.card(new BorderLayout(0, 6));
+        card.add(patternRow(pattern, regex, onDelete), BorderLayout.NORTH);
+        card.add(Widgets.row(target, mode, color), BorderLayout.CENTER);
         return card;
     }
 
+    /** Like {@link #highlightCard}, plus a capture group row shown only while the regex has groups. */
     static JComponent redactionCard(RedactionRule rule, Runnable onChange, Runnable onDelete, Font mono) {
         JTextField pattern = patternField(rule.regex, rule.matchMode, mono);
         JPanel groups = new JPanel(new WrapLayout(6, 0));
         groups.setOpaque(false);
-        int[] groupCount = { RuleEngine.countGroups(rule.regex, rule.matchMode) };
-        Runnable rebuildGroups = () -> rebuildGroups(groups, rule, groupCount[0], onChange);
+        AtomicReference<List<String>> groupLabels = new AtomicReference<>(
+            RuleEngine.groupLabels(rule.regex, rule.matchMode)
+        );
+        Runnable rebuildGroups = () -> rebuildGroups(groups, rule, groupLabels.get(), onChange);
         rebuildGroups.run();
 
         // Port of handleRegexChange: auto-select capture groups as they appear in the pattern.
         Consumer<String> patternChanged = text -> {
-            int newCount = RuleEngine.countGroups(text, rule.matchMode);
+            List<String> newLabels = RuleEngine.groupLabels(text, rule.matchMode);
+            int oldCount = groupLabels.get().size();
+            int newCount = newLabels.size();
             rule.regex = text;
             if (newCount == 0) {
                 rule.useCaptureGroups = false;
@@ -129,17 +140,23 @@ final class RuleCards {
                         .filter(g -> g <= newCount)
                         .toList()
                 );
-                selected.addAll(allGroups(groupCount[0] + 1, newCount));
+                selected.addAll(allGroups(oldCount + 1, newCount));
                 rule.selectedGroups = selected;
             }
-            if (newCount != groupCount[0]) {
-                groupCount[0] = newCount;
+            // Also on a renamed group, whose checkbox is labelled with the name.
+            if (!newLabels.equals(groupLabels.get())) {
+                groupLabels.set(newLabels);
                 rebuildGroups.run();
             }
             validate(pattern, rule.regex, rule.matchMode);
             onChange.run();
         };
         Widgets.onTextChange(pattern, patternChanged);
+        JToggleButton regex = regexToggle(rule.matchMode, value -> {
+            rule.matchMode = value;
+            setPlaceholder(pattern, value);
+            patternChanged.accept(rule.regex);
+        });
 
         JComboBox<RuleTarget> target = combo(RuleTarget.values(), rule.target, value -> {
             rule.target = value;
@@ -149,8 +166,9 @@ final class RuleCards {
             rule.color = value;
             onChange.run();
         });
-        JTextField replacement = new JTextField(rule.replacementText, 10);
+        JTextField replacement = new JTextField(rule.replacementText, 11);
         replacement.setFont(mono);
+        replacement.setCaretPosition(0);
         Widgets.placeholder(replacement, RedactionRule.DEFAULT_REPLACEMENT);
         Widgets.onTextChange(replacement, text -> {
             rule.replacementText = text;
@@ -174,38 +192,32 @@ final class RuleCards {
         modeRow.add(color);
         modeRow.add(replacement);
 
-        JPanel matchMode = Widgets.segmented(MatchMode.values(), rule.matchMode, value -> {
-            rule.matchMode = value;
-            setPlaceholder(pattern, value);
-            patternChanged.accept(rule.regex);
-        });
-
-        JPanel lower = new JPanel(new BorderLayout(0, 8));
+        JPanel lower = new JPanel(new BorderLayout(0, 6));
         lower.setOpaque(false);
         lower.add(modeRow, BorderLayout.NORTH);
         lower.add(groups, BorderLayout.CENTER);
-        lower.add(Widgets.row(matchMode), BorderLayout.SOUTH);
 
-        JPanel card = Widgets.card(new BorderLayout(0, 8));
-        card.add(patternRow(pattern, onDelete), BorderLayout.NORTH);
+        JPanel card = Widgets.card(new BorderLayout(0, 6));
+        card.add(patternRow(pattern, regex, onDelete), BorderLayout.NORTH);
         card.add(lower, BorderLayout.CENTER);
         return card;
     }
 
-    private static void rebuildGroups(JPanel panel, RedactionRule rule, int count, Runnable onChange) {
+    /** @param labels label of each capture group, see {@link RuleEngine#groupLabels} */
+    private static void rebuildGroups(JPanel panel, RedactionRule rule, List<String> labels, Runnable onChange) {
+        int count = labels.size();
         panel.removeAll();
-        JCheckBox enabled = new JCheckBox(
-            count == 0 ? "No capture groups" : "Only redact groups:",
-            rule.useCaptureGroups
-        );
+        panel.setVisible(count > 0);
+        JCheckBox enabled = new JCheckBox("Redact only", rule.useCaptureGroups);
+        enabled.setToolTipText("Redact only the selected capture groups instead of the whole match");
         enabled.setOpaque(false);
-        enabled.setEnabled(count > 0);
         panel.add(enabled);
 
         List<JCheckBox> boxes = new ArrayList<>();
         for (int group = 1; group <= count; group++) {
             int index = group;
-            JCheckBox box = new JCheckBox(String.valueOf(group), rule.selectedGroups.contains(group));
+            JCheckBox box = new JCheckBox(labels.get(group - 1), rule.selectedGroups.contains(group));
+            box.setToolTipText("Group " + group);
             box.setOpaque(false);
             box.setEnabled(rule.useCaptureGroups);
             box.addActionListener(event -> {
@@ -251,11 +263,35 @@ final class RuleCards {
         return field;
     }
 
-    private static JPanel patternRow(JTextField pattern, Runnable onDelete) {
-        JPanel row = new JPanel(new BorderLayout(6, 0));
+    /**
+     * The match mode as a {@code .*} toggle inside the pattern field, as in Burp's and IDEs' search boxes: on for a
+     * regular expression, off for a literal string.
+     */
+    private static JToggleButton regexToggle(MatchMode matchMode, Consumer<MatchMode> onChange) {
+        JToggleButton toggle = Widgets.greyedWhenDisabled(new JToggleButton(".*", matchMode == MatchMode.REGEX));
+        toggle.putClientProperty("JButton.buttonType", "toolBarButton");
+        toggle.setFont(new Font(Font.MONOSPACED, Font.BOLD, toggle.getFont().getSize()));
+        toggle.setMargin(new Insets(0, 4, 0, 4));
+        toggle.setFocusable(false);
+        Runnable tooltip = () ->
+            toggle.setToolTipText(
+                toggle.isSelected()
+                    ? "Regular expression (click to match the literal text)"
+                    : "Literal text (click to use a regular expression)"
+            );
+        tooltip.run();
+        toggle.addActionListener(event -> {
+            tooltip.run();
+            onChange.accept(toggle.isSelected() ? MatchMode.REGEX : MatchMode.STRING);
+        });
+        return toggle;
+    }
+
+    private static JPanel patternRow(JTextField pattern, JToggleButton regex, Runnable onDelete) {
+        JPanel row = new JPanel(new BorderLayout(4, 0));
         row.setOpaque(false);
-        row.add(pattern, BorderLayout.CENTER);
-        row.add(Widgets.iconButton(Widgets.Glyph.DELETE, "Delete rule", onDelete), BorderLayout.EAST);
+        row.add(Widgets.withTrailing(pattern, regex), BorderLayout.CENTER);
+        row.add(Widgets.flatIconButton(Widgets.Glyph.TRASH, "Delete rule", onDelete), BorderLayout.EAST);
         return row;
     }
 

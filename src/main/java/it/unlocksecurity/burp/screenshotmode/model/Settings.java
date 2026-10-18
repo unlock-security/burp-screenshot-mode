@@ -76,6 +76,8 @@ public final class Settings {
     public boolean showResponseInfo = true;
     /** Not part of the Caido plugin: Swing has no CSS theme to inherit, so the capture palette is selectable. */
     public ThemeMode theme = ThemeMode.AUTO;
+    /** Not part of the Caido plugin: Caido's editors cannot pretty print, Burp's can. */
+    public ViewMode view = ViewMode.RAW;
 
     public static Settings defaults() {
         Settings settings = new Settings();
@@ -103,6 +105,7 @@ public final class Settings {
         copy.showTimestamp = showTimestamp;
         copy.showResponseInfo = showResponseInfo;
         copy.theme = theme;
+        copy.view = view;
         return copy;
     }
 }

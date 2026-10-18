@@ -12,6 +12,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
@@ -88,7 +89,7 @@ class RenderPreviewTest {
         settings.highlights.add(note);
 
         RedactionRule token = RedactionRule.create(
-            "Bearer (\\S+)",
+            "Bearer (?<token>\\S+)",
             RuleTarget.REQUEST,
             RedactionMode.BLUR,
             MatchMode.REGEX
@@ -180,6 +181,15 @@ class RenderPreviewTest {
         BufferedImage image = render(settings, Palette.LIGHT, 612, 900);
         assertTrue(hasVariation(image));
         ImageCapture.save(image, output("stacked-light.png"));
+    }
+
+    @Test
+    void rendersPrettyBodies() throws Exception {
+        Settings settings = sampleSettings();
+        settings.view = ViewMode.PRETTY;
+        BufferedImage image = render(settings, Palette.DARK, 1100, 700);
+        assertTrue(hasVariation(image));
+        ImageCapture.save(image, output("pretty-dark.png"));
     }
 
     @Test

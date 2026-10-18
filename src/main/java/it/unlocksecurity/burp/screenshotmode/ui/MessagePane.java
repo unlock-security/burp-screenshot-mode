@@ -5,16 +5,21 @@ import it.unlocksecurity.burp.screenshotmode.render.Decorated;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import javax.swing.BorderFactory;
+import javax.swing.BoundedRangeModel;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingUtilities;
 
 /** Titled, scrollable message view: the "Request" or "Response" half of the screenshot. */
 final class MessagePane extends JPanel {
@@ -40,7 +45,7 @@ final class MessagePane extends JPanel {
     private final JLabel title;
     private final MessageView view = new MessageView();
     private final LineNumberGutter gutter = new LineNumberGutter(view);
-    private final JScrollPane scroll = new JScrollPane(view);
+    private final JScrollPane scroll = new ChainedScrollPane(view);
     private SelectionListener selectionListener = (action, text, target) -> {};
     private boolean scrollbarVisible;
 
@@ -108,6 +113,40 @@ final class MessagePane extends JPanel {
     /** Extra height the view needs to show everything without scrolling (negative when there is spare room). */
     int overflow() {
         return view.getPreferredSize().height - scroll.getViewport().getExtentSize().height;
+    }
+
+    /**
+     * Passes wheel scrolling it cannot use (nothing to scroll, or already at the top or bottom) on to the enclosing
+     * scroll pane, as browsers do. Swing would swallow it, so once "Fit to Content" makes the whole message fit, the
+     * preview could no longer be scrolled with the wheel or trackpad over the request and response.
+     */
+    private static final class ChainedScrollPane extends JScrollPane {
+
+        ChainedScrollPane(Component view) {
+            super(view);
+        }
+
+        @Override
+        protected void processMouseWheelEvent(MouseWheelEvent e) {
+            JScrollPane outer = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, this);
+            if (outer == null || canScroll(e)) {
+                super.processMouseWheelEvent(e);
+            } else {
+                outer.dispatchEvent(SwingUtilities.convertMouseEvent(this, e, outer));
+                e.consume();
+            }
+        }
+
+        private boolean canScroll(MouseWheelEvent e) {
+            JScrollBar bar = getVerticalScrollBar();
+            if (e.isShiftDown() || !bar.isVisible()) {
+                return false;
+            }
+            BoundedRangeModel model = bar.getModel();
+            return e.getPreciseWheelRotation() < 0
+                ? model.getValue() > model.getMinimum()
+                : model.getValue() + model.getExtent() < model.getMaximum();
+        }
     }
 
     private void maybeShowMenu(MouseEvent e) {

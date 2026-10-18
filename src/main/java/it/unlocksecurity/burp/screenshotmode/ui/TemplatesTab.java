@@ -3,10 +3,13 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -16,6 +19,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -35,6 +40,8 @@ import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumn;
 import javax.swing.table.TableRowSorter;
 
 /** Suite tab managing screenshot templates (port of the Caido plugin's Settings page). */
@@ -53,9 +60,11 @@ public final class TemplatesTab extends JPanel {
     private final TableRowSorter<TemplateTableModel> sorter = new TableRowSorter<>(model);
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
-    private final JButton edit = new JButton("Edit");
-    private final JButton setDefault = new JButton("Set as Default");
-    private final JButton delete = new JButton("Delete");
+    private final JButton edit = Widgets.button("Edit");
+    private final JButton duplicate = Widgets.button("Duplicate");
+    private final JButton setDefault = Widgets.button("Set as default");
+    private final JButton delete = Widgets.button("Delete");
+    private Predicate<String> confirmDiscard = this::askDiscard;
 
     public TemplatesTab(TemplateStore store, Host host) {
         this.store = store;
@@ -69,16 +78,10 @@ public final class TemplatesTab extends JPanel {
     }
 
     private JComponent buildList() {
-        JLabel title = new JLabel("Screenshot Mode");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 4));
-        JPanel header = new JPanel(new BorderLayout(0, 4));
-        header.add(title, BorderLayout.NORTH);
-        header.add(
-            Widgets.hint(
-                "Templates for pretty request/response screenshots. Right-click a request anywhere in Burp " +
-                    "and choose Extensions › Screenshot Mode › Screenshot, or press Ctrl+Shift+S."
-            ),
-            BorderLayout.CENTER
+        // The suite tab is already named "Screenshot Mode": no title, just how to take a screenshot.
+        JLabel header = Widgets.hint(
+            "Templates for request/response screenshots. Right-click a request anywhere in Burp and choose " +
+                "Extensions › Screenshot Mode › Screenshot, or press Ctrl+Shift+S."
         );
 
         JTextField search = new JTextField(24);
@@ -91,18 +94,38 @@ public final class TemplatesTab extends JPanel {
             )
         );
 
-        JButton create = new JButton("Create Template");
-        create.addActionListener(event -> openEditor(null));
-        edit.addActionListener(event -> selected().ifPresent(this::openEditor));
+        JButton create = Widgets.primary(Widgets.button("New template"));
+        create.addActionListener(event -> openEditor(null, false));
+        edit.addActionListener(event -> selected().ifPresent(template -> openEditor(template, false)));
+        duplicate.setToolTipText("Create a new template starting from the selected one");
+        duplicate.addActionListener(event -> selected().ifPresent(template -> openEditor(template, true)));
         setDefault.addActionListener(event -> selected().ifPresent(this::makeDefault));
         delete.addActionListener(event -> selected().ifPresent(this::delete));
-        JButton importButton = new JButton("Import…");
+        JButton importButton = Widgets.button("Import…");
         importButton.setToolTipText("Add templates from a JSON export (this extension's or the Caido plugin's format)");
         importButton.addActionListener(event -> importTemplates());
-        JButton exportButton = new JButton("Export…");
+        JButton exportButton = Widgets.button("Export…");
         exportButton.addActionListener(event -> exportTemplates());
 
-        JPanel toolbar = Widgets.row(search, create, edit, setDefault, delete, importButton, exportButton);
+        exportButton.setToolTipText("Save all templates to a JSON file");
+
+        // Actions on the selected template together, Delete set apart from them, file actions and the primary
+        // action on the right.
+        JPanel selection = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        selection.add(search);
+        selection.add(Widgets.separator());
+        selection.add(edit);
+        selection.add(duplicate);
+        selection.add(setDefault);
+        selection.add(Widgets.separator());
+        selection.add(delete);
+        JPanel global = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        global.add(importButton);
+        global.add(exportButton);
+        global.add(create);
+        JPanel toolbar = new JPanel(new BorderLayout(12, 0));
+        toolbar.add(selection, BorderLayout.CENTER);
+        toolbar.add(global, BorderLayout.EAST);
 
         table.setRowSorter(sorter);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -110,21 +133,22 @@ public final class TemplatesTab extends JPanel {
         table.getTableHeader().setReorderingAllowed(false);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
         table.getColumnModel().getColumn(TemplateTableModel.DEFAULT).setMaxWidth(70);
-        DefaultTableCellRenderer centered = new DefaultTableCellRenderer();
-        centered.setHorizontalAlignment(SwingConstants.CENTER);
-        for (int column : new int[] {
-            TemplateTableModel.DEFAULT,
-            TemplateTableModel.HIGHLIGHTS,
-            TemplateTableModel.REDACTIONS,
-        }) {
-            table.getColumnModel().getColumn(column).setCellRenderer(centered);
+        // Short values and counts are centred; the name is left-aligned, as free text reads best that way. Each
+        // header is aligned like its values.
+        for (int column = 0; column < model.getColumnCount(); column++) {
+            int alignment = column == TemplateTableModel.NAME ? SwingConstants.LEADING : SwingConstants.CENTER;
+            DefaultTableCellRenderer cells = new DefaultTableCellRenderer();
+            cells.setHorizontalAlignment(alignment);
+            TableColumn tableColumn = table.getColumnModel().getColumn(column);
+            tableColumn.setCellRenderer(cells);
+            tableColumn.setHeaderRenderer(alignedHeader(alignment));
         }
         table.addMouseListener(
             new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     if (e.getClickCount() == 2 && table.rowAtPoint(e.getPoint()) >= 0) {
-                        selected().ifPresent(TemplatesTab.this::openEditor);
+                        selected().ifPresent(template -> openEditor(template, false));
                     }
                 }
             }
@@ -142,15 +166,29 @@ public final class TemplatesTab extends JPanel {
         return panel;
     }
 
-    private JComponent buildEditor(Template template) {
-        boolean editing = template != null;
-        Settings working = editing ? template.settings.copy() : Settings.defaults();
+    /**
+     * @param template  the template to edit or duplicate, {@code null} to create one from the default settings
+     * @param duplicate create a new template starting from {@code template}'s settings (not in the Caido plugin)
+     */
+    private JComponent buildEditor(Template template, boolean duplicate) {
+        boolean editing = template != null && !duplicate;
+        Settings original = template != null ? template.settings.copy() : Settings.defaults();
+        Settings working = original.copy();
+        String originalName = editing ? template.name : duplicate ? copyName(template.name) : "";
 
-        JTextField name = new JTextField(editing ? template.name : "", 30);
-        Widgets.placeholder(name, "Enter template name");
-        JButton save = new JButton("Save");
-        save.setEnabled(!name.getText().isBlank());
-        Widgets.onTextChange(name, text -> save.setEnabled(!text.isBlank()));
+        JTextField name = new JTextField(originalName, 30);
+        Widgets.placeholder(name, "Template name");
+        JLabel unsaved = Widgets.chip("Unsaved");
+        unsaved.setToolTipText("This template has changes that are not saved yet");
+        JButton save = Widgets.primary(Widgets.button("Save"));
+        BooleanSupplier dirty = () ->
+            !name.getText().trim().equals(originalName) || !TemplateCodec.sameSettings(original, working);
+        Runnable updateState = () -> {
+            save.setEnabled(!name.getText().isBlank());
+            unsaved.setVisible(dirty.getAsBoolean());
+        };
+        updateState.run();
+        Widgets.onTextChange(name, text -> updateState.run());
         save.addActionListener(event -> {
             String trimmed = name.getText().trim();
             if (editing) {
@@ -162,14 +200,32 @@ public final class TemplatesTab extends JPanel {
             }
             showList();
         });
-        JButton back = new JButton("Back");
-        back.addActionListener(event -> showList());
+        JButton cancel = Widgets.button("Cancel");
+        String displayName = originalName.isBlank() ? "this template" : "\"" + originalName + "\"";
+        cancel.addActionListener(event -> {
+            if (!dirty.getAsBoolean() || confirmDiscard.test(displayName)) {
+                showList();
+            }
+        });
 
-        JLabel title = new JLabel(editing ? "Edit Template" : "Create Template");
+        JLabel title = new JLabel(
+            editing
+                ? "Edit \"" + template.name + "\""
+                : duplicate
+                  ? "Duplicate \"" + template.name + "\""
+                  : "New template"
+        );
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 3));
+        JPanel heading = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        heading.add(Widgets.hint("Templates ›"));
+        heading.add(title);
+        heading.add(unsaved);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        actions.add(cancel);
+        actions.add(save);
         JPanel bar = new JPanel(new BorderLayout(12, 0));
-        bar.add(Widgets.row(back, title), BorderLayout.CENTER);
-        bar.add(save, BorderLayout.EAST);
+        bar.add(heading, BorderLayout.CENTER);
+        bar.add(actions, BorderLayout.EAST);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
@@ -177,24 +233,78 @@ public final class TemplatesTab extends JPanel {
             )
         );
 
-        Widgets.Stack body = new Widgets.Stack(20);
-        body.setBorder(BorderFactory.createEmptyBorder(16, 0, 16, 0));
-        body.addItem(Widgets.section("Template Name", null, null, Widgets.row(name)));
-        body.addItem(new SettingsForm(working, () -> {}, host.editorFont().get(), true));
-        JScrollPane scroll = new JScrollPane(body);
-        scroll.setBorder(null);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        JLabel nameLabel = Widgets.title("Name");
+        nameLabel.setLabelFor(name);
+        JPanel nameRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        nameRow.setBorder(BorderFactory.createEmptyBorder(14, 0, 10, 0));
+        nameRow.add(nameLabel);
+        nameRow.add(name);
+
+        JPanel body = new JPanel(new BorderLayout());
+        body.add(nameRow, BorderLayout.NORTH);
+        body.add(new SettingsForm(working, updateState, host.editorFont().get(), true), BorderLayout.CENTER);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 0, 16));
         panel.add(bar, BorderLayout.NORTH);
-        panel.add(scroll, BorderLayout.CENTER);
+        panel.add(body, BorderLayout.CENTER);
         return panel;
     }
 
-    private void openEditor(Template template) {
+    private boolean askDiscard(String templateName) {
+        Object[] options = { "Discard", "Keep editing" };
+        int answer = JOptionPane.showOptionDialog(
+            this,
+            "Your changes to " + templateName + " haven't been saved.",
+            "Discard changes?",
+            JOptionPane.DEFAULT_OPTION,
+            JOptionPane.WARNING_MESSAGE,
+            null,
+            options,
+            options[1]
+        );
+        return answer == 0;
+    }
+
+    /** Replaces the "discard unsaved changes?" dialog, for tests. */
+    void setDiscardConfirmation(Predicate<String> confirmation) {
+        this.confirmDiscard = confirmation;
+    }
+
+    /** First free "name (copy)", "name (copy 2)", ... among the existing template names. */
+    private String copyName(String name) {
+        List<String> names = store
+            .templates()
+            .stream()
+            .map(template -> template.name)
+            .toList();
+        String candidate = name + " (copy)";
+        for (int i = 2; names.contains(candidate); i++) {
+            candidate = name + " (copy " + i + ")";
+        }
+        return candidate;
+    }
+
+    /**
+     * Wraps the header's current default renderer, looked up on every call so it stays the look and feel's (and
+     * follows Burp's theme switches), only changing the alignment of its label.
+     */
+    private TableCellRenderer alignedHeader(int alignment) {
+        return (table, value, isSelected, hasFocus, row, column) -> {
+            Component component = this.table
+                .getTableHeader()
+                .getDefaultRenderer()
+                .getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (component instanceof JLabel label) {
+                label.setHorizontalAlignment(alignment);
+            }
+            return component;
+        };
+    }
+
+    private void openEditor(Template template, boolean duplicate) {
         editorHolder.removeAll();
-        editorHolder.add(buildEditor(template), BorderLayout.CENTER);
+        editorHolder.add(buildEditor(template, duplicate), BorderLayout.CENTER);
         editorHolder.revalidate();
         cards.show(this, EDITOR);
     }
@@ -231,6 +341,7 @@ public final class TemplatesTab extends JPanel {
         Optional<Template> selected = selected();
         boolean isDefault = selected.map(template -> template.id.equals(store.defaultTemplateId())).orElse(false);
         edit.setEnabled(selected.isPresent());
+        duplicate.setEnabled(selected.isPresent());
         setDefault.setEnabled(selected.isPresent() && !isDefault);
         delete.setEnabled(selected.isPresent() && !isDefault);
         delete.setToolTipText(isDefault ? "The default template cannot be deleted" : null);
