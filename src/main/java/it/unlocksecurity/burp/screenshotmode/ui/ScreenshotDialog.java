@@ -73,10 +73,11 @@ final class ScreenshotDialog extends JDialog {
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final Timer renderTimer = new Timer(150, event -> render());
-    private final JButton resetHeight = Widgets.button("Reset Height");
+    private final JButton resetHeight = Widgets.button("Reset height");
     private final JLabel modified = Widgets.chip("Modified");
     private final JButton revert = Widgets.button("Revert");
     private final JButton update = Widgets.button("Update template");
+    private final JLabel output = Widgets.hint("");
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
     private int selectedTab = SettingsForm.RULES;
@@ -213,20 +214,37 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        JButton fit = Widgets.button("Fit to Content");
+        JButton fit = Widgets.button("Fit to content");
         fit.setToolTipText("Crop the height so the whole request and response are visible");
         fit.addActionListener(event -> fitToContent());
+        resetHeight.setToolTipText("Fill the window height again");
         resetHeight.addActionListener(event -> preview.setCropHeight(null));
+        output.setToolTipText("Drag the handle below the screenshot to crop its height");
 
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
-        bar.add(Widgets.hint("Drag the handle below the content to crop it • right-click selected text to add rules"));
-        bar.add(fit);
-        bar.add(resetHeight);
-        bar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Widgets.borderColor()));
+        JLabel tip = Widgets.hint("Right-click selected text to add a rule");
+        tip.setToolTipText(
+            "Select text in the request or response, then right-click to highlight it, redact it or hide its header"
+        );
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        left.add(output);
+        left.add(tip);
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        right.add(fit);
+        right.add(resetHeight);
+
+        JPanel bar = new JPanel(new BorderLayout(8, 0));
+        bar.add(left, BorderLayout.CENTER);
+        bar.add(right, BorderLayout.EAST);
+        bar.setBorder(
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
+                BorderFactory.createEmptyBorder(5, 8, 5, 8)
+            )
+        );
 
         JPanel column = new JPanel(new BorderLayout());
+        column.add(bar, BorderLayout.NORTH);
         column.add(previewScroll, BorderLayout.CENTER);
-        column.add(bar, BorderLayout.SOUTH);
         return column;
     }
 
@@ -249,6 +267,15 @@ final class ScreenshotDialog extends JDialog {
         modified.setVisible(differs);
         revert.setEnabled(differs);
         update.setEnabled(differs);
+    }
+
+    private void updateOutputLabel(Settings settings) {
+        String width = switch (settings.widthMode) {
+            case FULL -> "full width";
+            case PIXEL -> settings.widthPixels + " px wide";
+            case A4, LETTER -> settings.widthMode.label();
+        };
+        output.setText("2× PNG · " + width);
     }
 
     /**
@@ -303,6 +330,7 @@ final class ScreenshotDialog extends JDialog {
 
         preview.setMaxContentWidth(maxWidth);
         updateTemplateState();
+        updateOutputLabel(settings);
         preview.setBackground(palette.canvas());
         preview.setHandleColors(palette.canvas(), palette.muted());
         previewScroll.getViewport().setBackground(palette.canvas());

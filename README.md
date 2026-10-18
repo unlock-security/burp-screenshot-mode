@@ -28,7 +28,7 @@ No external tools, no manual cropping and blurring.
   groups (e.g. `session=([0-9a-f]+)` redacts only the value).
 - **Right-click selected text** in the preview to highlight it, redact it or hide its header in one click.
 - **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
-- **Crop** the captured height with the drag handle, or **Fit to Content** to show the whole messages.
+- **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
 - **Metadata footer**: request timestamp and response size/round-trip time.
 - **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
   suite tab, and import/export them as JSON.
