@@ -19,14 +19,12 @@ import java.awt.RenderingHints;
 import java.util.function.Consumer;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
-import javax.swing.ButtonGroup;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JColorChooser;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JToggleButton;
 import javax.swing.Scrollable;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -141,34 +139,8 @@ final class Widgets {
         return button;
     }
 
-    /** Mutually exclusive toggle buttons, the Swing take on PrimeVue's SelectButton. */
-    static <E> JPanel segmented(E[] values, E selected, Consumer<E> onChange) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        panel.setOpaque(false);
-        ButtonGroup group = new ButtonGroup();
-        // A FlowLayout gap would also pad the outer edges, so separate the buttons with struts instead.
-        int gap = 0;
-        for (E value : values) {
-            JToggleButton button = greyedWhenDisabled(new JToggleButton(value.toString(), value.equals(selected)));
-            button.setMargin(new Insets(3, 10, 3, 10));
-            button.addActionListener(event -> onChange.accept(value));
-            group.add(button);
-            if (gap > 0) {
-                panel.add(javax.swing.Box.createHorizontalStrut(gap));
-            }
-            panel.add(button);
-            gap = 6;
-        }
-        return panel;
-    }
-
-    /** Selects the button of a {@link #segmented} panel showing the given value, without firing listeners. */
-    static void selectSegment(JPanel segmented, Object value) {
-        for (Component component : segmented.getComponents()) {
-            if (component instanceof AbstractButton button && button.getText().equals(value.toString())) {
-                button.getModel().setSelected(true);
-            }
-        }
+    static <E> SegmentedControl<E> segmented(E[] values, E selected, Consumer<E> onChange) {
+        return new SegmentedControl<>(values, selected, onChange);
     }
 
     /** Burp's orange call-to-action style ({@code [style]Button.primary} in its theme); one per view. */

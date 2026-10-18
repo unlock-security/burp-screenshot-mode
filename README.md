@@ -38,7 +38,8 @@ No external tools, no manual cropping and blurring.
 
 1. Right-click a request anywhere in Burp (Repeater, Proxy, HTTP history, Target site map, Logger, …) and choose
    **Extensions › Screenshot Mode › Screenshot**, or press **Ctrl+Shift+S**.
-2. Pick a template and tweak headers, layout, width, highlights and redactions. The preview updates as you type.
+2. Pick a template and tweak the rules (highlights and redactions), the hidden headers and the appearance, each in
+   its own tab. The preview updates as you type.
 3. Click **Copy to clipboard** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**). Copy only copies the
    screenshot when no text is selected; with a selection it copies the text as usual.
 

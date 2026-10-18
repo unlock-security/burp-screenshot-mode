@@ -94,7 +94,7 @@ final class RuleCards {
             rule.color = value;
             onChange.run();
         });
-        JPanel matchMode = Widgets.segmented(MatchMode.values(), rule.matchMode, value -> {
+        JComponent matchMode = Widgets.segmented(MatchMode.values(), rule.matchMode, value -> {
             rule.matchMode = value;
             setPlaceholder(pattern, value);
             validate(pattern, rule.regex, rule.matchMode);
@@ -182,7 +182,7 @@ final class RuleCards {
         modeRow.add(color);
         modeRow.add(replacement);
 
-        JPanel matchMode = Widgets.segmented(MatchMode.values(), rule.matchMode, value -> {
+        JComponent matchMode = Widgets.segmented(MatchMode.values(), rule.matchMode, value -> {
             rule.matchMode = value;
             setPlaceholder(pattern, value);
             patternChanged.accept(rule.regex);

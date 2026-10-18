@@ -79,6 +79,7 @@ final class ScreenshotDialog extends JDialog {
     private final JButton update = Widgets.button("Update template");
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
+    private int selectedTab = SettingsForm.RULES;
 
     private boolean updatingCombo;
     private boolean rendered;
@@ -94,8 +95,9 @@ final class ScreenshotDialog extends JDialog {
         statusTimer.setRepeats(false);
         renderTimer.setRepeats(false);
 
-        JSplitPane main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildSidebar(), buildPreview());
-        main.setDividerLocation(380);
+        formHolder.setMinimumSize(new Dimension(300, 0));
+        JSplitPane main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, formHolder, buildPreview());
+        main.setDividerLocation(400);
         main.setBorder(null);
 
         JPanel root = new JPanel(new BorderLayout());
@@ -207,19 +209,6 @@ final class ScreenshotDialog extends JDialog {
         return bar;
     }
 
-    private JComponent buildSidebar() {
-        formHolder.setOpaque(false);
-        Widgets.Stack sidebar = new Widgets.Stack(20);
-        sidebar.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
-        sidebar.addItem(formHolder);
-
-        JScrollPane scroll = new JScrollPane(sidebar);
-        scroll.setBorder(null);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
-        scroll.setMinimumSize(new Dimension(280, 0));
-        return scroll;
-    }
-
     private JComponent buildPreview() {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
@@ -243,10 +232,10 @@ final class ScreenshotDialog extends JDialog {
 
     private void rebuildForm() {
         formHolder.removeAll();
-        formHolder.add(
-            new SettingsForm(state.settings, renderTimer::restart, host.editorFont().get(), false),
-            BorderLayout.CENTER
-        );
+        SettingsForm form = new SettingsForm(state.settings, renderTimer::restart, host.editorFont().get(), false);
+        form.tabs().setSelectedIndex(selectedTab);
+        form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
+        formHolder.add(form, BorderLayout.CENTER);
         formHolder.revalidate();
         formHolder.repaint();
     }
