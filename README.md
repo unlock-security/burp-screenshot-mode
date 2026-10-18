@@ -39,13 +39,15 @@ No external tools, no manual cropping and blurring.
 1. Right-click a request anywhere in Burp (Repeater, Proxy, HTTP history, Target site map, Logger, …) and choose
    **Extensions › Screenshot Mode › Screenshot**, or press **Ctrl+Shift+S**.
 2. Pick a template and tweak headers, layout, width, highlights and redactions. The preview updates as you type.
-3. Click **Save Screenshot** or **Copy to Clipboard**.
+3. Click **Copy to clipboard** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**). Copy only copies the
+   screenshot when no text is selected; with a selection it copies the text as usual.
 
 From a message editor, the screenshot shows what the editor currently holds, including unsent edits in Repeater.\
 When several rows are selected in a table, the first one is used.
 
 Settings changed in the screenshot window apply to that message only, and are remembered if you screenshot the
-same message again. Use **Update Template** or **Save As New…** to keep them. The **Screenshot Mode** suite tab
+same message again; a **Modified** label shows when they differ from the template. Use **Update template** or
+**Save as new…** to keep them, or **Revert** to go back to the template. The **Screenshot Mode** suite tab
 manages the templates.
 
 ## Installation

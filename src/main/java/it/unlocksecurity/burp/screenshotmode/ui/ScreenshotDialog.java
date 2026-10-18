@@ -9,14 +9,19 @@ import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
 import java.awt.Rectangle;
+import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
@@ -42,6 +47,7 @@ import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.text.JTextComponent;
 
 /** The screenshot window: settings on the left, live preview of the captured content on the right. */
 final class ScreenshotDialog extends JDialog {
@@ -52,6 +58,7 @@ final class ScreenshotDialog extends JDialog {
         "'screenshot-'yyyyMMdd-HHmmss'.png'"
     );
     private static final Color SUCCESS = new Color(0x3fa45b);
+    private static final int MENU_SHORTCUT = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
 
     private final Host host;
     private final TemplateStore store;
@@ -67,7 +74,11 @@ final class ScreenshotDialog extends JDialog {
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final Timer renderTimer = new Timer(150, event -> render());
     private final JButton resetHeight = Widgets.button("Reset Height");
+    private final JLabel modified = Widgets.chip("Modified");
+    private final JButton revert = Widgets.button("Revert");
+    private final JButton update = Widgets.button("Update template");
     private final Runnable templatesListener = this::reloadTemplates;
+    private final KeyEventDispatcher copyShortcut = this::copyShortcut;
 
     private boolean updatingCombo;
     private boolean rendered;
@@ -96,6 +107,13 @@ final class ScreenshotDialog extends JDialog {
             KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+        getRootPane().registerKeyboardAction(
+            event -> takeScreenshot(false),
+            KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_SHORTCUT),
+            JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
+        // Text components bind Copy themselves, so a window-level key binding would never fire: dispatch it first.
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(copyShortcut);
 
         content.setSelectionListener(this::onSelectionAction);
         content.setSplitRatio(state.splitRatio);
@@ -121,35 +139,18 @@ final class ScreenshotDialog extends JDialog {
 
     @Override
     public void dispose() {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(copyShortcut);
         store.removeListener(templatesListener);
         renderTimer.stop();
         statusTimer.stop();
         super.dispose();
     }
 
+    /**
+     * Template controls on the left, the output actions on the right. Copy to Clipboard is the primary action: the
+     * usual end of the task is pasting the screenshot into a report.
+     */
     private JComponent buildTopBar() {
-        JLabel title = new JLabel("Screenshot Mode");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 3));
-        JButton save = Widgets.button("Save Screenshot");
-        save.addActionListener(event -> takeScreenshot(false));
-        JButton copy = Widgets.button("Copy to Clipboard");
-        copy.addActionListener(event -> takeScreenshot(true));
-
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        bar.add(title);
-        bar.add(save);
-        bar.add(copy);
-        bar.add(status);
-        bar.setBorder(
-            BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
-                BorderFactory.createEmptyBorder(10, 6, 10, 6)
-            )
-        );
-        return bar;
-    }
-
-    private JComponent buildSidebar() {
         templateCombo.addActionListener(event -> {
             if (
                 !updatingCombo &&
@@ -162,27 +163,54 @@ final class ScreenshotDialog extends JDialog {
                 render();
             }
         });
-        JButton reset = Widgets.iconButton(Widgets.Glyph.RESET, "Reset to template defaults", this::resetToTemplate);
-        JPanel comboRow = new JPanel(new BorderLayout(6, 0));
-        comboRow.setOpaque(false);
-        comboRow.add(templateCombo, BorderLayout.CENTER);
-        comboRow.add(reset, BorderLayout.EAST);
-
-        JButton update = Widgets.button("Update Template");
+        templateCombo.setPrototypeDisplayValue(new Template("", "Client report – redacted tokens", null));
+        modified.setToolTipText("These settings differ from the template. They apply to this message only.");
+        revert.setToolTipText("Discard the changes and go back to the template's settings");
+        revert.addActionListener(event -> resetToTemplate());
         update.setToolTipText("Save the current settings into the selected template");
         update.addActionListener(event -> updateTemplate());
-        JButton saveAs = Widgets.button("Save As New…");
+        JButton saveAs = Widgets.button("Save as new…");
+        saveAs.setToolTipText("Create a new template from the current settings");
         saveAs.addActionListener(event -> saveAsNewTemplate());
 
-        JPanel templateContent = new JPanel(new BorderLayout(0, 6));
-        templateContent.setOpaque(false);
-        templateContent.add(comboRow, BorderLayout.NORTH);
-        templateContent.add(Widgets.row(update, saveAs), BorderLayout.CENTER);
+        JButton save = Widgets.button("Save PNG…");
+        save.setToolTipText("Save the screenshot as a PNG file (" + shortcut(KeyEvent.VK_S) + ")");
+        save.addActionListener(event -> takeScreenshot(false));
+        JButton copy = Widgets.primary(Widgets.button("Copy to clipboard"));
+        copy.setToolTipText("Copy the screenshot to the clipboard (" + shortcut(KeyEvent.VK_C) + ")");
+        copy.addActionListener(event -> takeScreenshot(true));
 
+        JLabel templateLabel = new JLabel("Template");
+        templateLabel.setLabelFor(templateCombo);
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        left.add(templateLabel);
+        left.add(templateCombo);
+        left.add(modified);
+        left.add(revert);
+        left.add(update);
+        left.add(saveAs);
+
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        right.add(status);
+        right.add(save);
+        right.add(copy);
+
+        JPanel bar = new JPanel(new BorderLayout(12, 0));
+        bar.add(left, BorderLayout.CENTER);
+        bar.add(right, BorderLayout.EAST);
+        bar.setBorder(
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8)
+            )
+        );
+        return bar;
+    }
+
+    private JComponent buildSidebar() {
         formHolder.setOpaque(false);
         Widgets.Stack sidebar = new Widgets.Stack(20);
         sidebar.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
-        sidebar.addItem(Widgets.section("Template", null, null, templateContent));
         sidebar.addItem(formHolder);
 
         JScrollPane scroll = new JScrollPane(sidebar);
@@ -223,6 +251,44 @@ final class ScreenshotDialog extends JDialog {
         formHolder.repaint();
     }
 
+    /** Shows whether the settings differ from the selected template; Revert and Update only make sense if so. */
+    private void updateTemplateState() {
+        boolean differs = store
+            .getTemplateById(state.templateId)
+            .map(template -> !TemplateCodec.sameSettings(template.settings, state.settings))
+            .orElse(false);
+        modified.setVisible(differs);
+        revert.setEnabled(differs);
+        update.setEnabled(differs);
+    }
+
+    /**
+     * Copy (⌘C / Ctrl+C) copies the screenshot, unless the focused text component has a selection: then it copies
+     * that text as usual, so selecting text in the preview or in a pattern field keeps working.
+     */
+    private boolean copyShortcut(KeyEvent e) {
+        if (
+            e.getID() != KeyEvent.KEY_PRESSED ||
+            e.getKeyCode() != KeyEvent.VK_C ||
+            e.getModifiersEx() != MENU_SHORTCUT ||
+            !isActive()
+        ) {
+            return false;
+        }
+        Component focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        if (focus instanceof JTextComponent text && text.getSelectionStart() != text.getSelectionEnd()) {
+            return false;
+        }
+        e.consume();
+        takeScreenshot(true);
+        return true;
+    }
+
+    private static String shortcut(int keyCode) {
+        String key = KeyEvent.getKeyText(keyCode);
+        return System.getProperty("os.name", "").toLowerCase().contains("mac") ? "⌘" + key : "Ctrl+" + key;
+    }
+
     private void render() {
         renderTimer.stop();
         Settings settings = state.settings;
@@ -247,6 +313,7 @@ final class ScreenshotDialog extends JDialog {
         rendered = true;
 
         preview.setMaxContentWidth(maxWidth);
+        updateTemplateState();
         preview.setBackground(palette.canvas());
         preview.setHandleColors(palette.canvas(), palette.muted());
         previewScroll.getViewport().setBackground(palette.canvas());
@@ -290,6 +357,8 @@ final class ScreenshotDialog extends JDialog {
         } finally {
             updatingCombo = false;
         }
+        // The template may have been edited in the suite tab while this window is open.
+        updateTemplateState();
     }
 
     private void resetToTemplate() {
@@ -298,7 +367,7 @@ final class ScreenshotDialog extends JDialog {
                 state.settings = template.settings.copy();
                 rebuildForm();
                 render();
-                showStatus("Settings reset to \"" + template.name + "\"", false);
+                showStatus("Reverted to \"" + template.name + "\"", false);
             },
             () -> showStatus("Select a template first", true)
         );
@@ -306,7 +375,8 @@ final class ScreenshotDialog extends JDialog {
 
     private void updateTemplate() {
         if (store.updateTemplate(state.templateId, null, state.settings).isPresent()) {
-            showStatus("Template updated!", false);
+            updateTemplateState();
+            showStatus("Template updated", false);
         } else {
             showStatus("Failed to update template: select a template first", true);
         }
@@ -325,7 +395,8 @@ final class ScreenshotDialog extends JDialog {
         Template template = store.createTemplate(name.trim(), state.settings);
         state.templateId = template.id;
         reloadTemplates();
-        showStatus("Template \"" + template.name + "\" created!", false);
+        updateTemplateState();
+        showStatus("Template \"" + template.name + "\" created", false);
     }
 
     /**
@@ -374,7 +445,7 @@ final class ScreenshotDialog extends JDialog {
             BufferedImage image = ImageCapture.render(content);
             if (toClipboard) {
                 ImageCapture.copyToClipboard(image);
-                showStatus("Screenshot copied to clipboard!", false);
+                showStatus("Copied to clipboard", false);
                 return;
             }
 
@@ -382,11 +453,11 @@ final class ScreenshotDialog extends JDialog {
             if (file != null) {
                 ImageCapture.save(image, file);
                 host.preferences().set(LAST_DIRECTORY_KEY, file.getParent());
-                showStatus("Screenshot saved!", false);
+                showStatus("Saved " + file.getName(), false);
             }
         } catch (Exception e) {
             host.logError().accept("Screenshot failed: " + e);
-            showStatus("Failed: " + e.getMessage(), true);
+            showStatus("Screenshot failed: " + e.getMessage(), true);
         }
     }
 

@@ -16,8 +16,6 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
-import java.awt.geom.Arc2D;
-import java.awt.geom.Path2D;
 import java.util.function.Consumer;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -173,6 +171,37 @@ final class Widgets {
         }
     }
 
+    /** Burp's orange call-to-action style ({@code [style]Button.primary} in its theme); one per view. */
+    static JButton primary(JButton button) {
+        button.putClientProperty("FlatLaf.styleClass", "primary");
+        return button;
+    }
+
+    /** A small rounded status label, such as "Modified", in the theme's warning tones. */
+    static JLabel chip(String text) {
+        JLabel label = new JLabel(text) {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                Graphics2D g = (Graphics2D) graphics.create();
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setColor(themeColor("Colors.palette.warning.7", new Color(0xf3e2c9)));
+                g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+                g.dispose();
+                setForeground(themeColor("Colors.palette.warning.2", new Color(0x976a14)));
+                super.paintComponent(graphics);
+            }
+        };
+        label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 1));
+        label.setBorder(BorderFactory.createEmptyBorder(2, 9, 2, 9));
+        return label;
+    }
+
+    /** A color of Burp's palette (theme JSON), resolved at paint time so it follows theme switches. */
+    static Color themeColor(String key, Color fallback) {
+        Color color = UIManager.getColor(key);
+        return color != null ? color : fallback;
+    }
+
     static JButton colorButton(String hex, Consumer<String> onChange) {
         JButton button = greyedWhenDisabled(new JButton());
         button.setMargin(new Insets(4, 6, 4, 6));
@@ -321,8 +350,7 @@ final class Widgets {
     /** Vector icons drawn in the component's foreground color, so they follow Burp's light and dark themes. */
     enum Glyph implements Icon {
         PLUS,
-        DELETE,
-        RESET;
+        DELETE;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
@@ -339,14 +367,6 @@ final class Widgets {
                 case DELETE -> {
                     g.drawLine(3, 3, 11, 11);
                     g.drawLine(11, 3, 3, 11);
-                }
-                case RESET -> {
-                    g.draw(new Arc2D.Double(2, 2, 10, 10, 90, 270, Arc2D.OPEN));
-                    Path2D arrow = new Path2D.Double();
-                    arrow.moveTo(5, 0);
-                    arrow.lineTo(7.5, 2);
-                    arrow.lineTo(5, 4.5);
-                    g.draw(arrow);
                 }
             }
             g.dispose();

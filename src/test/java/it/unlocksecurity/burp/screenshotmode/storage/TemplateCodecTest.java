@@ -103,6 +103,21 @@ class TemplateCodecTest {
     }
 
     @Test
+    void comparesSettingsByWhatWouldBeStored() {
+        Settings settings = decodeSettings(v2(V2_SETTINGS));
+        Settings copy = settings.copy();
+        assertTrue(TemplateCodec.sameSettings(settings, copy));
+
+        copy.redactions.getFirst().replacementText = "###";
+        assertFalse(TemplateCodec.sameSettings(settings, copy), "a rule edit counts");
+
+        Settings full = Settings.defaults();
+        Settings fullWithStalePixels = Settings.defaults();
+        fullWithStalePixels.widthPixels = 1234;
+        assertTrue(TemplateCodec.sameSettings(full, fullWithStalePixels), "pixels are not stored in full width");
+    }
+
+    @Test
     void metadataTogglesDefaultWhenMissingInV2() {
         Settings settings = decodeSettings(
             v2(

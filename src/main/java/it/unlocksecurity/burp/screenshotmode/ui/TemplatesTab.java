@@ -73,16 +73,10 @@ public final class TemplatesTab extends JPanel {
     }
 
     private JComponent buildList() {
-        JLabel title = new JLabel("Screenshot Mode");
-        title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 4));
-        JPanel header = new JPanel(new BorderLayout(0, 4));
-        header.add(title, BorderLayout.NORTH);
-        header.add(
-            Widgets.hint(
-                "Templates for pretty request/response screenshots. Right-click a request anywhere in Burp " +
-                    "and choose Extensions › Screenshot Mode › Screenshot, or press Ctrl+Shift+S."
-            ),
-            BorderLayout.CENTER
+        // The suite tab is already named "Screenshot Mode": no title, just how to take a screenshot.
+        JLabel header = Widgets.hint(
+            "Templates for request/response screenshots. Right-click a request anywhere in Burp and choose " +
+                "Extensions › Screenshot Mode › Screenshot, or press Ctrl+Shift+S."
         );
 
         JTextField search = new JTextField(24);

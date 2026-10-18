@@ -103,6 +103,14 @@ public final class TemplateCodec {
         return GSON.toJson(root);
     }
 
+    /**
+     * Whether two settings would be stored identically, i.e. whether saving one over the other changes anything.
+     * Comparing the stored form ignores values the format drops (such as the pixel width outside pixel mode).
+     */
+    public static boolean sameSettings(Settings a, Settings b) {
+        return encodeSettings(a).equals(encodeSettings(b));
+    }
+
     private static JsonObject encodeTemplate(Template template) {
         JsonObject object = new JsonObject();
         object.addProperty("id", template.id);
