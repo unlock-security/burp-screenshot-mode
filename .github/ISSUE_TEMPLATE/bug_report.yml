@@ -1,0 +1,107 @@
+name: Bug report
+description: Something in Screenshot Mode does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+
+        > [!WARNING]
+        > Screenshots, requests and responses often contain sensitive data. Before attaching them, remove or replace
+        > hostnames, credentials, tokens, cookies and anything else that belongs to a client.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Screenshots of the Screenshot Mode window help a lot.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Where you opened Screenshot Mode from (Repeater, Proxy history, ...) and the settings involved.
+      placeholder: |
+        1. Open a request in Repeater and press Ctrl+Shift+S
+        2. Add a redaction rule with the regex `...`
+        3. Click "Fit to Content"
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample request/response or template
+      description: |
+        If the bug depends on the message content or on your settings, paste a minimal, sanitized example.
+        Templates can be exported as JSON from the Screenshot Mode suite tab.
+      render: text
+
+  - type: textarea
+    id: errors
+    attributes:
+      label: Errors
+      description: |
+        Any output in Burp under **Extensions › Installed › Screenshot Mode › Errors** (and **Output**, if relevant).
+      render: text
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Screenshot Mode version
+      description: From the jar name (`screenshot-mode-<version>.jar`) or the release you downloaded.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: burp-edition
+    attributes:
+      label: Burp Suite edition
+      options:
+        - Professional
+        - Community
+    validations:
+      required: true
+
+  - type: input
+    id: burp-version
+    attributes:
+      label: Burp Suite version
+      description: From **Help › About**.
+      placeholder: "2026.7"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the [existing issues](https://github.com/unlock-security/burp-screenshot-mode/issues?q=is%3Aissue) and this bug is not already reported.
+          required: true
+        - label: I removed any sensitive data from this report.
+          required: true

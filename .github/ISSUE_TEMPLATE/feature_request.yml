@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest an idea or an improvement for Screenshot Mode
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make Screenshot Mode better!
+
+        > [!WARNING]
+        > If you attach screenshots or example requests, remove any client or otherwise sensitive data first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe what you are trying to do and what makes it hard today.
+      placeholder: When I screenshot a long JSON response for a report, I have to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you would like it to work. Mockups or screenshots of similar features elsewhere are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you use today or other approaches you thought about.
+
+  - type: dropdown
+    id: caido
+    attributes:
+      label: Does Caido's Screenshot Mode have this feature?
+      description: |
+        This extension is a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
+        plugin. Knowing whether Caido already does this helps decide how it should behave here.
+      options:
+        - "I don't know"
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that helps, e.g. the kind of reports you produce or the Burp tools you use.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the [existing issues](https://github.com/unlock-security/burp-screenshot-mode/issues?q=is%3Aissue) and this feature is not already requested.
+          required: true
