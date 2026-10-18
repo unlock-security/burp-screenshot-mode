@@ -328,12 +328,15 @@ final class ScreenshotDialog extends JDialog {
         showStatus("Template \"" + template.name + "\" created!", false);
     }
 
-    /** Port of the Caido selection context menu actions. */
+    /**
+     * Port of the Caido selection context menu actions. Unlike Caido, new rules go first, like the ones added with the
+     * "+" button in {@link RuleCards#section}.
+     */
     private void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
         Settings settings = state.settings;
         switch (action) {
-            case HIGHLIGHT -> settings.highlights.add(HighlightRule.create(selected, target, MatchMode.STRING));
-            case REDACT -> settings.redactions.add(
+            case HIGHLIGHT -> settings.highlights.addFirst(HighlightRule.create(selected, target, MatchMode.STRING));
+            case REDACT -> settings.redactions.addFirst(
                 RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING)
             );
             case HIDE_HEADER -> {

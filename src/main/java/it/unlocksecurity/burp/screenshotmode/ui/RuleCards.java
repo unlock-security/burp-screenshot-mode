@@ -60,7 +60,9 @@ final class RuleCards {
         rebuild[0].run();
 
         JButton add = Widgets.iconButton(Widgets.Glyph.PLUS, "Add rule", () -> {
-            rules.add(factory.get());
+            // Caido appends new rules; we prepend so the new card shows up right below the button instead of at the
+            // bottom of a possibly long, scrolled-away list.
+            rules.addFirst(factory.get());
             rebuild[0].run();
             onChange.run();
         });
