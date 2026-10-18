@@ -7,6 +7,7 @@ import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -35,6 +36,8 @@ import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.table.TableColumn;
 import javax.swing.table.TableRowSorter;
 
 /** Suite tab managing screenshot templates (port of the Caido plugin's Settings page). */
@@ -113,14 +116,15 @@ public final class TemplatesTab extends JPanel {
         table.getTableHeader().setReorderingAllowed(false);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
         table.getColumnModel().getColumn(TemplateTableModel.DEFAULT).setMaxWidth(70);
-        DefaultTableCellRenderer centered = new DefaultTableCellRenderer();
-        centered.setHorizontalAlignment(SwingConstants.CENTER);
-        for (int column : new int[] {
-            TemplateTableModel.DEFAULT,
-            TemplateTableModel.HIGHLIGHTS,
-            TemplateTableModel.REDACTIONS,
-        }) {
-            table.getColumnModel().getColumn(column).setCellRenderer(centered);
+        // Short values and counts are centred; the name is left-aligned, as free text reads best that way. Each
+        // header is aligned like its values.
+        for (int column = 0; column < model.getColumnCount(); column++) {
+            int alignment = column == TemplateTableModel.NAME ? SwingConstants.LEADING : SwingConstants.CENTER;
+            DefaultTableCellRenderer cells = new DefaultTableCellRenderer();
+            cells.setHorizontalAlignment(alignment);
+            TableColumn tableColumn = table.getColumnModel().getColumn(column);
+            tableColumn.setCellRenderer(cells);
+            tableColumn.setHeaderRenderer(alignedHeader(alignment));
         }
         table.addMouseListener(
             new MouseAdapter() {
@@ -213,6 +217,23 @@ public final class TemplatesTab extends JPanel {
             candidate = name + " (copy " + i + ")";
         }
         return candidate;
+    }
+
+    /**
+     * Wraps the header's current default renderer, looked up on every call so it stays the look and feel's (and
+     * follows Burp's theme switches), only changing the alignment of its label.
+     */
+    private TableCellRenderer alignedHeader(int alignment) {
+        return (table, value, isSelected, hasFocus, row, column) -> {
+            Component component = this.table
+                .getTableHeader()
+                .getDefaultRenderer()
+                .getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            if (component instanceof JLabel label) {
+                label.setHorizontalAlignment(alignment);
+            }
+            return component;
+        };
     }
 
     private void openEditor(Template template, boolean duplicate) {

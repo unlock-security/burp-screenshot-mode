@@ -86,6 +86,31 @@ class TemplatesTabTest {
         });
     }
 
+    @Test
+    void alignsHeadersLikeTheirValues() throws Exception {
+        TemplateStore store = store();
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = find(new TemplatesTab(store, host()), JTable.class, t -> true).get();
+            for (int column = 0; column < table.getColumnCount(); column++) {
+                int expected = table.getColumnName(column).equals("Name")
+                    ? javax.swing.SwingConstants.LEADING
+                    : javax.swing.SwingConstants.CENTER;
+                javax.swing.JLabel cell = (javax.swing.JLabel) table.prepareRenderer(
+                    table.getCellRenderer(0, column),
+                    0,
+                    column
+                );
+                javax.swing.JLabel header = (javax.swing.JLabel) table
+                    .getColumnModel()
+                    .getColumn(column)
+                    .getHeaderRenderer()
+                    .getTableCellRendererComponent(table, table.getColumnName(column), false, false, -1, column);
+                assertEquals(expected, cell.getHorizontalAlignment(), table.getColumnName(column) + " values");
+                assertEquals(expected, header.getHorizontalAlignment(), table.getColumnName(column) + " header");
+            }
+        });
+    }
+
     private static void assertAllStyled(Container root) {
         List<AbstractButton> buttons = new java.util.ArrayList<>();
         collect(root, buttons);
