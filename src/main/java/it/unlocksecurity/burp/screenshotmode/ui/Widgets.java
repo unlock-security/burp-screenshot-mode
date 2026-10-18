@@ -67,6 +67,12 @@ final class Widgets {
         return label;
     }
 
+    /** A {@link #hint} that wraps at {@code width} pixels instead of being cut off in a narrow column. */
+    static JLabel wrappingHint(String text, int width) {
+        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return hint("<html><div style='width:" + width + "px'>" + escaped + "</div></html>");
+    }
+
     /** A titled block of the settings form, with an optional hint and an optional button on the right. */
     static JPanel section(String title, String hint, JComponent action, JComponent content) {
         JPanel header = new JPanel(new BorderLayout(8, 0));

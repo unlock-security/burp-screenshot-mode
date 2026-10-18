@@ -46,7 +46,7 @@ final class RuleCards {
         rebuild[0] = () -> {
             list.clear();
             if (rules.isEmpty()) {
-                list.addItem(Widgets.hint(emptyText));
+                list.addItem(Widgets.wrappingHint(emptyText, 260));
             }
             for (R rule : rules) {
                 list.addItem(
