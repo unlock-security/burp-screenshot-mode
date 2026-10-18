@@ -9,6 +9,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.awt.BorderLayout;
 import java.awt.Font;
@@ -51,6 +52,19 @@ final class SettingsForm extends JPanel {
                 Widgets.row(
                     Widgets.segmented(Disposition.values(), settings.disposition, value -> {
                         settings.disposition = value;
+                        onChange.run();
+                    })
+                )
+            )
+        );
+        general.addItem(
+            Widgets.section(
+                "Body",
+                "Pretty prints JSON, XML and HTML bodies",
+                null,
+                Widgets.row(
+                    Widgets.segmented(ViewMode.values(), settings.view, value -> {
+                        settings.view = value;
                         onChange.run();
                     })
                 )

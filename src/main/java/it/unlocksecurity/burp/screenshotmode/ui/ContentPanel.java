@@ -3,11 +3,13 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.render.PrettyPrinter;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -189,7 +191,12 @@ final class ContentPanel extends JPanel {
         Font mono,
         Font ui
     ) {
-        String filtered = HeaderFilter.filter(raw == null ? "" : raw, settings.headersToHide.rulesFor(target));
+        String text = raw == null ? "" : raw;
+        // Before the header filter, which may hide the Content-Type the pretty printer relies on.
+        if (settings.view == ViewMode.PRETTY) {
+            text = PrettyPrinter.format(text);
+        }
+        String filtered = HeaderFilter.filter(text, settings.headersToHide.rulesFor(target));
         Decorated decorated = RuleEngine.apply(
             filtered,
             settings.highlights

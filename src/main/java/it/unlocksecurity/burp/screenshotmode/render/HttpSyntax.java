@@ -111,15 +111,35 @@ public final class HttpSyntax {
         }
     }
 
+    /** Body formats, told apart by the Content-Type or, failing that, by the first character of the body. */
+    enum BodyKind {
+        JSON,
+        MARKUP,
+        FORM,
+        OTHER;
+
+        /** @param contentType lowercase Content-Type header value, empty when missing */
+        static BodyKind of(String contentType, String body) {
+            String sniff = body.stripLeading();
+            if (contentType.contains("json") || sniff.startsWith("{") || sniff.startsWith("[")) {
+                return JSON;
+            } else if (contentType.contains("xml") || contentType.contains("html") || sniff.startsWith("<")) {
+                return MARKUP;
+            } else if (contentType.contains("x-www-form-urlencoded")) {
+                return FORM;
+            }
+            return OTHER;
+        }
+    }
+
     private static void tokenizeBody(String text, int start, String contentType, List<Token> tokens) {
         String body = text.substring(start);
-        String sniff = body.stripLeading();
-        if (contentType.contains("json") || sniff.startsWith("{") || sniff.startsWith("[")) {
-            tokenizeJson(body, start, tokens);
-        } else if (contentType.contains("xml") || contentType.contains("html") || sniff.startsWith("<")) {
-            tokenizeMarkup(body, start, tokens);
-        } else if (contentType.contains("x-www-form-urlencoded")) {
-            tokenizeForm(body, start, tokens);
+        switch (BodyKind.of(contentType, body)) {
+            case JSON -> tokenizeJson(body, start, tokens);
+            case MARKUP -> tokenizeMarkup(body, start, tokens);
+            case FORM -> tokenizeForm(body, start, tokens);
+            case OTHER -> {
+            }
         }
     }
 
