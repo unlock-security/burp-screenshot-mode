@@ -1,0 +1,8 @@
+{
+  "[java]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "prettier.documentSelectors": ["**/*.java"],
+  "prettier.requireConfig": true
+}

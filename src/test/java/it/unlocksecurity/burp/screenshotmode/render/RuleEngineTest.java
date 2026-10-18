@@ -1,0 +1,207 @@
+package it.unlocksecurity.burp.screenshotmode.render;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
+import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
+import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
+import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import java.awt.Color;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+class RuleEngineTest {
+
+    private static final String TEXT = "Authorization: Bearer abc.def\nCookie: session=s3cr3t; theme=dark";
+
+    private static HighlightRule highlight(String pattern, MatchMode matchMode) {
+        return HighlightRule.create(pattern, RuleTarget.REQUEST, matchMode);
+    }
+
+    private static RedactionRule redaction(String pattern, RedactionMode mode) {
+        return RedactionRule.create(pattern, RuleTarget.REQUEST, mode, MatchMode.REGEX);
+    }
+
+    private static String slice(Decorated decorated, Decorated.Span span) {
+        return decorated.text().substring(span.from(), span.to());
+    }
+
+    @Test
+    void highlightsEveryRegexMatch() {
+        Decorated result = RuleEngine.apply(TEXT, List.of(highlight("[a-z]+=", MatchMode.REGEX)), List.of());
+        assertEquals(TEXT, result.text());
+        assertEquals(
+            List.of("session=", "theme="),
+            result
+                .spans()
+                .stream()
+                .map(s -> slice(result, s))
+                .toList()
+        );
+        assertEquals(Decorated.Kind.HIGHLIGHT, result.spans().getFirst().kind());
+        assertEquals(Color.YELLOW, result.spans().getFirst().color());
+    }
+
+    @Test
+    void stringModeMatchesRegexMetacharactersLiterally() {
+        Decorated result = RuleEngine.apply(TEXT, List.of(highlight("abc.def", MatchMode.STRING)), List.of());
+        assertEquals(1, result.spans().size());
+        Decorated none = RuleEngine.apply("abcXdef", List.of(highlight("abc.def", MatchMode.STRING)), List.of());
+        assertTrue(none.spans().isEmpty());
+    }
+
+    @Test
+    void rectangleModeAndCustomColor() {
+        HighlightRule rule = highlight("Cookie", MatchMode.STRING);
+        rule.mode = HighlightMode.RECTANGLE;
+        rule.color = "#ff0000";
+        Decorated.Span span = RuleEngine.apply(TEXT, List.of(rule), List.of()).spans().getFirst();
+        assertEquals(Decorated.Kind.RECTANGLE, span.kind());
+        assertEquals(Color.RED, span.color());
+    }
+
+    @Test
+    void highlightsOverlappingARedactionAreDropped() {
+        Decorated result = RuleEngine.apply(
+            TEXT,
+            List.of(highlight("Bearer \\S+", MatchMode.REGEX), highlight("Cookie", MatchMode.STRING)),
+            List.of(redaction("abc\\.def", RedactionMode.BLUR))
+        );
+        assertEquals(
+            List.of(Decorated.Kind.BLUR, Decorated.Kind.HIGHLIGHT),
+            result.spans().stream().map(Decorated.Span::kind).toList()
+        );
+        assertEquals("abc.def", slice(result, result.spans().getFirst()));
+    }
+
+    @Test
+    void opaqueRedactionKeepsTextAndCarriesColor() {
+        RedactionRule rule = redaction("s3cr3t", RedactionMode.OPAQUE);
+        rule.color = "#00ff00";
+        Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(rule));
+        assertEquals(TEXT, result.text());
+        assertEquals(Color.GREEN, result.spans().getFirst().color());
+    }
+
+    @Test
+    void replaceRedactionRewritesTextAndShiftsLaterSpans() {
+        RedactionRule rule = redaction("abc\\.def", RedactionMode.REPLACE);
+        rule.replacementText = "***";
+        Decorated result = RuleEngine.apply(TEXT, List.of(highlight("theme", MatchMode.STRING)), List.of(rule));
+        assertEquals("Authorization: Bearer ***\nCookie: session=s3cr3t; theme=dark", result.text());
+        assertEquals(
+            List.of("***", "theme"),
+            result
+                .spans()
+                .stream()
+                .map(s -> slice(result, s))
+                .toList()
+        );
+        assertEquals(Decorated.Kind.REPLACED, result.spans().getFirst().kind());
+    }
+
+    @Test
+    void emptyReplacementFallsBackToRedacted() {
+        RedactionRule rule = redaction("s3cr3t", RedactionMode.REPLACE);
+        rule.replacementText = "";
+        assertTrue(RuleEngine.apply(TEXT, List.of(), List.of(rule)).text().contains("session=[REDACTED];"));
+    }
+
+    @Test
+    void overlappingReplacementsKeepTheEarliest() {
+        RedactionRule first = redaction("session=s3cr3t", RedactionMode.REPLACE);
+        RedactionRule second = redaction("s3cr3t; theme", RedactionMode.REPLACE);
+        second.replacementText = "SECOND";
+        Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(second, first));
+        assertTrue(result.text().endsWith("Cookie: [REDACTED]; theme=dark"), result.text());
+    }
+
+    @Test
+    void spansInsideAReplacementSnapToItsEdges() {
+        RedactionRule replace = redaction("session=s3cr3t", RedactionMode.REPLACE);
+        RedactionRule blur = redaction("s3cr3t; theme", RedactionMode.BLUR);
+        Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(replace, blur));
+        Decorated.Span blurSpan = result.spans(Decorated.Kind.BLUR).getFirst();
+        assertEquals("[REDACTED]; theme", slice(result, blurSpan));
+    }
+
+    @Test
+    void captureGroupsRedactOnlySelectedGroups() {
+        RedactionRule rule = redaction("(session)=(\\w+)", RedactionMode.BLUR);
+        rule.useCaptureGroups = true;
+        rule.selectedGroups = List.of(2);
+        Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(rule));
+        assertEquals(
+            List.of("s3cr3t"),
+            result
+                .spans()
+                .stream()
+                .map(s -> slice(result, s))
+                .toList()
+        );
+    }
+
+    @Test
+    void captureGroupsDisabledRedactWholeMatch() {
+        RedactionRule rule = redaction("session=(\\w+)", RedactionMode.BLUR);
+        rule.selectedGroups = List.of(1);
+        Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(rule));
+        assertEquals(
+            List.of("session=s3cr3t"),
+            result
+                .spans()
+                .stream()
+                .map(s -> slice(result, s))
+                .toList()
+        );
+    }
+
+    @Test
+    void invalidAndEmptyPatternsMatchNothing() {
+        assertTrue(
+            RuleEngine.apply(TEXT, List.of(highlight("(", MatchMode.REGEX), highlight("", MatchMode.REGEX)), List.of())
+                .spans()
+                .isEmpty()
+        );
+        assertTrue(RuleEngine.validate("(", MatchMode.REGEX).isPresent());
+        assertTrue(RuleEngine.validate("(", MatchMode.STRING).isEmpty());
+    }
+
+    @Test
+    void emptyMatchesAreIgnored() {
+        assertTrue(
+            RuleEngine.apply(TEXT, List.of(highlight("x*", MatchMode.REGEX)), List.of())
+                .spans()
+                .isEmpty()
+        );
+    }
+
+    @Test
+    void countsCaptureGroups() {
+        assertEquals(2, RuleEngine.countGroups("(a)(?:b)(?<name>c)", MatchMode.REGEX));
+        assertEquals(0, RuleEngine.countGroups("(a)", MatchMode.STRING));
+        assertEquals(0, RuleEngine.countGroups("(", MatchMode.REGEX));
+    }
+
+    @Test
+    @Timeout(5)
+    void catastrophicBacktrackingIsCutShort() {
+        String text = "a".repeat(40) + "!";
+        assertTrue(
+            RuleEngine.apply(text, List.of(highlight("(a+)+b", MatchMode.REGEX)), List.of())
+                .spans()
+                .isEmpty()
+        );
+    }
+
+    @Test
+    void parsesAndFormatsColors() {
+        assertEquals(new Color(0x12ab34), RuleEngine.parseColor("#12AB34", Color.BLACK));
+        assertEquals(Color.BLACK, RuleEngine.parseColor("red", Color.BLACK));
+        assertEquals("#12ab34", RuleEngine.toHex(new Color(0x12ab34)));
+    }
+}
