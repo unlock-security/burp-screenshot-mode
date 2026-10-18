@@ -15,7 +15,7 @@ No external tools, no manual cropping and blurring.
 
 > This is a Burp Suite (Montoya API) port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode) plugin.
 
-![Screenshot Mode window](assets/window.png)
+![From a Repeater request to a report-ready screenshot: open Screenshot Mode, highlight a leaked token, hide and show headers, switch to A4, pretty and stacked, update the template and copy](assets/demo.gif)
 
 ## Features
 
@@ -26,6 +26,7 @@ No external tools, no manual cropping and blurring.
 - **Highlights**: regex or literal patterns, painted as a translucent marker or as a rectangle, in any color.
 - **Redactions**: blur, opaque box or replacement text (`[REDACTED]`), optionally limited to selected capture
   groups (e.g. `session=([0-9a-f]+)` redacts only the value).
+- **Pretty view** for JSON, XML and HTML bodies, like Burp's Pretty tab, without breaking your rules.
 - **Right-click selected text** in the preview to highlight it, redact it or hide its header in one click.
 - **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
 - **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
@@ -33,6 +34,22 @@ No external tools, no manual cropping and blurring.
 - **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
   suite tab, and import/export them as JSON.
 - **Export** as a 2× PNG file or straight to the clipboard.
+
+## Screenshots
+
+The screenshot window, in Burp's light and dark themes:
+
+![Screenshot Mode window, light theme](assets/window-light.png)
+![Screenshot Mode window, dark theme](assets/window-dark.png)
+
+Templates are managed in the *Screenshot Mode* suite tab:
+
+![Templates tab](assets/templates.png)
+
+What ends up in your report:
+
+![Exported screenshot, light](assets/screenshot-light.png)
+![Exported screenshot, dark](assets/screenshot-dark.png)
 
 ## Usage
 
