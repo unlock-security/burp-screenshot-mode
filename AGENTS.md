@@ -5,11 +5,17 @@ This file provides guidance to any AI agent when working with code in this repos
 ## What this is
 
 A Burp Suite extension (Montoya API 2026.7, Java 21) that renders request/response pairs as report-ready PNG
-screenshots. It is a **port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
-plugin**: many classes and comments reference their Caido/TypeScript counterparts (`decorations.ts`, `types.ts`,
-`useCrop`, `utils/screenshot.ts`, ...) and behavior is meant to match it. When changing behavior, check whether it
-diverges from Caido and say so in a comment if it does intentionally (e.g. `Settings.theme`, which Caido doesn't
-have).
+screenshots. It **started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
+plugin** and has since diverged on purpose, in features (Pretty view, screenshot theme, named capture groups,
+template duplication, keyboard shortcuts, ...) and in UI (tabbed settings, Burp-native controls and styling). Caido
+is a reference, not a spec: design new behavior for Burp users and follow Burp's conventions, without trying to
+match Caido.
+
+Two things remain tied to Caido:
+- **The template format.** Templates must still round-trip with Caido's plugin (see Persistence below).
+- **Names in older code.** Some classes and comments still point to their Caido/TypeScript origin (`decorations.ts`,
+  `types.ts`, `useCrop`, "port of ...", "unlike Caido ..."). They are history, not a requirement: don't add new
+  "matches Caido" or "diverges from Caido" remarks, and drop stale ones when you rewrite the code around them.
 
 ## Commands
 
@@ -58,6 +64,7 @@ tests construct the full UI and render images without Burp — keep new Burp dep
 
 **Rendering pipeline** (per message half, in `ui.ContentPanel`):
 `MessageText.fromBytes` (UTF-8 with ISO-8859-1 fallback, `\n` line breaks, truncation) →
+`PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`) →
 `HeaderFilter.filter` (hide headers; `!`-prefixed rules force-show) →
 `RuleEngine.apply` (highlights + redactions → `Decorated` text + spans) →
 `HttpSyntax.tokenize` → `MessagePane`/`MessageView` paint it with a `Palette`.
@@ -75,11 +82,14 @@ file or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor`
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
   template id, split ratio, crop). Edits in the screenshot window affect only that session until the user explicitly
   updates/saves a template.
-- `SettingsForm` mutates a `Settings` in place and is reused by both the screenshot sidebar and the template editor
-  in `TemplatesTab`.
+- `SettingsForm` mutates a `Settings` in place, in three tabs (Rules, Headers, Appearance), and is reused by both the
+  screenshot sidebar and the template editor in `TemplatesTab`. `TemplateCodec.sameSettings` (comparison of the
+  stored form) drives the "Modified"/"Unsaved" state of both.
 
 **Persistence:** `TemplateStore` saves all templates as one JSON string under the Burp preference key
 `screenshot-mode.templates`. `TemplateCodec` reads/writes Caido's storage format (current `VERSION = 2`) and
-migrates v1 and unversioned v0 payloads; the same codec handles template import/export. Any schema change must stay
-compatible with Caido's format and keep the migration chain working (covered by `TemplateCodecTest`).
+migrates v1 and unversioned v0 payloads; the same codec handles template import/export. Features Caido doesn't have
+are stored as extra, optional settings fields (`theme`, `view`) that Caido ignores and that default sensibly when
+missing; add new ones the same way. Any schema change must stay compatible with Caido's format in both directions and
+keep the migration chain working (covered by `TemplateCodecTest`).
   

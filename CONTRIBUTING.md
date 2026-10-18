@@ -4,8 +4,9 @@ Thanks for helping improve the extension! To report a bug or ask for a feature, 
 [issue](https://github.com/unlock-security/burp-screenshot-mode/issues/new/choose) using one of the templates.
 Please remove client data from any screenshot or request you attach.
 
-This extension is a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode) plugin, and
-its behavior is meant to match it. If a change makes it diverge from Caido on purpose, say so in a code comment.
+The extension started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
+plugin and now has its own features and UI, so changes don't need to match Caido. What must stay compatible is the
+template format: templates exported here have to import into Caido and the other way round.
 
 ## Building and testing
 
@@ -69,7 +70,7 @@ src/main/java/it/unlocksecurity/burp/screenshotmode/
 ├── ScreenshotModeExtension.java   Montoya entry point: suite tab, context menu, hotkey
 ├── BurpMessages.java              HttpRequestResponse → MessageData adapter
 ├── ScreenshotContextMenu.java
-├── model/                         Settings, templates and rules (port of types.ts / schemas)
+├── model/                         Settings, templates and rules
 ├── storage/                       JSON codec with migrations, template store on Burp preferences
 ├── render/                        Header filter, rule engine, syntax tokenizer, palettes
 └── ui/                            Screenshot window, preview/capture, settings form, templates tab

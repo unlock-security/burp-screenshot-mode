@@ -13,7 +13,9 @@
 Take pretty screenshots of requests and responses directly inside Burp Suite, ready to drop into a report.
 No external tools, no manual cropping and blurring.
 
-> This is a Burp Suite (Montoya API) port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode) plugin.
+> Started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode) plugin, it has
+> since grown its own features and a UI designed for Burp. Templates stay compatible with Caido's, so you can move
+> them between the two tools.
 
 ![From a Repeater request to a report-ready screenshot: open Screenshot Mode, highlight a leaked token, hide and show headers, switch to A4, pretty and stacked, update the template and copy](assets/demo.gif)
 
@@ -32,7 +34,7 @@ No external tools, no manual cropping and blurring.
 - **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
 - **Metadata footer**: request timestamp and response size/round-trip time.
 - **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
-  suite tab, and import/export them as JSON.
+  suite tab, and import/export them as JSON, in the same format as Caido's plugin.
 - **Export** as a 2× PNG file or straight to the clipboard.
 
 ## Screenshots
@@ -48,8 +50,10 @@ Templates are managed in the *Screenshot Mode* suite tab:
 
 What ends up in your report:
 
-![Exported screenshot, light](assets/screenshot-light.png)
-![Exported screenshot, dark](assets/screenshot-dark.png)
+<p>
+  <img src="assets/screenshot-light.png" alt="Exported screenshot, light" width="49%">
+  <img src="assets/screenshot-dark.png" alt="Exported screenshot, dark" width="49%">
+</p>
 
 ## Usage
 
@@ -91,4 +95,4 @@ development setup, code formatting, commit conventions and how releases work.
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Based on the Caido plugin by Caido Labs Inc.
+MIT, see [LICENSE](LICENSE). Originally based on the Caido plugin by Caido Labs Inc.
