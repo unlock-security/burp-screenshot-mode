@@ -30,8 +30,8 @@ No external tools, no manual cropping and blurring.
 - **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
 - **Crop** the captured height with the drag handle, or **Fit to Content** to show the whole messages.
 - **Metadata footer**: request timestamp and response size/round-trip time.
-- **Templates**: save settings as named templates, pick a default, edit them from the *Screenshot Mode* suite tab,
-  and import/export them as JSON.
+- **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
+  suite tab, and import/export them as JSON.
 - **Export** as a 2× PNG file or straight to the clipboard.
 
 ## Usage

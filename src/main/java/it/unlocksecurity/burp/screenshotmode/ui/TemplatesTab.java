@@ -54,6 +54,7 @@ public final class TemplatesTab extends JPanel {
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final JButton edit = new JButton("Edit");
+    private final JButton duplicate = new JButton("Duplicate");
     private final JButton setDefault = new JButton("Set as Default");
     private final JButton delete = new JButton("Delete");
 
@@ -92,8 +93,10 @@ public final class TemplatesTab extends JPanel {
         );
 
         JButton create = new JButton("Create Template");
-        create.addActionListener(event -> openEditor(null));
-        edit.addActionListener(event -> selected().ifPresent(this::openEditor));
+        create.addActionListener(event -> openEditor(null, false));
+        edit.addActionListener(event -> selected().ifPresent(template -> openEditor(template, false)));
+        duplicate.setToolTipText("Create a new template starting from the selected one");
+        duplicate.addActionListener(event -> selected().ifPresent(template -> openEditor(template, true)));
         setDefault.addActionListener(event -> selected().ifPresent(this::makeDefault));
         delete.addActionListener(event -> selected().ifPresent(this::delete));
         JButton importButton = new JButton("Import…");
@@ -102,7 +105,7 @@ public final class TemplatesTab extends JPanel {
         JButton exportButton = new JButton("Export…");
         exportButton.addActionListener(event -> exportTemplates());
 
-        JPanel toolbar = Widgets.row(search, create, edit, setDefault, delete, importButton, exportButton);
+        JPanel toolbar = Widgets.row(search, create, edit, duplicate, setDefault, delete, importButton, exportButton);
 
         table.setRowSorter(sorter);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -124,7 +127,7 @@ public final class TemplatesTab extends JPanel {
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     if (e.getClickCount() == 2 && table.rowAtPoint(e.getPoint()) >= 0) {
-                        selected().ifPresent(TemplatesTab.this::openEditor);
+                        selected().ifPresent(template -> openEditor(template, false));
                     }
                 }
             }
@@ -142,11 +145,15 @@ public final class TemplatesTab extends JPanel {
         return panel;
     }
 
-    private JComponent buildEditor(Template template) {
-        boolean editing = template != null;
-        Settings working = editing ? template.settings.copy() : Settings.defaults();
+    /**
+     * @param template  the template to edit or duplicate, {@code null} to create one from the default settings
+     * @param duplicate create a new template starting from {@code template}'s settings (not in the Caido plugin)
+     */
+    private JComponent buildEditor(Template template, boolean duplicate) {
+        boolean editing = template != null && !duplicate;
+        Settings working = template != null ? template.settings.copy() : Settings.defaults();
 
-        JTextField name = new JTextField(editing ? template.name : "", 30);
+        JTextField name = new JTextField(editing ? template.name : duplicate ? copyName(template.name) : "", 30);
         Widgets.placeholder(name, "Enter template name");
         JButton save = new JButton("Save");
         save.setEnabled(!name.getText().isBlank());
@@ -165,7 +172,9 @@ public final class TemplatesTab extends JPanel {
         JButton back = new JButton("Back");
         back.addActionListener(event -> showList());
 
-        JLabel title = new JLabel(editing ? "Edit Template" : "Create Template");
+        JLabel title = new JLabel(
+            editing ? "Edit Template" : duplicate ? "Duplicate \"" + template.name + "\"" : "Create Template"
+        );
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 3));
         JPanel bar = new JPanel(new BorderLayout(12, 0));
         bar.add(Widgets.row(back, title), BorderLayout.CENTER);
@@ -192,9 +201,23 @@ public final class TemplatesTab extends JPanel {
         return panel;
     }
 
-    private void openEditor(Template template) {
+    /** First free "name (copy)", "name (copy 2)", ... among the existing template names. */
+    private String copyName(String name) {
+        List<String> names = store
+            .templates()
+            .stream()
+            .map(template -> template.name)
+            .toList();
+        String candidate = name + " (copy)";
+        for (int i = 2; names.contains(candidate); i++) {
+            candidate = name + " (copy " + i + ")";
+        }
+        return candidate;
+    }
+
+    private void openEditor(Template template, boolean duplicate) {
         editorHolder.removeAll();
-        editorHolder.add(buildEditor(template), BorderLayout.CENTER);
+        editorHolder.add(buildEditor(template, duplicate), BorderLayout.CENTER);
         editorHolder.revalidate();
         cards.show(this, EDITOR);
     }
@@ -231,6 +254,7 @@ public final class TemplatesTab extends JPanel {
         Optional<Template> selected = selected();
         boolean isDefault = selected.map(template -> template.id.equals(store.defaultTemplateId())).orElse(false);
         edit.setEnabled(selected.isPresent());
+        duplicate.setEnabled(selected.isPresent());
         setDefault.setEnabled(selected.isPresent() && !isDefault);
         delete.setEnabled(selected.isPresent() && !isDefault);
         delete.setToolTipText(isDefault ? "The default template cannot be deleted" : null);
