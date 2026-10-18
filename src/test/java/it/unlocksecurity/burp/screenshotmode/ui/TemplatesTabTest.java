@@ -73,6 +73,43 @@ class TemplatesTabTest {
         assertEquals(1, store.templates().size());
     }
 
+    @Test
+    void everyButtonIsGreyedWhenDisabled() throws Exception {
+        TemplateStore store = store();
+        store.updateTemplate(store.defaultTemplateId(), null, RenderPreviewTest.sampleSettings());
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            assertAllStyled(tab);
+            select(tab, store.getDefaultTemplate());
+            button(tab, "Edit").doClick();
+            assertAllStyled(tab);
+        });
+    }
+
+    private static void assertAllStyled(Container root) {
+        List<AbstractButton> buttons = new java.util.ArrayList<>();
+        collect(root, buttons);
+        assertTrue(buttons.size() > 5, "found " + buttons.size() + " buttons");
+        for (AbstractButton button : buttons) {
+            assertTrue(
+                button.getClientProperty("FlatLaf.style") != null,
+                "not created through Widgets: " + button.getText() + " " + button.getToolTipText()
+            );
+        }
+    }
+
+    private static void collect(Container root, List<AbstractButton> buttons) {
+        for (Component child : root.getComponents()) {
+            // Exact classes: subclasses are look-and-feel parts such as scroll bar and combo box arrows.
+            if (child.getClass() == javax.swing.JButton.class || child.getClass() == javax.swing.JToggleButton.class) {
+                buttons.add((AbstractButton) child);
+            }
+            if (child instanceof Container container) {
+                collect(container, buttons);
+            }
+        }
+    }
+
     private static TemplateStore store() {
         Map<String, String> values = new HashMap<>();
         TemplateStore store = new TemplateStore(preferences(values), message -> {});

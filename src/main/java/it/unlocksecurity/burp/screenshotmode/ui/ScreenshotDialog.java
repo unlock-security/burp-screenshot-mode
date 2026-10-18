@@ -66,7 +66,7 @@ final class ScreenshotDialog extends JDialog {
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final Timer renderTimer = new Timer(150, event -> render());
-    private final JButton resetHeight = new JButton("Reset Height");
+    private final JButton resetHeight = Widgets.button("Reset Height");
     private final Runnable templatesListener = this::reloadTemplates;
 
     private boolean updatingCombo;
@@ -130,9 +130,9 @@ final class ScreenshotDialog extends JDialog {
     private JComponent buildTopBar() {
         JLabel title = new JLabel("Screenshot Mode");
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 3));
-        JButton save = new JButton("Save Screenshot");
+        JButton save = Widgets.button("Save Screenshot");
         save.addActionListener(event -> takeScreenshot(false));
-        JButton copy = new JButton("Copy to Clipboard");
+        JButton copy = Widgets.button("Copy to Clipboard");
         copy.addActionListener(event -> takeScreenshot(true));
 
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
@@ -168,10 +168,10 @@ final class ScreenshotDialog extends JDialog {
         comboRow.add(templateCombo, BorderLayout.CENTER);
         comboRow.add(reset, BorderLayout.EAST);
 
-        JButton update = new JButton("Update Template");
+        JButton update = Widgets.button("Update Template");
         update.setToolTipText("Save the current settings into the selected template");
         update.addActionListener(event -> updateTemplate());
-        JButton saveAs = new JButton("Save As New…");
+        JButton saveAs = Widgets.button("Save As New…");
         saveAs.addActionListener(event -> saveAsNewTemplate());
 
         JPanel templateContent = new JPanel(new BorderLayout(0, 6));
@@ -196,7 +196,7 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        JButton fit = new JButton("Fit to Content");
+        JButton fit = Widgets.button("Fit to Content");
         fit.setToolTipText("Crop the height so the whole request and response are visible");
         fit.addActionListener(event -> fitToContent());
         resetHeight.addActionListener(event -> preview.setCropHeight(null));

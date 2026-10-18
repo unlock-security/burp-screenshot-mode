@@ -53,10 +53,10 @@ public final class TemplatesTab extends JPanel {
     private final TableRowSorter<TemplateTableModel> sorter = new TableRowSorter<>(model);
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
-    private final JButton edit = new JButton("Edit");
-    private final JButton duplicate = new JButton("Duplicate");
-    private final JButton setDefault = new JButton("Set as Default");
-    private final JButton delete = new JButton("Delete");
+    private final JButton edit = Widgets.button("Edit");
+    private final JButton duplicate = Widgets.button("Duplicate");
+    private final JButton setDefault = Widgets.button("Set as Default");
+    private final JButton delete = Widgets.button("Delete");
 
     public TemplatesTab(TemplateStore store, Host host) {
         this.store = store;
@@ -92,17 +92,17 @@ public final class TemplatesTab extends JPanel {
             )
         );
 
-        JButton create = new JButton("Create Template");
+        JButton create = Widgets.button("Create Template");
         create.addActionListener(event -> openEditor(null, false));
         edit.addActionListener(event -> selected().ifPresent(template -> openEditor(template, false)));
         duplicate.setToolTipText("Create a new template starting from the selected one");
         duplicate.addActionListener(event -> selected().ifPresent(template -> openEditor(template, true)));
         setDefault.addActionListener(event -> selected().ifPresent(this::makeDefault));
         delete.addActionListener(event -> selected().ifPresent(this::delete));
-        JButton importButton = new JButton("Import…");
+        JButton importButton = Widgets.button("Import…");
         importButton.setToolTipText("Add templates from a JSON export (this extension's or the Caido plugin's format)");
         importButton.addActionListener(event -> importTemplates());
-        JButton exportButton = new JButton("Export…");
+        JButton exportButton = Widgets.button("Export…");
         exportButton.addActionListener(event -> exportTemplates());
 
         JPanel toolbar = Widgets.row(search, create, edit, duplicate, setDefault, delete, importButton, exportButton);
@@ -155,7 +155,7 @@ public final class TemplatesTab extends JPanel {
 
         JTextField name = new JTextField(editing ? template.name : duplicate ? copyName(template.name) : "", 30);
         Widgets.placeholder(name, "Enter template name");
-        JButton save = new JButton("Save");
+        JButton save = Widgets.button("Save");
         save.setEnabled(!name.getText().isBlank());
         Widgets.onTextChange(name, text -> save.setEnabled(!text.isBlank()));
         save.addActionListener(event -> {
@@ -169,7 +169,7 @@ public final class TemplatesTab extends JPanel {
             }
             showList();
         });
-        JButton back = new JButton("Back");
+        JButton back = Widgets.button("Back");
         back.addActionListener(event -> showList());
 
         JLabel title = new JLabel(

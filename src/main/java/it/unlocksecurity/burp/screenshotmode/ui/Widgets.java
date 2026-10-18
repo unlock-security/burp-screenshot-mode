@@ -115,8 +115,28 @@ final class Widgets {
         return row;
     }
 
+    /**
+     * Burp's theme gives disabled buttons near-black bold text on a lighter background than enabled ones (Light
+     * theme: {@code #4B4B4B} on white vs {@code #2B2B2B} on {@code #EEEEEE}), so they look clickable. Fade text,
+     * background and border into the panel instead. A FlatLaf style is resolved against the current theme, so it
+     * follows Burp's light/dark switch; other look and feels ignore it.
+     */
+    private static final String DISABLED_STYLE =
+        "disabledText: mix($Button.foreground,$Panel.background,35%);" +
+        "disabledBackground: $Panel.background;" +
+        "disabledBorderColor: mix($Button.borderColor,$Panel.background,60%)";
+
+    static <B extends AbstractButton> B greyedWhenDisabled(B button) {
+        button.putClientProperty("FlatLaf.style", DISABLED_STYLE);
+        return button;
+    }
+
+    static JButton button(String text) {
+        return greyedWhenDisabled(new JButton(text));
+    }
+
     static JButton iconButton(Icon icon, String tooltip, Runnable action) {
-        JButton button = new JButton(icon);
+        JButton button = greyedWhenDisabled(new JButton(icon));
         button.setToolTipText(tooltip);
         button.setMargin(new Insets(4, 6, 4, 6));
         button.addActionListener(event -> action.run());
@@ -131,7 +151,7 @@ final class Widgets {
         // A FlowLayout gap would also pad the outer edges, so separate the buttons with struts instead.
         int gap = 0;
         for (E value : values) {
-            JToggleButton button = new JToggleButton(value.toString(), value.equals(selected));
+            JToggleButton button = greyedWhenDisabled(new JToggleButton(value.toString(), value.equals(selected)));
             button.setMargin(new Insets(3, 10, 3, 10));
             button.addActionListener(event -> onChange.accept(value));
             group.add(button);
@@ -154,7 +174,7 @@ final class Widgets {
     }
 
     static JButton colorButton(String hex, Consumer<String> onChange) {
-        JButton button = new JButton();
+        JButton button = greyedWhenDisabled(new JButton());
         button.setMargin(new Insets(4, 6, 4, 6));
         button.setToolTipText("Choose color");
         button.setIcon(new SwatchIcon(RuleEngine.parseColor(hex, Color.YELLOW)));
