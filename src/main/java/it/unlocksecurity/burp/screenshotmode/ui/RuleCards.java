@@ -12,6 +12,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import javax.swing.JButton;
@@ -110,13 +111,17 @@ final class RuleCards {
         JTextField pattern = patternField(rule.regex, rule.matchMode, mono);
         JPanel groups = new JPanel(new WrapLayout(6, 0));
         groups.setOpaque(false);
-        int[] groupCount = { RuleEngine.countGroups(rule.regex, rule.matchMode) };
-        Runnable rebuildGroups = () -> rebuildGroups(groups, rule, groupCount[0], onChange);
+        AtomicReference<List<String>> groupLabels = new AtomicReference<>(
+            RuleEngine.groupLabels(rule.regex, rule.matchMode)
+        );
+        Runnable rebuildGroups = () -> rebuildGroups(groups, rule, groupLabels.get(), onChange);
         rebuildGroups.run();
 
         // Port of handleRegexChange: auto-select capture groups as they appear in the pattern.
         Consumer<String> patternChanged = text -> {
-            int newCount = RuleEngine.countGroups(text, rule.matchMode);
+            List<String> newLabels = RuleEngine.groupLabels(text, rule.matchMode);
+            int oldCount = groupLabels.get().size();
+            int newCount = newLabels.size();
             rule.regex = text;
             if (newCount == 0) {
                 rule.useCaptureGroups = false;
@@ -131,11 +136,12 @@ final class RuleCards {
                         .filter(g -> g <= newCount)
                         .toList()
                 );
-                selected.addAll(allGroups(groupCount[0] + 1, newCount));
+                selected.addAll(allGroups(oldCount + 1, newCount));
                 rule.selectedGroups = selected;
             }
-            if (newCount != groupCount[0]) {
-                groupCount[0] = newCount;
+            // Also on a renamed group, whose checkbox is labelled with the name.
+            if (!newLabels.equals(groupLabels.get())) {
+                groupLabels.set(newLabels);
                 rebuildGroups.run();
             }
             validate(pattern, rule.regex, rule.matchMode);
@@ -194,7 +200,9 @@ final class RuleCards {
         return card;
     }
 
-    private static void rebuildGroups(JPanel panel, RedactionRule rule, int count, Runnable onChange) {
+    /** @param labels label of each capture group, see {@link RuleEngine#groupLabels} */
+    private static void rebuildGroups(JPanel panel, RedactionRule rule, List<String> labels, Runnable onChange) {
+        int count = labels.size();
         panel.removeAll();
         JCheckBox enabled = new JCheckBox(
             count == 0 ? "No capture groups" : "Only redact groups:",
@@ -207,7 +215,8 @@ final class RuleCards {
         List<JCheckBox> boxes = new ArrayList<>();
         for (int group = 1; group <= count; group++) {
             int index = group;
-            JCheckBox box = new JCheckBox(String.valueOf(group), rule.selectedGroups.contains(group));
+            JCheckBox box = new JCheckBox(labels.get(group - 1), rule.selectedGroups.contains(group));
+            box.setToolTipText("Group " + group);
             box.setOpaque(false);
             box.setEnabled(rule.useCaptureGroups);
             box.addActionListener(event -> {

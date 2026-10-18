@@ -89,7 +89,7 @@ class RenderPreviewTest {
         settings.highlights.add(note);
 
         RedactionRule token = RedactionRule.create(
-            "Bearer (\\S+)",
+            "Bearer (?<token>\\S+)",
             RuleTarget.REQUEST,
             RedactionMode.BLUR,
             MatchMode.REGEX

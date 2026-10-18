@@ -211,14 +211,24 @@ public final class RuleEngine {
         }
     }
 
-    /** Number of capture groups in a pattern (0 for literal strings and invalid patterns). */
-    public static int countGroups(String pattern, MatchMode matchMode) {
+    /**
+     * Labels of the capture groups in a pattern, the label of group {@code n} at index {@code n - 1}: its name for a
+     * named group, its number otherwise. Empty for literal strings and invalid patterns. Caido only shows numbers.
+     */
+    public static List<String> groupLabels(String pattern, MatchMode matchMode) {
         if (matchMode == MatchMode.STRING) {
-            return 0;
+            return List.of();
         }
         return compile(pattern, matchMode)
-            .map(p -> p.matcher("").groupCount())
-            .orElse(0);
+            .map(compiled -> {
+                String[] labels = new String[compiled.matcher("").groupCount()];
+                for (int i = 0; i < labels.length; i++) {
+                    labels[i] = String.valueOf(i + 1);
+                }
+                compiled.namedGroups().forEach((name, group) -> labels[group - 1] = name);
+                return List.of(labels);
+            })
+            .orElse(List.of());
     }
 
     public static Color parseColor(String hex, Color fallback) {

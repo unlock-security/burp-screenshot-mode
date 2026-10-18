@@ -181,10 +181,10 @@ class RuleEngineTest {
     }
 
     @Test
-    void countsCaptureGroups() {
-        assertEquals(2, RuleEngine.countGroups("(a)(?:b)(?<name>c)", MatchMode.REGEX));
-        assertEquals(0, RuleEngine.countGroups("(a)", MatchMode.STRING));
-        assertEquals(0, RuleEngine.countGroups("(", MatchMode.REGEX));
+    void labelsCaptureGroupsByNameOrNumber() {
+        assertEquals(List.of("1", "name", "3"), RuleEngine.groupLabels("(a)(?:b)(?<name>c)(d)", MatchMode.REGEX));
+        assertEquals(List.of(), RuleEngine.groupLabels("(a)", MatchMode.STRING));
+        assertEquals(List.of(), RuleEngine.groupLabels("(", MatchMode.REGEX));
     }
 
     @Test
