@@ -209,6 +209,13 @@ final class Widgets {
         return color != null ? color : fallback;
     }
 
+    /** A thin vertical rule separating groups of buttons in a toolbar. */
+    static JComponent separator() {
+        javax.swing.JSeparator separator = new javax.swing.JSeparator(javax.swing.SwingConstants.VERTICAL);
+        separator.setPreferredSize(new Dimension(9, 22));
+        return separator;
+    }
+
     static JButton colorButton(String hex, Consumer<String> onChange) {
         JButton button = greyedWhenDisabled(new JButton());
         button.setMargin(new Insets(4, 6, 4, 6));

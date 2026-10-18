@@ -62,13 +62,13 @@ class TemplatesTabTest {
     }
 
     @Test
-    void backDiscardsTheDuplicate() throws Exception {
+    void cancelDiscardsAnUntouchedDuplicate() throws Exception {
         TemplateStore store = store();
         SwingUtilities.invokeAndWait(() -> {
             TemplatesTab tab = new TemplatesTab(store, host());
             select(tab, store.getDefaultTemplate());
             button(tab, "Duplicate").doClick();
-            button(tab, "Back").doClick();
+            button(tab, "Cancel").doClick();
         });
         assertEquals(1, store.templates().size());
     }
@@ -133,6 +133,47 @@ class TemplatesTabTest {
                 collect(container, buttons);
             }
         }
+    }
+
+    @Test
+    void cancelAsksBeforeDiscardingChanges() throws Exception {
+        TemplateStore store = store();
+        Template original = store.getDefaultTemplate();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            List<String> asked = new java.util.ArrayList<>();
+            boolean[] discard = { false };
+            tab.setDiscardConfirmation(name -> {
+                asked.add(name);
+                return discard[0];
+            });
+            select(tab, original);
+            button(tab, "Edit").doClick();
+            button(tab, "Cancel").doClick();
+            assertTrue(asked.isEmpty(), "nothing to discard yet");
+            assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
+
+            button(tab, "Edit").doClick();
+            JTextField name = find(tab, JTextField.class, f -> f.getText().equals(original.name)).get();
+            name.setText("Renamed");
+            button(tab, "Cancel").doClick();
+            assertEquals(List.of("\"" + original.name + "\""), asked);
+            button(tab, "Save"); // still editing: throws if the Save button is not showing
+
+            discard[0] = true;
+            button(tab, "Cancel").doClick();
+            assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
+        });
+        assertEquals(original.name, store.getDefaultTemplate().name, "nothing was saved");
+    }
+
+    @Test
+    void newTemplateIsThePrimaryAction() throws Exception {
+        TemplateStore store = store();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            assertEquals("primary", button(tab, "New template").getClientProperty("FlatLaf.styleClass"));
+        });
     }
 
     private static TemplateStore store() {
