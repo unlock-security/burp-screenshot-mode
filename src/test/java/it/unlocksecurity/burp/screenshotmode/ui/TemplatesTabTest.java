@@ -176,7 +176,7 @@ class TemplatesTabTest {
         });
     }
 
-    private static TemplateStore store() {
+    static TemplateStore store() {
         Map<String, String> values = new HashMap<>();
         TemplateStore store = new TemplateStore(preferences(values), message -> {});
         store.initialize();
@@ -197,7 +197,7 @@ class TemplatesTabTest {
         };
     }
 
-    private static Host host() {
+    static Host host() {
         Font font = new Font(Font.MONOSPACED, Font.PLAIN, 13);
         return new Host(
             () -> font,

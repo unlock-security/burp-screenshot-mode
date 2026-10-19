@@ -16,6 +16,8 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.util.function.Consumer;
@@ -27,8 +29,10 @@ import javax.swing.JColorChooser;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.Scrollable;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
@@ -67,10 +71,42 @@ final class Widgets {
         return label;
     }
 
-    /** A {@link #hint} that wraps at {@code width} pixels instead of being cut off in a narrow column. */
-    static JLabel wrappingHint(String text, int width) {
-        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return hint("<html><div style='width:" + width + "px'>" + escaped + "</div></html>");
+    /**
+     * A {@link #hint} that wraps at word boundaries to the width the layout gives it, instead of being cut off in a
+     * narrow column. It asks for at most {@code width} pixels, so it never makes its column wider. A text area rather
+     * than an {@code <html>} label, which Burp shows as markup.
+     */
+    static JTextArea wrappingHint(String text, int width) {
+        JTextArea area = new JTextArea(text) {
+            @Override
+            public Dimension getPreferredSize() {
+                // The height is the one for the current width, once laid out.
+                Dimension size = super.getPreferredSize();
+                return new Dimension(Math.min(size.width, width), size.height);
+            }
+        };
+        JLabel style = hint("");
+        area.setFont(style.getFont());
+        area.setForeground(style.getForeground());
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setHighlighter(null);
+        area.setOpaque(false);
+        area.setBorder(BorderFactory.createEmptyBorder());
+        // A wrapping text area only knows its height once it has a width: lay out again when the line count changes.
+        area.addComponentListener(
+            new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    if (area.getPreferredSize().height != area.getHeight()) {
+                        SwingUtilities.invokeLater(area::revalidate);
+                    }
+                }
+            }
+        );
+        return area;
     }
 
     /** A titled block of the settings form, with an optional hint and an optional button on the right. */

@@ -261,18 +261,26 @@ class RenderPreviewTest {
             layoutTree(tab);
             saveComponent(tab, "templates-tab.png");
 
-            for (boolean wide : new boolean[] { false, true }) {
-                Widgets.Stack holder = new Widgets.Stack(0);
-                holder.setOpaque(true);
-                holder.addItem(new SettingsForm(sampleSettings(), () -> {}, MONO, wide));
-                holder.setSize(wide ? 1100 : 360, 2000);
-                layoutTree(holder);
-                layoutTree(holder);
-                holder.setSize(holder.getWidth(), holder.getPreferredSize().height);
-                layoutTree(holder);
-                saveComponent(holder, wide ? "form-wide.png" : "form-sidebar.png");
-            }
+            Settings empty = Settings.defaults();
+            empty.highlights.clear();
+            empty.redactions.clear();
+            saveForm(sampleSettings(), false, "form-sidebar.png");
+            saveForm(sampleSettings(), true, "form-wide.png");
+            saveForm(empty, false, "form-empty.png");
+            saveForm(empty, true, "form-empty-wide.png");
         });
+    }
+
+    private static void saveForm(Settings settings, boolean wide, String name) {
+        Widgets.Stack holder = new Widgets.Stack(0);
+        holder.setOpaque(true);
+        holder.addItem(new SettingsForm(settings, () -> {}, MONO, wide));
+        holder.setSize(wide ? 1100 : 360, 2000);
+        layoutTree(holder);
+        layoutTree(holder);
+        holder.setSize(holder.getWidth(), holder.getPreferredSize().height);
+        layoutTree(holder);
+        saveComponent(holder, name);
     }
 
     private static void saveComponent(JComponent component, String name) {
