@@ -12,9 +12,11 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.MouseWheelEvent;
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
 class MessagePaneTest {
@@ -72,23 +74,39 @@ class MessagePaneTest {
     }
 
     @Test
-    void passesWheelToThePreviewWhenTheMessageFits() {
-        Setup setup = Setup.of(3, 250);
-        assertTrue(!setup.inner().getVerticalScrollBar().isVisible(), "message fits, no inner scrollbar");
-        setup.wheel(1);
-        assertTrue(setup.outerY() > 0, "the preview scrolled");
+    void passesWheelToThePreviewWhenTheMessageFits() throws Throwable {
+        onEdt(() -> {
+            Setup setup = Setup.of(3, 250);
+            assertTrue(!setup.inner().getVerticalScrollBar().isVisible(), "message fits, no inner scrollbar");
+            setup.wheel(1);
+            assertTrue(setup.outerY() > 0, "the preview scrolled");
+        });
     }
 
     @Test
-    void scrollsTheMessageFirstThenThePreview() {
-        Setup setup = Setup.of(100, 250);
-        setup.wheel(1);
-        assertTrue(setup.innerY() > 0, "the message scrolled");
-        assertEquals(0, setup.outerY(), "the preview did not");
-
-        for (int i = 0; i < 200; i++) {
+    void scrollsTheMessageFirstThenThePreview() throws Throwable {
+        onEdt(() -> {
+            Setup setup = Setup.of(100, 250);
             setup.wheel(1);
+            assertTrue(setup.innerY() > 0, "the message scrolled");
+            assertEquals(0, setup.outerY(), "the preview did not");
+
+            for (int i = 0; i < 200; i++) {
+                setup.wheel(1);
+            }
+            assertTrue(setup.outerY() > 0, "at the bottom of the message, the preview scrolls");
+        });
+    }
+
+    /**
+     * Swing components must be used on the event dispatch thread: laid out from the test thread, they can deadlock
+     * with the EDT on the tree lock when a display is available (-PpreviewUi).
+     */
+    private static void onEdt(Runnable test) throws Throwable {
+        try {
+            SwingUtilities.invokeAndWait(test);
+        } catch (InvocationTargetException e) {
+            throw e.getCause();
         }
-        assertTrue(setup.outerY() > 0, "at the bottom of the message, the preview scrolls");
     }
 }
