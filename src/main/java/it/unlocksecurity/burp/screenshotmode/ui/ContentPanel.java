@@ -19,6 +19,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
@@ -49,6 +50,7 @@ final class ContentPanel extends JPanel {
     private double splitRatio = 0.5;
     private boolean applyingRatio;
     private DoubleConsumer splitRatioListener = ratio -> {};
+    private Consumer<String> errorListener = message -> {};
 
     ContentPanel() {
         super(new BorderLayout());
@@ -112,6 +114,11 @@ final class ContentPanel extends JPanel {
 
     void setSplitRatioListener(DoubleConsumer listener) {
         this.splitRatioListener = listener;
+    }
+
+    /** Receives errors that did not stop the rendering, such as a body the pretty printer failed on. */
+    void setErrorListener(Consumer<String> listener) {
+        this.errorListener = listener;
     }
 
     void setSplitRatio(double ratio) {
@@ -182,7 +189,7 @@ final class ContentPanel extends JPanel {
         repaint();
     }
 
-    private static void renderPane(
+    private void renderPane(
         MessagePane pane,
         String raw,
         RuleTarget target,
@@ -194,7 +201,12 @@ final class ContentPanel extends JPanel {
         String text = raw == null ? "" : raw;
         // Before the header filter, which may hide the Content-Type the pretty printer relies on.
         if (settings.view == ViewMode.PRETTY) {
-            text = PrettyPrinter.format(text);
+            try {
+                text = PrettyPrinter.format(text);
+            } catch (RuntimeException | StackOverflowError e) {
+                // The pretty printers accept any input, so this is a bug: show the raw message rather than nothing.
+                errorListener.accept("Could not pretty print the " + target.id() + ", showing it raw: " + e);
+            }
         }
         String filtered = HeaderFilter.filter(text, settings.headersToHide.rulesFor(target));
         Decorated decorated = RuleEngine.apply(

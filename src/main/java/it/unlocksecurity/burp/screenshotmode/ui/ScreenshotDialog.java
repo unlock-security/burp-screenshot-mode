@@ -121,6 +121,7 @@ final class ScreenshotDialog extends JDialog {
         content.setSelectionListener(this::onSelectionAction);
         content.setSplitRatio(state.splitRatio);
         content.setSplitRatioListener(ratio -> state.splitRatio = ratio);
+        content.setErrorListener(host.logError());
         preview.setCropListener(height -> {
             state.cropHeight = height;
             resetHeight.setEnabled(height != null);
@@ -309,15 +310,21 @@ final class ScreenshotDialog extends JDialog {
         renderTimer.stop();
         Settings settings = state.settings;
         Palette palette = host.palette(settings.theme);
-        content.render(
-            data,
-            settings,
-            palette,
-            host.editorFont().get(),
-            host.displayFont().get(),
-            settings.showTimestamp ? timestamp() : null,
-            settings.showResponseInfo ? responseInfo() : null
-        );
+        try {
+            content.render(
+                data,
+                settings,
+                palette,
+                host.editorFont().get(),
+                host.displayFont().get(),
+                settings.showTimestamp ? timestamp() : null,
+                settings.showResponseInfo ? responseInfo() : null
+            );
+        } catch (RuntimeException | StackOverflowError e) {
+            // Runs on the Swing thread: report it in the extension's error log rather than Burp's.
+            host.logError().accept("Could not render the screenshot: " + e);
+            showStatus("Could not render the screenshot, see the extension's errors", true);
+        }
 
         // Like Caido, a new content width resets the request/response split.
         Integer maxWidth = settings.maxContentWidth();
