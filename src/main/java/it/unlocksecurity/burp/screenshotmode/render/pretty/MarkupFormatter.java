@@ -5,12 +5,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Puts every tag, comment and text node of HTML or XML on its own line, indented by nesting depth. An element holding
  * only text stays on one line. Tags, attributes, entities and text are copied as they are: unlike an HTML parser,
  * nothing is "fixed", so broken or malicious markup shows exactly as sent. Unbalanced markup only skews the
- * indentation.
+ * indentation. In HTML, the content of {@code <script>} and {@code <style>} is formatted as JavaScript (or JSON) and
+ * CSS.
  */
 final class MarkupFormatter {
 
@@ -36,6 +39,11 @@ final class MarkupFormatter {
      * {@code textarea} and {@code title}) or whitespace-sensitive ({@code pre}).
      */
     private static final Set<String> RAW_ELEMENTS = Set.of("script", "style", "textarea", "title", "pre", "xmp");
+    /** Applied to a single start tag; no nested quantifiers, so it runs in linear time. */
+    private static final Pattern TYPE_ATTRIBUTE = Pattern.compile(
+        "\\stype\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))",
+        Pattern.CASE_INSENSITIVE
+    );
 
     private enum Kind {
         OPEN,
@@ -47,9 +55,20 @@ final class MarkupFormatter {
         RAW,
     }
 
-    private record Item(Kind kind, int from, int to, String name) {
+    private enum Content {
+        VERBATIM,
+        JAVASCRIPT,
+        JSON,
+        CSS,
+    }
+
+    /**
+     * @param contentFrom for {@link Kind#RAW}, the end of the start tag
+     * @param contentTo   for {@link Kind#RAW}, the start of the end tag
+     */
+    private record Item(Kind kind, int from, int to, String name, int contentFrom, int contentTo, Content content) {
         static Item of(Kind kind, int from, int to, String name) {
-            return new Item(kind, from, to, name);
+            return new Item(kind, from, to, name, to, to, Content.VERBATIM);
         }
     }
 
@@ -197,11 +216,31 @@ final class MarkupFormatter {
     private void addRaw(int from, int startTagEnd, String name) {
         int endTag = findEndTag(name, startTagEnd);
         int to = body.length();
-        if (endTag >= 0) {
+        if (endTag < 0) {
+            endTag = to;
+        } else {
             int tagEnd = tagEnd(endTag + 2 + name.length());
             to = tagEnd < 0 ? to : tagEnd;
         }
-        items.add(Item.of(Kind.RAW, from, to, name));
+        Content content = switch (name) {
+            case "script" -> scriptContent(type(from, startTagEnd));
+            case "style" -> {
+                String type = type(from, startTagEnd);
+                yield type == null || type.isBlank() || type.contains("css") ? Content.CSS : Content.VERBATIM;
+            }
+            default -> Content.VERBATIM;
+        };
+        items.add(new Item(Kind.RAW, from, to, name, startTagEnd, endTag, content));
+    }
+
+    private static Content scriptContent(String type) {
+        if (type == null || type.isBlank() || type.equals("module")) {
+            return Content.JAVASCRIPT;
+        } else if (type.contains("json")) {
+            return Content.JSON;
+        }
+        // text/template and the like hold markup or data, not code.
+        return type.contains("javascript") || type.contains("ecmascript") ? Content.JAVASCRIPT : Content.VERBATIM;
     }
 
     /** @return the start of {@code </name}, ignoring case, or -1 */
@@ -218,6 +257,21 @@ final class MarkupFormatter {
             i += 2;
         }
         return -1;
+    }
+
+    /** @return the lowercase {@code type} attribute of the start tag between {@code from} and {@code to}, or null */
+    private String type(int from, int to) {
+        Matcher matcher = TYPE_ATTRIBUTE.matcher(body).region(from, to);
+        if (!matcher.find()) {
+            return null;
+        }
+        String value =
+            matcher.group(1) != null
+                ? matcher.group(1)
+                : matcher.group(2) != null
+                  ? matcher.group(2)
+                  : matcher.group(3);
+        return value.strip().toLowerCase(Locale.ROOT);
     }
 
     private void addText(int from, int to) {
@@ -259,7 +313,7 @@ final class MarkupFormatter {
                 }
                 case RAW -> {
                     out.newline();
-                    write(item, out);
+                    writeRaw(item, out);
                 }
             }
         }
@@ -271,6 +325,31 @@ final class MarkupFormatter {
 
     private void write(Item item, IndentWriter out) {
         out.write(body, item.from(), item.to());
+    }
+
+    private void writeRaw(Item item, IndentWriter out) {
+        out.write(body, item.from(), item.contentFrom());
+        String content = Scan.strip(body.substring(item.contentFrom(), item.contentTo()));
+        boolean formatted =
+            !content.isEmpty() &&
+            (item.content() == Content.JAVASCRIPT ||
+                item.content() == Content.CSS ||
+                (item.content() == Content.JSON && JsonFormatter.accepts(content)));
+        if (formatted) {
+            out.indent();
+            out.newline();
+            switch (item.content()) {
+                case JAVASCRIPT -> JavaScriptFormatter.write(content, out);
+                case CSS -> CssFormatter.write(content, out);
+                case JSON -> JsonFormatter.write(content, out);
+                case VERBATIM -> throw new IllegalStateException();
+            }
+            out.dedent();
+            out.newline();
+        } else {
+            out.write(body, item.contentFrom(), item.contentTo());
+        }
+        out.write(body, item.contentTo(), item.to());
     }
 
     private int nameEnd(int from) {

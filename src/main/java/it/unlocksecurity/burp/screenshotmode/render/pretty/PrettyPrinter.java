@@ -5,8 +5,8 @@ import it.unlocksecurity.burp.screenshotmode.render.Scan;
 import java.util.Locale;
 
 /**
- * Pretty prints message bodies, like the "Pretty" tab of Burp's message editor: JSON, HTML and XML (SVG, RSS,
- * SOAP, ...). Only line breaks and indentation change: the tokens and the spacing within a line are
+ * Pretty prints message bodies, like the "Pretty" tab of Burp's message editor: JSON, HTML, XML (SVG, RSS, SOAP,
+ * ...), CSS and JavaScript. Only line breaks and indentation change: the tokens and the spacing within a line are
  * kept as they are, so rules written against the raw message still match, and what the screenshot shows is what was
  * sent. Bodies in other formats, or that don't parse as the format they claim, are returned unchanged.
  *
@@ -19,6 +19,8 @@ public final class PrettyPrinter {
         JSON,
         HTML,
         XML,
+        CSS,
+        JAVASCRIPT,
     }
 
     private PrettyPrinter() {}
@@ -64,6 +66,8 @@ public final class PrettyPrinter {
                     return null;
                 }
             }
+            case CSS -> CssFormatter.write(body, out);
+            case JAVASCRIPT -> JavaScriptFormatter.write(body, out);
         }
         return out.toString();
     }
@@ -92,6 +96,10 @@ public final class PrettyPrinter {
             return Format.HTML;
         } else if (type.contains("xml")) {
             return Format.XML;
+        } else if (type.equals("text/css")) {
+            return Format.CSS;
+        } else if (type.contains("javascript") || type.contains("ecmascript")) {
+            return Format.JAVASCRIPT;
         }
         return null;
     }

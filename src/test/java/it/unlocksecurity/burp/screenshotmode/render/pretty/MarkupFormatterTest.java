@@ -67,12 +67,41 @@ class MarkupFormatterTest {
     }
 
     @Test
-    void keepsScriptsAndStylesAsTheyAre() {
-        String html = "<head><script>if (a<b) { x(\"</p>\"); }</script><style>p{margin:0}</style></head>";
+    void formatsScriptsAndStyles() {
+        String html =
+            "<head><script>if (a<b) { x(\"</p>\"); }</script><style>p{margin:0}</style>" +
+            "<script type=\"application/ld+json\">{\"a\":1}</script><script src=\"x.js\"></script></head>";
         assertEquals(
-            "<head>\n  <script>if (a<b) { x(\"</p>\"); }</script>\n  <style>p{margin:0}</style>\n</head>",
+            """
+            <head>
+              <script>
+                if (a<b) {
+                  x("</p>");
+                }
+              </script>
+              <style>
+                p{
+                  margin:0
+                }
+              </style>
+              <script type="application/ld+json">
+                {
+                  "a":1
+                }
+              </script>
+              <script src="x.js"></script>
+            </head>""",
             MarkupFormatter.format(html, true)
         );
+    }
+
+    @Test
+    void leavesTemplatesAndUnknownScriptTypesVerbatim() {
+        String html = "<script type='text/x-template'><div>{{ a }}</div></script>";
+        assertEquals(html, MarkupFormatter.format(html, true));
+        // Not valid JSON: shown as it is.
+        String json = "<script type=application/json>{a:1}</script>";
+        assertEquals(json, MarkupFormatter.format(json, true));
     }
 
     @Test
@@ -83,7 +112,7 @@ class MarkupFormatterTest {
             MarkupFormatter.format("<p>a < b<img src=x onerror=alert(1)><a href=\"x", true)
         );
         assertEquals("<a>\n  <!-- never closed", MarkupFormatter.format("<a><!-- never closed", true));
-        assertEquals("<p>\n  <script>f()", MarkupFormatter.format("<p><script>f()", true));
+        assertEquals("<script>\n  f()", MarkupFormatter.format("<script>f()", true));
     }
 
     @Test

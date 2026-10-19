@@ -28,7 +28,9 @@ No external tools, no manual cropping and blurring.
 - **Highlights**: regex or literal patterns, painted as a translucent marker or as a rectangle, in any color.
 - **Redactions**: blur, opaque box or replacement text (`[REDACTED]`), optionally limited to selected capture
   groups (e.g. `session=([0-9a-f]+)` redacts only the value).
-- **Pretty view** for JSON, XML and HTML bodies, like Burp's Pretty tab, without breaking your rules.
+- **Pretty view** for JSON, HTML, XML (SVG, RSS, SOAP, …), CSS and JavaScript bodies, like Burp's Pretty tab.
+  Only line breaks and indentation change, so your rules still match and broken or malicious markup shows exactly as
+  sent.
 - **Right-click selected text** in the preview to highlight it, redact it or hide its header in one click.
 - **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
 - **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.

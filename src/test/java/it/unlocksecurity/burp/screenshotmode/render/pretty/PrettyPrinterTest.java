@@ -83,6 +83,9 @@ class PrettyPrinterTest {
     void picksTheFormatFromTheContentType() {
         assertEquals("<svg>\n  <g/>\n</svg>", body("image/svg+xml", "<svg><g/></svg>"));
         assertEquals("<feed>\n  <id>1</id>\n</feed>", body("application/atom+xml", "<feed><id>1</id></feed>"));
+        assertEquals("a{\n  b:c\n}", body("text/css; charset=utf-8", "a{b:c}"));
+        assertEquals("f();\ng();", body("application/javascript", "f();g();"));
+        assertEquals("f();\ng();", body("text/javascript", "f();g();"));
         assertEquals("{\n  \"a\":1\n}", body("application/problem+json", "{\"a\":1}"));
         // HTML served as XML still gets HTML rules (void elements).
         assertEquals("<!doctype html>\n<p>\n  <br>\n</p>", body("application/xml", "<!doctype html><p><br></p>"));
@@ -111,7 +114,9 @@ class PrettyPrinterTest {
     private static final List<Function<String, String>> FORMATTERS = List.of(
         JsonFormatter::format,
         body -> MarkupFormatter.format(body, true),
-        body -> MarkupFormatter.format(body, false)
+        body -> MarkupFormatter.format(body, false),
+        CssFormatter::format,
+        JavaScriptFormatter::format
     );
 
     @Test
