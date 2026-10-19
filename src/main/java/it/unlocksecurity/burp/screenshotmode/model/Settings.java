@@ -9,29 +9,36 @@ public final class Settings {
     public static final int MIN_PIXEL_WIDTH = 200;
     public static final int MAX_PIXEL_WIDTH = 2000;
 
+    /*
+     * Noisy headers hidden by default, split by the messages each is defined for: RFC 9110 (semantics), 9111
+     * (caching), 9112 (HTTP/1.1) and the specs named below. Vendor headers (Cloudflare, CloudFront, S3, Fastly, ...)
+     * are added by servers and CDNs to responses: Burp, on the client side, never sees them in requests.
+     */
+
+    /** Allowed in both requests and responses. */
     private static final List<String> DEFAULT_HEADERS_TO_HIDE = List.of(
+        // Mostly requests, but also in 415 responses (RFC 9110, section 15.5.16).
         "Accept",
         "Accept-Encoding",
-        "Accept-Language",
-        "Accept-Ranges",
-        "Age",
-        "Alt-Svc",
         "Cache-Control",
-        "CF-Cache-Status",
-        "CF-RAY",
         "Connection",
         "Content-Length",
         "Date",
-        "ETag",
-        "Expect-CT",
-        "Expires",
+        // RFC 2068, section 19.7.1.1.
         "Keep-Alive",
-        "Last-Modified",
-        "NEL",
-        "Permissions-Policy",
+        // A request field (RFC 9111, section 5.4), but servers commonly send "Pragma: no-cache" too.
         "Pragma",
+        // RFC 9218, section 5.
         "Priority",
-        "Report-To",
+        "Transfer-Encoding",
+        "Via",
+        // No spec: clients and proxies send it, servers echo it.
+        "X-Request-Id"
+    );
+
+    private static final List<String> DEFAULT_REQUEST_HEADERS_TO_HIDE = List.of(
+        "Accept-Language",
+        // User-Agent Client Hints (WICG) and Fetch Metadata (W3C).
         "Sec-CH-UA",
         "Sec-CH-UA-Arch",
         "Sec-CH-UA-Bitness",
@@ -45,21 +52,40 @@ public final class Settings {
         "Sec-Fetch-Mode",
         "Sec-Fetch-Site",
         "Sec-Fetch-User",
+        // Upgrade Insecure Requests (W3C).
+        "Upgrade-Insecure-Requests"
+    );
+
+    private static final List<String> DEFAULT_RESPONSE_HEADERS_TO_HIDE = List.of(
+        "Accept-Ranges",
+        "Age",
+        // RFC 7838.
+        "Alt-Svc",
+        "CF-Cache-Status",
+        "CF-RAY",
+        "ETag",
+        // RFC 9163.
+        "Expect-CT",
+        "Expires",
+        "Last-Modified",
+        // Network Error Logging, Permissions Policy, Reporting API, Server Timing (W3C).
+        "NEL",
+        "Permissions-Policy",
+        "Report-To",
         "Server-Timing",
+        // RFC 6797.
         "Strict-Transport-Security",
-        "Transfer-Encoding",
-        "Upgrade-Insecure-Requests",
         "Vary",
-        "Via",
         "X-Amz-Cf-Id",
         "X-Amz-Cf-Pop",
         "X-Amz-Id-2",
         "X-Amz-Request-Id",
         "X-Cache",
+        // Fetch (WHATWG).
         "X-Content-Type-Options",
+        // RFC 7034.
         "X-Frame-Options",
         "X-Powered-By",
-        "X-Request-Id",
         "X-Served-By",
         "X-Timer",
         "X-XSS-Protection"
@@ -82,6 +108,8 @@ public final class Settings {
     public static Settings defaults() {
         Settings settings = new Settings();
         settings.headersToHide.both = new ArrayList<>(DEFAULT_HEADERS_TO_HIDE);
+        settings.headersToHide.request = new ArrayList<>(DEFAULT_REQUEST_HEADERS_TO_HIDE);
+        settings.headersToHide.response = new ArrayList<>(DEFAULT_RESPONSE_HEADERS_TO_HIDE);
         return settings;
     }
 

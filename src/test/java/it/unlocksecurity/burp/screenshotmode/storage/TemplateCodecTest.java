@@ -224,7 +224,7 @@ class TemplateCodecTest {
             Template template = decoded.data().templates().getFirst();
             assertEquals("Default", template.name);
             assertEquals(template.id, decoded.data().defaultTemplateId());
-            assertTrue(template.settings.headersToHide.both.contains("Sec-Fetch-Mode"));
+            assertTrue(template.settings.headersToHide.request.contains("Sec-Fetch-Mode"));
         }
     }
 
