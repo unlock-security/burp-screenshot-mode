@@ -64,15 +64,21 @@ tests construct the full UI and render images without Burp — keep new Burp dep
 
 **Rendering pipeline** (per message half, in `ui.ContentPanel`):
 `MessageText.fromBytes` (UTF-8 with ISO-8859-1 fallback, `\n` line breaks, truncation) →
-`PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`) →
+`pretty.PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`; only adds line breaks
+and indentation) →
 `HeaderFilter.filter` (hide headers; `!`-prefixed rules force-show) →
 `RuleEngine.apply` (highlights + redactions → `Decorated` text + spans) →
 `HttpSyntax.tokenize` → `MessagePane`/`MessageView` paint it with a `Palette`.
-`RuleEngine` applies `replace` redactions to the text itself, so all other spans are remapped from source to
-display offsets. Regex matching runs against a deadline-checking `CharSequence` to guard the EDT from catastrophic
-backtracking in user patterns. Blur has no Swing equivalent: `MessageView` post-processes the affected rows on an
-offscreen image (`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at 2× and exports PNG to
-file or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF).
+`render.pretty` holds one formatter per body format behind `PrettyPrinter`, its only public class, writing through
+`IndentWriter` (lazy line breaks and indentation, output capped at `MessageText.MAX_CHARS`).
+`RuleEngine` applies `replace` redactions to the text itself, so all other spans are remapped from source to display
+offsets. Regex matching runs against a deadline-checking `CharSequence` to guard the EDT from catastrophic backtracking
+in user patterns. Message bodies come from servers under test and are processed on the EDT, so the pretty printers and
+`HttpSyntax` scan them by hand in linear time, with the helpers in `render.Scan`: don't run `java.util.regex` patterns
+with a repeated group, like `(?:"[^"]*"|[^>])*`, over a body, since they recurse once per character and overflow the
+stack on long input. Blur has no Swing equivalent: `MessageView` post-processes the affected rows on an offscreen image
+(`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at 2× and exports PNG to file or clipboard
+(custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF).
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its stored

@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 public final class MessageText {
 
     /** Larger messages are truncated: nobody screenshots megabytes and Swing text layout gets slow. */
-    static final int MAX_CHARS = 300_000;
+    public static final int MAX_CHARS = 300_000;
 
     /**
      * Enough bytes for {@link #MAX_CHARS} characters in any encoding (UTF-8 needs at most 3 bytes per char, a CRLF
@@ -61,7 +61,7 @@ public final class MessageText {
         return text.substring(0, MAX_CHARS) + truncationNote(text.length() - MAX_CHARS);
     }
 
-    static String truncationNote(long characters) {
+    public static String truncationNote(long characters) {
         return "\n… [truncated " + characters + " characters]";
     }
 
