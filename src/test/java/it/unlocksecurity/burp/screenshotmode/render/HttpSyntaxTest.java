@@ -53,4 +53,29 @@ class HttpSyntaxTest {
         assertTrue(tokens.stream().allMatch(t -> 0 <= t.from() && t.from() <= t.to() && t.to() <= text.length()));
         assertTrue(HttpSyntax.tokenize("", true).isEmpty());
     }
+
+    @Test
+    void tokenizesLongJsonStringsWithoutRecursion() {
+        // A JWT or an embedded image: overflowed the stack with the former regular expression.
+        String value = "\"" + "A\\u0041".repeat(20_000) + "\"";
+        String text = "HTTP/1.1 200 OK\nContent-Type: application/json\n\n{\"a\" : " + value + ", \"b\":-1.5e3}";
+        Map<String, HttpSyntax.TokenType> tokens = tokens(text, false);
+        assertEquals(HttpSyntax.TokenType.KEY, tokens.get("\"a\""));
+        assertEquals(HttpSyntax.TokenType.STRING, tokens.get(value));
+        assertEquals(HttpSyntax.TokenType.NUMBER, tokens.get("-1.5e3"));
+    }
+
+    @Test
+    void tokenizesJsonLikeBefore() {
+        String text =
+            "HTTP/1.1 200 OK\nContent-Type: application/json\n\n[\"x\\\"\", 12ab, 3.e, 7e, null, nullx, \"open\n\"k\":1]";
+        Map<String, HttpSyntax.TokenType> tokens = tokens(text, false);
+        assertEquals(HttpSyntax.TokenType.STRING, tokens.get("\"x\\\"\""));
+        assertEquals(HttpSyntax.TokenType.NUMBER, tokens.get("3"));
+        assertEquals(null, tokens.get("7"));
+        assertEquals(HttpSyntax.TokenType.KEYWORD, tokens.get("null"));
+        assertEquals(HttpSyntax.TokenType.KEY, tokens.get("\"k\""));
+        assertEquals(null, tokens.get("12"));
+        assertEquals(null, tokens.get("nullx"));
+    }
 }

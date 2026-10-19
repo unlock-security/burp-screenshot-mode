@@ -199,6 +199,21 @@ class RuleEngineTest {
     }
 
     @Test
+    void stackOverflowingPatternsAreSkipped() {
+        // (a|b)* recurses once per character in java.util.regex.
+        String text = "x" + "ab".repeat(50_000) + "y";
+        assertTrue(
+            RuleEngine.apply(
+                text,
+                List.of(highlight("x(a|b)*y", MatchMode.REGEX), highlight("y", MatchMode.STRING)),
+                List.of()
+            )
+                .spans()
+                .size() == 1
+        );
+    }
+
+    @Test
     void parsesAndFormatsColors() {
         assertEquals(new Color(0x12ab34), RuleEngine.parseColor("#12AB34", Color.BLACK));
         assertEquals(Color.BLACK, RuleEngine.parseColor("red", Color.BLACK));

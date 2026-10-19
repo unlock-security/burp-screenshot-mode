@@ -181,8 +181,9 @@ public final class RuleEngine {
                 }
                 matches.add(new Match(matcher.start(), matcher.end(), groups));
             }
-        } catch (DeadlineCharSequence.TimeoutException e) {
-            // Keep whatever matched before the budget ran out.
+        } catch (DeadlineCharSequence.TimeoutException | StackOverflowError e) {
+            // Keep whatever matched before the budget ran out, or before a pattern that recurses once per character,
+            // like (a|b)*, overflowed the stack on a long match.
         }
         return matches;
     }

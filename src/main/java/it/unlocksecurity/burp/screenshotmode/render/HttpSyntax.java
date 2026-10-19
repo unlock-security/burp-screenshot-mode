@@ -28,12 +28,6 @@ public final class HttpSyntax {
 
     public record Token(int from, int to, TokenType type) {}
 
-    private static final Pattern JSON = Pattern.compile(
-        "(?<key>\"(?:[^\"\\\\\\n]|\\\\.)*\"(?=\\s*:))" +
-            "|(?<string>\"(?:[^\"\\\\\\n]|\\\\.)*\")" +
-            "|(?<number>-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" +
-            "|(?<keyword>\\b(?:true|false|null)\\b)"
-    );
     private static final Pattern MARKUP = Pattern.compile("<!--[\\s\\S]*?(?:-->|$)|<[^<>]*>");
     private static final Pattern TAG_OPEN = Pattern.compile("^(</|<\\?|<!|<)([^\\s/>?]*)");
     private static final Pattern TAG_CLOSE = Pattern.compile("(/>|\\?>|>)$");
@@ -143,19 +137,86 @@ public final class HttpSyntax {
         }
     }
 
+    /**
+     * Strings (keys when a colon follows), numbers and {@code true}/{@code false}/{@code null}. Scanned by hand: a
+     * regular expression for strings, {@code "(?:[^"\\]|\\.)*"}, recurses once per character and overflows the
+     * stack on a string of a few thousand characters, like a JWT or an embedded image.
+     */
     private static void tokenizeJson(String body, int offset, List<Token> tokens) {
-        Matcher matcher = JSON.matcher(body);
-        while (matcher.find()) {
-            TokenType type =
-                matcher.group("key") != null
-                    ? TokenType.KEY
-                    : matcher.group("string") != null
-                      ? TokenType.STRING
-                      : matcher.group("number") != null
-                        ? TokenType.NUMBER
-                        : TokenType.KEYWORD;
-            tokens.add(new Token(offset + matcher.start(), offset + matcher.end(), type));
+        int length = body.length();
+        // No string can be closed before this index: an earlier one ran into the end of its line.
+        int noStringBefore = 0;
+        int i = 0;
+        while (i < length) {
+            char c = body.charAt(i);
+            boolean wordBefore = i > 0 && Scan.isWordChar(body.charAt(i - 1));
+            if (c == '"' && i >= noStringBefore) {
+                int end = Scan.closedQuoteEnd(body, i);
+                if (end >= 0) {
+                    int next = Scan.skipWhitespace(body, end);
+                    boolean key = next < length && body.charAt(next) == ':';
+                    tokens.add(new Token(offset + i, offset + end, key ? TokenType.KEY : TokenType.STRING));
+                    i = end;
+                    continue;
+                }
+                noStringBefore = -end - 1;
+            } else if ((c == '-' && i + 1 < length && isDigit(body.charAt(i + 1))) || (isDigit(c) && !wordBefore)) {
+                int end = numberEnd(body, i);
+                if (end > 0) {
+                    tokens.add(new Token(offset + i, offset + end, TokenType.NUMBER));
+                    i = end;
+                    continue;
+                }
+            } else if (!wordBefore && Scan.isWordChar(c)) {
+                int end = Scan.wordEnd(body, i);
+                String word = body.substring(i, end);
+                if (word.equals("true") || word.equals("false") || word.equals("null")) {
+                    tokens.add(new Token(offset + i, offset + end, TokenType.KEYWORD));
+                }
+                i = end;
+                continue;
+            }
+            i++;
         }
+    }
+
+    /**
+     * @return the end of the number starting at {@code from}, with its fraction and exponent when they are followed
+     *     by a word boundary, or -1 when no form of it is
+     */
+    private static int numberEnd(String body, int from) {
+        int integerEnd = digitsEnd(body, body.charAt(from) == '-' ? from + 1 : from);
+        int fractionEnd = body.startsWith(".", integerEnd) ? digitsEnd(body, integerEnd + 1) : integerEnd;
+        if (fractionEnd == integerEnd + 1) {
+            fractionEnd = integerEnd;
+        }
+        int exponentEnd = fractionEnd;
+        if (fractionEnd < body.length() && (body.charAt(fractionEnd) == 'e' || body.charAt(fractionEnd) == 'E')) {
+            int digits = fractionEnd + 1;
+            if (digits < body.length() && (body.charAt(digits) == '+' || body.charAt(digits) == '-')) {
+                digits++;
+            }
+            int end = digitsEnd(body, digits);
+            exponentEnd = end > digits ? end : fractionEnd;
+        }
+        for (int end : new int[] { exponentEnd, fractionEnd, integerEnd }) {
+            if (end == body.length() || !Scan.isWordChar(body.charAt(end))) {
+                return end;
+            }
+        }
+        return -1;
+    }
+
+    private static int digitsEnd(String body, int from) {
+        int i = from;
+        while (i < body.length() && isDigit(body.charAt(i))) {
+            i++;
+        }
+        return i;
+    }
+
+    private static boolean isDigit(char c) {
+        return c >= '0' && c <= '9';
     }
 
     private static void tokenizeMarkup(String body, int offset, List<Token> tokens) {
