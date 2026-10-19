@@ -19,8 +19,8 @@ class SettingsTest {
         assertFalse(headers.rulesFor(RuleTarget.RESPONSE).contains("Sec-Fetch-Mode"));
         assertTrue(headers.rulesFor(RuleTarget.RESPONSE).contains("ETag"));
         assertFalse(headers.rulesFor(RuleTarget.REQUEST).contains("ETag"));
-        assertTrue(headers.rulesFor(RuleTarget.REQUEST).contains("Content-Length"));
-        assertTrue(headers.rulesFor(RuleTarget.RESPONSE).contains("Content-Length"));
+        assertTrue(headers.rulesFor(RuleTarget.REQUEST).contains("Date"));
+        assertTrue(headers.rulesFor(RuleTarget.RESPONSE).contains("Date"));
     }
 
     @Test

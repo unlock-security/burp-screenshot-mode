@@ -11,8 +11,12 @@ public final class Settings {
 
     /*
      * Noisy headers hidden by default, split by the messages each is defined for: RFC 9110 (semantics), 9111
-     * (caching), 9112 (HTTP/1.1) and the specs named below. Vendor headers (Cloudflare, CloudFront, S3, Fastly, ...)
-     * are added by servers and CDNs to responses: Burp, on the client side, never sees them in requests.
+     * (caching) and the specs named below. Vendor headers (Cloudflare, CloudFront, S3, Fastly, DuckDuckGo, ...) are
+     * added by servers and CDNs to responses: Burp, on the client side, never sees them in requests.
+     *
+     * Headers that can take part in request smuggling or other desync attacks are left visible, as they can be the
+     * evidence: Content-Length, Transfer-Encoding, TE, Trailer, Connection, Keep-Alive, Upgrade, Expect, Host,
+     * HTTP2-Settings and Proxy-Connection.
      */
 
     /** Allowed in both requests and responses. */
@@ -21,61 +25,113 @@ public final class Settings {
         "Accept",
         "Accept-Encoding",
         "Cache-Control",
-        "Connection",
-        "Content-Length",
+        // RFC 9530.
+        "Content-Digest",
         "Date",
-        // RFC 2068, section 19.7.1.1.
-        "Keep-Alive",
         // A request field (RFC 9111, section 5.4), but servers commonly send "Pragma: no-cache" too.
         "Pragma",
         // RFC 9218, section 5.
         "Priority",
-        "Transfer-Encoding",
+        // RFC 9530.
+        "Repr-Digest",
         "Via",
         // No spec: clients and proxies send it, servers echo it.
         "X-Request-Id"
     );
 
     private static final List<String> DEFAULT_REQUEST_HEADERS_TO_HIDE = List.of(
+        // Deprecated by browsers (RFC 9110, section 12.5.2).
+        "Accept-Charset",
         "Accept-Language",
-        // User-Agent Client Hints (WICG) and Fetch Metadata (W3C).
+        // Do Not Track (W3C), withdrawn.
+        "DNT",
+        // Client hints (RFC 8942): device and network.
+        "Device-Memory",
+        "Downlink",
+        "DPR",
+        "ECT",
+        "RTT",
+        "Viewport-Width",
+        // RFC 8470.
+        "Early-Data",
+        // Legacy prefetch hint; Sec-Purpose replaces it (Fetch, WHATWG).
+        "Purpose",
+        // Topics API (WICG).
+        "Sec-Browsing-Topics",
+        // User preference media features client hints (WICG).
+        "Sec-CH-Prefers-Color-Scheme",
+        "Sec-CH-Prefers-Reduced-Motion",
+        // User-Agent Client Hints (WICG).
         "Sec-CH-UA",
         "Sec-CH-UA-Arch",
         "Sec-CH-UA-Bitness",
+        "Sec-CH-UA-Form-Factors",
         "Sec-CH-UA-Full-Version",
         "Sec-CH-UA-Full-Version-List",
         "Sec-CH-UA-Mobile",
         "Sec-CH-UA-Model",
         "Sec-CH-UA-Platform",
         "Sec-CH-UA-Platform-Version",
+        "Sec-CH-UA-WoW64",
+        // Fetch Metadata (W3C).
         "Sec-Fetch-Dest",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Site",
+        "Sec-Fetch-Storage-Access",
         "Sec-Fetch-User",
+        // Global Privacy Control.
+        "Sec-GPC",
+        // Fetch (WHATWG).
+        "Sec-Purpose",
         // Upgrade Insecure Requests (W3C).
         "Upgrade-Insecure-Requests"
     );
 
     private static final List<String> DEFAULT_RESPONSE_HEADERS_TO_HIDE = List.of(
+        // Client hints (RFC 8942) and Client Hint Reliability (IETF draft).
+        "Accept-CH",
+        "Critical-CH",
         "Accept-Ranges",
         "Age",
         // RFC 7838.
         "Alt-Svc",
+        // RFC 9211.
+        "Cache-Status",
+        // RFC 9213.
+        "CDN-Cache-Control",
         "CF-Cache-Status",
         "CF-RAY",
+        // HTML (WHATWG) and Fetch (WHATWG).
+        "Cross-Origin-Embedder-Policy",
+        "Cross-Origin-Opener-Policy",
+        "Cross-Origin-Resource-Policy",
+        "X-Duckduckgo-Privacy-Random-Ac",
         "ETag",
         // RFC 9163.
         "Expect-CT",
         "Expires",
         "Last-Modified",
-        // Network Error Logging, Permissions Policy, Reporting API, Server Timing (W3C).
+        // Network Error Logging (W3C).
         "NEL",
+        // HTML (WHATWG).
+        "Origin-Agent-Cluster",
+        // Permissions Policy (W3C).
         "Permissions-Policy",
+        // RFC 9209.
+        "Proxy-Status",
+        // Referrer Policy (W3C).
+        "Referrer-Policy",
+        // Reporting API (W3C): Reporting-Endpoints replaces Report-To.
         "Report-To",
+        "Reporting-Endpoints",
+        // Server Timing and Resource Timing (W3C).
         "Server-Timing",
+        "Timing-Allow-Origin",
         // RFC 6797.
         "Strict-Transport-Security",
         "Vary",
+        // Obsoleted by RFC 9111, section 5.5, but still sent.
+        "Warning",
         "X-Amz-Cf-Id",
         "X-Amz-Cf-Pop",
         "X-Amz-Id-2",
@@ -83,8 +139,11 @@ public final class Settings {
         "X-Cache",
         // Fetch (WHATWG).
         "X-Content-Type-Options",
+        "X-DNS-Prefetch-Control",
+        "X-Download-Options",
         // RFC 7034.
         "X-Frame-Options",
+        "X-Permitted-Cross-Domain-Policies",
         "X-Powered-By",
         "X-Served-By",
         "X-Timer",
