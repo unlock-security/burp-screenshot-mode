@@ -76,10 +76,14 @@ and indentation) →
 `HeaderFilter.filter` (hides the headers `HeaderVisibility` hides in that message) →
 `RuleEngine.apply` (highlights + redactions → `Decorated` text + spans) →
 `HttpSyntax.tokenize` → `MessagePane`/`MessageView` paint it with a `Palette`.
-The URL bar is a `MessageView` too: `RuleEngine.apply` with the rules whose target is `URL`, no header filter and no
+Rules (`model.Rule`, the base of `HighlightRule` and `RedactionRule`) are of two `RuleType`s: a header rule matches
+the value (for highlights, the whole line) of named headers in both messages, found by a linear scan of the header
+lines; a pattern rule matches its regex or literal in each of its `targets`. `Rule.appliesTo` decides which rules run
+on each part, off rules included.
+The URL bar is a `MessageView` too: `RuleEngine.apply` with the rules that apply to the `URL`, no header filter and no
 syntax colors. `RuleEngine.apply` also reports a `RuleStatus` per rule (matches, invalid regex, stopped early), which
-`ContentPanel` collects by rule identity: the screenshot window shows it under each rule card and asks before
-exporting when a redaction failed.
+`ContentPanel` collects by rule identity: the screenshot window shows it on each rule's line in `ui.RuleList` and
+asks before exporting when a redaction failed.
 `render.pretty` holds one formatter per body format behind `PrettyPrinter`, its only public class, writing through
 `IndentWriter` (lazy line breaks and indentation, output capped at `MessageText.MAX_CHARS`).
 `RuleEngine` applies `replace` redactions to the text itself, so all other spans are remapped from source to display
@@ -112,7 +116,8 @@ edit the default hidden headers and rules there, and update the file whenever `V
 fails otherwise). Optional settings fields
 (`theme`, `view`, `url`) default sensibly when missing. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
-`TemplateCodecTest`).
+`TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced
+by the named rules of the current default (`storage.LegacyDefaults`); rules the user edited are kept as they are.
 
 **Header catalog:** `storage/header-catalog.json` (read by `storage.HeaderCatalogFile` into a `model.HeaderCatalog`)
 lists the known headers in groups, with the messages each is used in and where it is defined. It is reference data,

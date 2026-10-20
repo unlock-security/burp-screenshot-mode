@@ -33,6 +33,46 @@ class RuleEngineTest {
         return decorated.text().substring(span.from(), span.to());
     }
 
+    private static final String MESSAGE = String.join(
+        "\n",
+        "GET /x-api-key: no HTTP/1.1",
+        "Host: example.com",
+        "x-api-key:   k3y",
+        "X-Api-Key:",
+        "Accept: */*",
+        "",
+        "X-Api-Key: body"
+    );
+
+    @Test
+    void redactsTheValueOfNamedHeadersIgnoringCase() {
+        RedactionRule rule = RedactionRule.forHeaders(List.of("X-API-KEY"), RedactionMode.REPLACE);
+        Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
+        Decorated result = RuleEngine.apply(MESSAGE, List.of(), List.of(rule), statuses::put);
+        assertEquals(MESSAGE.replace("x-api-key:   k3y", "x-api-key:   [REDACTED]"), result.text());
+        assertEquals(new RuleStatus(1, null, null), statuses.get(rule), "an empty value is nothing to redact");
+    }
+
+    @Test
+    void highlightsTheWholeLineOfNamedHeaders() {
+        HighlightRule rule = HighlightRule.forHeaders(List.of("host", "Accept"));
+        Decorated result = RuleEngine.apply(MESSAGE, List.of(rule), List.of());
+        assertEquals(
+            List.of("Host: example.com", "Accept: */*"),
+            result
+                .spans()
+                .stream()
+                .map(span -> slice(result, span))
+                .toList()
+        );
+    }
+
+    @Test
+    void headerRulesLeaveTheStartLineAndTheBodyAlone() {
+        RedactionRule rule = RedactionRule.forHeaders(List.of("GET /x-api-key"), RedactionMode.REPLACE);
+        assertEquals(MESSAGE, RuleEngine.apply(MESSAGE, List.of(), List.of(rule)).text());
+    }
+
     @Test
     void highlightsEveryRegexMatch() {
         Decorated result = RuleEngine.apply(TEXT, List.of(highlight("[a-z]+=", MatchMode.REGEX)), List.of());

@@ -1,0 +1,155 @@
+package it.unlocksecurity.burp.screenshotmode.ui;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
+import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
+import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
+import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
+import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import java.awt.Font;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+class RuleListTest {
+
+    private static final Font MONO = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+
+    private final Settings settings = DefaultTemplate.settings();
+    private int changes;
+    private final SettingsForm form = new SettingsForm(settings, () -> changes++, MONO, false);
+
+    private RedactionRule named(String name) {
+        return settings.redactions
+            .stream()
+            .filter(rule -> rule.name.equals(name))
+            .findFirst()
+            .orElseThrow();
+    }
+
+    @Test
+    void describesRulesInWords() {
+        assertEquals("Header · X-Api-Key and 4 more · Replace", RuleList.summary(named("API key headers")));
+        assertEquals("Header · Cookie · Replace with [OMITTED]", RuleList.summary(named("Cookie values")));
+        assertEquals("Request · Response · URL · Replace", RuleList.summary(named("JSON Web Tokens")));
+
+        HighlightRule pattern = HighlightRule.create("\"role\": \"admin\"", RuleTarget.REQUEST, MatchMode.STRING);
+        pattern.targets.add(RuleTarget.RESPONSE);
+        assertEquals("\"role\": \"admin\"", RuleList.title(pattern), "unnamed rules show their pattern");
+        assertEquals("Request · Response · Highlight", RuleList.summary(pattern));
+
+        HighlightRule header = HighlightRule.forHeaders(List.of("Strict-Transport-Security"));
+        assertEquals("Strict-Transport-Security", RuleList.title(header));
+        assertEquals("Header · Highlight the whole line", RuleList.summary(header));
+        assertEquals("No headers yet", RuleList.title(HighlightRule.forHeaders(List.of())));
+    }
+
+    @Test
+    void opensOneRuleAtATimeAcrossBothLists() {
+        settings.highlights.add(HighlightRule.create("x", RuleTarget.REQUEST, MatchMode.STRING));
+        SettingsForm form = new SettingsForm(settings, () -> {}, MONO, false);
+        RuleList<RedactionRule>.Row cookie = form.redactionList().row(named("Cookie values"));
+        RuleList<HighlightRule>.Row highlight = form.highlightList().row(settings.highlights.getFirst());
+
+        cookie.header().toggle();
+        assertTrue(cookie.isExpanded());
+        highlight.header().toggle();
+        assertTrue(highlight.isExpanded());
+        assertFalse(cookie.isExpanded());
+        highlight.header().toggle();
+        assertFalse(highlight.isExpanded());
+    }
+
+    @Test
+    void turnsARuleOffFromItsLine() {
+        RedactionRule cookie = named("Cookie values");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(cookie);
+        Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
+        statuses.put(cookie, new RuleStatus(1, null, null));
+        form.showRuleStatuses(statuses);
+        assertEquals("1", row.pill().getText());
+        assertEquals(RuleList.Pill.Style.FILLED, row.pill().style());
+
+        clickEnabled(row);
+        assertFalse(cookie.enabled);
+        assertEquals("Off", row.pill().getText());
+        assertEquals(1, changes);
+    }
+
+    @Test
+    void flagsRulesThatFailed() {
+        RedactionRule rule = RedactionRule.create("(", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
+        settings.redactions.addFirst(rule);
+        SettingsForm form = new SettingsForm(settings, () -> {}, MONO, false);
+        Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
+        statuses.put(rule, new RuleStatus(0, RuleStatus.Problem.INVALID, "Unclosed group"));
+        form.showRuleStatuses(statuses);
+        RuleList.Pill shown = form.redactionList().row(rule).pill();
+        assertEquals("Error", shown.getText());
+        assertEquals(RuleList.Pill.Style.ERROR, shown.style());
+        assertTrue(shown.getToolTipText().contains("Unclosed group"));
+    }
+
+    @Test
+    void addsAHeaderRuleFirstAndOpen() {
+        RuleList<RedactionRule> list = form.redactionList();
+        list.addRuleForTests(RuleType.HEADER);
+        RedactionRule added = settings.redactions.getFirst();
+        assertEquals(RuleType.HEADER, added.type);
+        assertEquals(RedactionMode.REPLACE, added.mode);
+        assertTrue(list.row(added).isExpanded());
+    }
+
+    @Test
+    void editsUpdateTheRuleLine() {
+        RedactionRule cookie = named("Cookie values");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(cookie);
+        row.header().toggle();
+        javax.swing.JTextField headers = (javax.swing.JTextField) find(row.editorPanel(), "Headers");
+        headers.setText("Cookie, X-Session");
+        assertEquals(List.of("Cookie", "X-Session"), cookie.headers);
+        assertEquals("Header · Cookie and 1 more · Replace with [OMITTED]", row.summaryLabel().getText());
+    }
+
+    private static void clickEnabled(RuleList<?>.Row row) {
+        for (java.awt.Component component : row.header().getComponents()) {
+            if (component instanceof javax.swing.JCheckBox box) {
+                box.doClick();
+                return;
+            }
+        }
+        throw new AssertionError("no checkbox");
+    }
+
+    /** The control a label is for. */
+    private static java.awt.Component find(java.awt.Container container, String label) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (
+                component instanceof javax.swing.JLabel title &&
+                label.equals(title.getText()) &&
+                title.getLabelFor() != null
+            ) {
+                java.awt.Component target = title.getLabelFor();
+                if (target instanceof java.awt.Container holder && !(target instanceof javax.swing.JTextField)) {
+                    return holder.getComponent(0);
+                }
+                return target;
+            }
+            if (component instanceof java.awt.Container child) {
+                java.awt.Component found = find(child, label);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+}

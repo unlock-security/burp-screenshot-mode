@@ -267,11 +267,11 @@ final class ContentPanel extends JPanel {
             text,
             settings.highlights
                 .stream()
-                .filter(rule -> rule.target == target)
+                .filter(rule -> rule.appliesTo(target))
                 .toList(),
             settings.redactions
                 .stream()
-                .filter(rule -> rule.target == target)
+                .filter(rule -> rule.appliesTo(target))
                 .toList(),
             ruleStatuses::put
         );

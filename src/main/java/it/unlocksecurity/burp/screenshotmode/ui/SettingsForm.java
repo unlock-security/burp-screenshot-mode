@@ -1,11 +1,14 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
@@ -20,7 +23,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import javax.swing.BorderFactory;
@@ -32,7 +35,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.UIManager;
 
@@ -53,8 +55,9 @@ final class SettingsForm extends JPanel {
     private final JTabbedPane tabs = new JTabbedPane();
     private final Badge rulesCount = new Badge();
     private final Badge headersCount = new Badge();
-    /** The status line under each rule card, keyed by the rule itself. */
-    private final Map<Object, JTextArea> statusLines = new IdentityHashMap<>();
+    private final RuleList.Expansion expansion = new RuleList.Expansion();
+    private RuleList<HighlightRule> highlightList;
+    private RuleList<RedactionRule> redactionList;
     private final HeadersTab headers;
     private int failedRules;
 
@@ -100,60 +103,79 @@ final class SettingsForm extends JPanel {
     }
 
     private JComponent rulesTab(boolean wide) {
-        JPanel highlights = RuleCards.section(
+        HeaderCatalog catalog = HeaderCatalogFile.bundled();
+        highlightList = new RuleList<>(
             "Highlights",
-            null,
             "No highlights yet. Add one with + or right-click selected text in the preview.",
             settings.highlights,
-            () -> HighlightRule.create("", RuleTarget.REQUEST, MatchMode.REGEX),
-            (rule, change, delete) -> RuleCards.highlightCard(rule, change, delete, mono, statusLine(rule)),
-            onChange
+            type ->
+                type == RuleType.HEADER
+                    ? HighlightRule.forHeaders(List.of())
+                    : HighlightRule.create("", RuleTarget.REQUEST, MatchMode.REGEX),
+            (rule, fields) -> RuleList.highlightEditor(rule, fields, catalog),
+            expansion,
+            onChange,
+            mono
         );
-        JPanel redactions = RuleCards.section(
+        redactionList = new RuleList<>(
             "Redactions",
-            null,
             "No redactions yet. Add one with + or right-click selected text in the preview.",
             settings.redactions,
             // Replace, like right-click › Redact: blur and opaque only hide the text on screen.
-            () -> RedactionRule.create("", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX),
-            (rule, change, delete) -> RuleCards.redactionCard(rule, change, delete, mono, statusLine(rule)),
-            onChange
+            type ->
+                type == RuleType.HEADER
+                    ? RedactionRule.forHeaders(List.of(), RedactionMode.REPLACE)
+                    : RedactionRule.create("", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX),
+            (rule, fields) -> RuleList.redactionEditor(rule, fields, catalog),
+            expansion,
+            onChange,
+            mono
         );
         if (wide) {
             JPanel columns = new JPanel(new GridLayout(1, 2, 24, 0));
             columns.setOpaque(false);
-            columns.add(highlights);
-            columns.add(redactions);
+            columns.add(highlightList);
+            columns.add(redactionList);
             return columns;
         }
         Widgets.Stack stack = new Widgets.Stack(20, false);
-        stack.addItem(highlights);
-        stack.addItem(redactions);
+        stack.addItem(highlightList);
+        stack.addItem(redactionList);
         return stack;
     }
 
-    /** A rule card's status line, empty and hidden until {@link #showRuleStatuses} fills it. */
-    private JTextArea statusLine(Object rule) {
-        JTextArea line = Widgets.wrappingHint("", 260);
-        line.setVisible(false);
-        statusLines.put(rule, line);
-        return line;
+    RuleList<HighlightRule> highlightList() {
+        return highlightList;
+    }
+
+    RuleList<RedactionRule> redactionList() {
+        return redactionList;
+    }
+
+    /** Opens a rule in its list, closing the open one. */
+    void expand(Rule rule) {
+        expansion.open(rule);
+    }
+
+    /** Switches to the Rules tab and opens a rule, with the focus in what it matches. */
+    void showRule(Rule rule) {
+        tabs.setSelectedIndex(RULES);
+        for (RuleList<?> list : List.of(highlightList, redactionList)) {
+            if (list.contains(rule)) {
+                list.reveal(rule);
+            }
+        }
     }
 
     /**
-     * Shows under each rule card what it did in the screenshot: its matches, or why it did not fully apply. Rules
-     * without a status (as in the template editor, which renders no message) show nothing.
+     * Shows on each rule what it did in the screenshot: its matches, or why it did not fully apply. Rules without a
+     * status (as in the template editor, which renders no message) show none.
      */
     void showRuleStatuses(Map<Object, RuleStatus> statuses) {
-        statusLines.forEach((rule, line) -> {
-            RuleStatus status = statuses.get(rule);
-            line.setVisible(status != null);
-            if (status != null) {
-                line.setText(describe(status));
-                line.setForeground(status.failed() ? Widgets.errorColor() : Widgets.mutedColor());
-            }
-        });
+        highlightList.showStatuses(statuses);
+        redactionList.showStatuses(statuses);
         failedRules = (int) Stream.concat(settings.highlights.stream(), settings.redactions.stream())
+            .filter(rule -> rule.enabled)
             .map(statuses::get)
             .filter(status -> status != null && status.failed())
             .count();

@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
@@ -23,6 +24,7 @@ import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -141,7 +143,7 @@ class TemplateCodecTest {
         assertEquals(RedactionMode.REPLACE, replace.mode);
         assertEquals("***", replace.replacementText);
         assertEquals(List.of(2), replace.selectedGroups);
-        assertEquals(RuleTarget.RESPONSE, replace.target);
+        assertEquals(EnumSet.of(RuleTarget.RESPONSE), replace.targets);
 
         RedactionRule opaque = settings.redactions.get(1);
         assertEquals(RedactionMode.OPAQUE, opaque.mode);
@@ -154,14 +156,20 @@ class TemplateCodecTest {
         StoredData original = TemplateCodec.decode(v2(V2_SETTINGS)).data();
         original.templates().getFirst().settings.theme = ThemeMode.LIGHT;
         original.templates().getFirst().settings.view = ViewMode.PRETTY;
-        original.templates().getFirst().settings.redactions.getFirst().target = RuleTarget.URL;
+        original.templates().getFirst().settings.redactions.getFirst().targets = EnumSet.of(
+            RuleTarget.REQUEST,
+            RuleTarget.URL
+        );
         original.templates().getFirst().settings.url = UrlMode.PATH;
         String encoded = TemplateCodec.encode(original);
         StoredData decoded = TemplateCodec.decode(encoded).data();
         assertEquals(encoded, TemplateCodec.encode(decoded));
         assertEquals(ThemeMode.LIGHT, decoded.templates().getFirst().settings.theme);
         assertEquals(ViewMode.PRETTY, decoded.templates().getFirst().settings.view);
-        assertEquals(RuleTarget.URL, decoded.templates().getFirst().settings.redactions.getFirst().target);
+        assertEquals(
+            EnumSet.of(RuleTarget.REQUEST, RuleTarget.URL),
+            decoded.templates().getFirst().settings.redactions.getFirst().targets
+        );
         assertEquals(UrlMode.PATH, decoded.templates().getFirst().settings.url);
         assertFalse(encoded.contains("\"color\": \"#000000\""), "mode-specific fields only for their mode");
     }
@@ -331,6 +339,109 @@ class TemplateCodecTest {
             Visibility.SHOW,
             migrate("{\"both\": [\"!X-Mine\"], \"request\": [], \"response\": []}").headers.get("X-Mine")
         );
+    }
+
+    @Test
+    void roundTripsRulesOfVersion3() {
+        Settings settings = DefaultTemplate.settings();
+        HighlightRule header = HighlightRule.forHeaders(List.of("Strict-Transport-Security"));
+        header.enabled = false;
+        header.mode = HighlightMode.RECTANGLE;
+        settings.highlights.add(header);
+        RedactionRule pattern = RedactionRule.create(
+            "(a)(b)",
+            RuleTarget.RESPONSE,
+            RedactionMode.OPAQUE,
+            MatchMode.REGEX
+        );
+        pattern.name = "Mine";
+        pattern.targets.add(RuleTarget.URL);
+        pattern.useCaptureGroups = true;
+        pattern.selectedGroups = List.of(2);
+        settings.redactions.add(pattern);
+
+        String encoded = TemplateCodec.encode(new StoredData(List.of(Template.create("t", settings)), "x"));
+        Settings decoded = decodeSettings(encoded);
+        assertTrue(TemplateCodec.sameSettings(settings, decoded));
+        HighlightRule readHeader = decoded.highlights.getLast();
+        assertEquals(RuleType.HEADER, readHeader.type);
+        assertEquals(List.of("Strict-Transport-Security"), readHeader.headers);
+        assertFalse(readHeader.enabled);
+        RedactionRule readPattern = decoded.redactions.getLast();
+        assertEquals("Mine", readPattern.name);
+        assertEquals(EnumSet.of(RuleTarget.RESPONSE, RuleTarget.URL), readPattern.targets);
+        assertEquals(List.of(2), readPattern.selectedGroups);
+        assertTrue(readPattern.useCaptureGroups);
+    }
+
+    private static String v2Redactions(String redactions) {
+        return v2(
+            """
+            {"headersToHide": {"both": [], "request": [], "response": []}, "disposition": "vertical",
+             "width": {"mode": "full"}, "highlights": [], "redactions": [%s]}""".formatted(redactions)
+        );
+    }
+
+    private static final String OLD_JWT = """
+    {"id": "%s", "regex": "eyJ[\\\\w-]+\\\\.eyJ[\\\\w-]+\\\\.[\\\\w-]*", "target": "%s",
+     "useCaptureGroups": false, "selectedGroups": [], "matchMode": "regex", "mode": "replace",
+     "replacementText": "%s"}""";
+
+    @Test
+    void namesExactCopiesOfTheOldDefaultsAndMergesTheirTargets() {
+        Settings settings = decodeSettings(
+            v2Redactions(
+                OLD_JWT.formatted("a", "request", "[REDACTED]") +
+                    "," +
+                    OLD_JWT.formatted("b", "url", "***") +
+                    "," +
+                    OLD_JWT.formatted("c", "response", "[REDACTED]")
+            )
+        );
+        assertEquals(2, settings.redactions.size());
+        RedactionRule jwt = settings.redactions.getFirst();
+        assertEquals("JSON Web Tokens", jwt.name);
+        assertEquals("a", jwt.id);
+        assertEquals(EnumSet.of(RuleTarget.REQUEST, RuleTarget.RESPONSE), jwt.targets, "the URL rule was edited");
+        RedactionRule edited = settings.redactions.getLast();
+        assertEquals("", edited.name);
+        assertEquals("***", edited.replacementText);
+        assertEquals(EnumSet.of(RuleTarget.URL), edited.targets);
+    }
+
+    @Test
+    void migratesTheOldDefaultRulesToTheNamedOnes() throws Exception {
+        String json;
+        try (var in = TemplateCodecTest.class.getResourceAsStream("default-template-v2.json")) {
+            json = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        List<RedactionRule> migrated = decodeSettings(json).redactions;
+        List<RedactionRule> current = DefaultTemplate.settings().redactions;
+        assertEquals(
+            current
+                .stream()
+                .map(rule -> rule.name)
+                .sorted()
+                .toList(),
+            migrated
+                .stream()
+                .map(rule -> rule.name)
+                .sorted()
+                .toList()
+        );
+        for (RedactionRule rule : migrated) {
+            RedactionRule same = current
+                .stream()
+                .filter(c -> c.name.equals(rule.name))
+                .findFirst()
+                .orElseThrow();
+            assertEquals(same.type, rule.type, rule.name);
+            assertEquals(same.headers, rule.headers, rule.name);
+            if (rule.type == RuleType.PATTERN) {
+                assertEquals(same.targets, rule.targets, rule.name);
+                assertEquals(same.regex, rule.regex, rule.name);
+            }
+        }
     }
 
     @Test

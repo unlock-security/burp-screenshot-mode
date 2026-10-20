@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
 import java.awt.Font;
 import java.lang.reflect.InvocationTargetException;
+import java.util.EnumSet;
 import java.util.List;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
@@ -54,7 +55,7 @@ class ContentPanelTest {
         );
         assertEquals("https://example.com/needle", renderedUrl("https://example.com/needle", settings));
 
-        settings.redactions.getFirst().target = RuleTarget.URL;
+        settings.redactions.getFirst().targets = EnumSet.of(RuleTarget.URL);
         assertEquals("https://example.com/[REDACTED]", renderedUrl("https://example.com/needle", settings));
     }
 

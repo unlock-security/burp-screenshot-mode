@@ -5,11 +5,15 @@ import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
@@ -60,10 +64,14 @@ public final class RuleEngine {
         List<Range> redacted = new ArrayList<>();
         for (RedactionRule rule : redactions) {
             List<Range> ranges = new ArrayList<>();
-            Found found = findMatches(text, rule.regex, rule.matchMode);
+            Found found = find(text, rule, false);
             statuses.accept(rule, status(found, rule.regex, rule.matchMode));
             for (Match match : found.matches()) {
-                ranges.addAll(redactionRanges(match, rule.useCaptureGroups, rule.selectedGroups));
+                ranges.addAll(
+                    rule.type == RuleType.HEADER
+                        ? List.of(new Range(match.from(), match.to()))
+                        : redactionRanges(match, rule.useCaptureGroups, rule.selectedGroups)
+                );
             }
             redactionRanges.add(ranges);
             redacted.addAll(ranges);
@@ -74,7 +82,7 @@ public final class RuleEngine {
             Decorated.Kind kind =
                 rule.mode == HighlightMode.RECTANGLE ? Decorated.Kind.RECTANGLE : Decorated.Kind.HIGHLIGHT;
             Color color = parseColor(rule.color, Color.YELLOW);
-            Found found = findMatches(text, rule.regex, rule.matchMode);
+            Found found = find(text, rule, true);
             statuses.accept(rule, status(found, rule.regex, rule.matchMode));
             for (Match match : found.matches()) {
                 Range range = new Range(match.from(), match.to());
@@ -196,6 +204,50 @@ public final class RuleEngine {
             found.problem(),
             found.problem() == RuleStatus.Problem.INVALID ? validate(pattern, matchMode).orElse(null) : null
         );
+    }
+
+    /** @param wholeLine for a header rule, match the whole header line instead of its value */
+    private static Found find(String text, Rule rule, boolean wholeLine) {
+        return rule.type == RuleType.HEADER
+            ? new Found(headerMatches(text, rule.headers, wholeLine), null)
+            : findMatches(text, rule.regex, rule.matchMode);
+    }
+
+    /**
+     * The values (or whole lines) of the named headers, ignoring case. Scans the header lines by hand, in linear time,
+     * as the message comes from the server under test.
+     */
+    static List<Match> headerMatches(String text, List<String> names, boolean wholeLine) {
+        Set<String> wanted = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        wanted.addAll(names);
+        List<Match> matches = new ArrayList<>();
+        int start = text.indexOf('\n') + 1; // after the start line
+        while (start > 0 && start < text.length()) {
+            int end = text.indexOf('\n', start);
+            if (end < 0) {
+                end = text.length();
+            }
+            if (end == start) {
+                break; // the end of the headers
+            }
+            int colon = start;
+            while (colon < end && text.charAt(colon) != ':') {
+                colon++;
+            }
+            if (colon > start && colon < end && wanted.contains(text.substring(start, colon))) {
+                int from = colon + 1;
+                while (from < end && (text.charAt(from) == ' ' || text.charAt(from) == '\t')) {
+                    from++;
+                }
+                if (wholeLine) {
+                    matches.add(new Match(start, end, List.of()));
+                } else if (from < end) {
+                    matches.add(new Match(from, end, List.of()));
+                }
+            }
+            start = end + 1;
+        }
+        return matches;
     }
 
     static Found findMatches(String text, String pattern, MatchMode matchMode) {

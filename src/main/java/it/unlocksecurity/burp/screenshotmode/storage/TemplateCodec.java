@@ -17,7 +17,9 @@ import it.unlocksecurity.burp.screenshotmode.model.Labeled;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
@@ -26,6 +28,7 @@ import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -149,28 +152,16 @@ public final class TemplateCodec {
 
         JsonArray highlights = new JsonArray();
         for (HighlightRule rule : settings.highlights) {
-            JsonObject json = new JsonObject();
-            json.addProperty("id", rule.id);
-            json.addProperty("regex", rule.regex);
-            json.addProperty("target", rule.target.id());
-            json.addProperty("color", rule.color);
+            JsonObject json = encodeRule(rule, null);
             json.addProperty("mode", rule.mode.id());
-            json.addProperty("matchMode", rule.matchMode.id());
+            json.addProperty("color", rule.color);
             highlights.add(json);
         }
         object.add("highlights", highlights);
 
         JsonArray redactions = new JsonArray();
         for (RedactionRule rule : settings.redactions) {
-            JsonObject json = new JsonObject();
-            json.addProperty("id", rule.id);
-            json.addProperty("regex", rule.regex);
-            json.addProperty("target", rule.target.id());
-            json.addProperty("useCaptureGroups", rule.useCaptureGroups);
-            JsonArray groups = new JsonArray();
-            rule.selectedGroups.forEach(groups::add);
-            json.add("selectedGroups", groups);
-            json.addProperty("matchMode", rule.matchMode.id());
+            JsonObject json = encodeRule(rule, rule.useCaptureGroups ? rule.selectedGroups : null);
             json.addProperty("mode", rule.mode.id());
             if (rule.mode == RedactionMode.OPAQUE) {
                 json.addProperty("color", rule.color);
@@ -187,6 +178,36 @@ public final class TemplateCodec {
         object.addProperty("view", settings.view.id());
         object.addProperty("url", settings.url.id());
         return object;
+    }
+
+    /** @param groups the capture groups a pattern redaction is limited to, or {@code null} for the whole match */
+    private static JsonObject encodeRule(Rule rule, List<Integer> groups) {
+        JsonObject json = new JsonObject();
+        json.addProperty("id", rule.id);
+        json.addProperty("name", rule.name);
+        json.addProperty("enabled", rule.enabled);
+        JsonObject match = new JsonObject();
+        match.addProperty("type", rule.type.id());
+        if (rule.type == RuleType.HEADER) {
+            match.add("headers", stringArray(rule.headers));
+        } else {
+            JsonArray targets = new JsonArray();
+            for (RuleTarget target : RuleTarget.values()) {
+                if (rule.targets.contains(target)) {
+                    targets.add(target.id());
+                }
+            }
+            match.add("targets", targets);
+            match.addProperty("regex", rule.regex);
+            match.addProperty("matchMode", rule.matchMode.id());
+            if (groups != null) {
+                JsonArray array = new JsonArray();
+                groups.forEach(array::add);
+                match.add("groups", array);
+            }
+        }
+        json.add("match", match);
+        return json;
     }
 
     private static StoredData parseStoredData(JsonObject object, int version) {
@@ -237,6 +258,9 @@ public final class TemplateCodec {
         }
         for (JsonElement element : asArray(object.get("redactions"), "redactions")) {
             settings.redactions.add(parseRedaction(asObject(element, "redaction")));
+        }
+        if (version < 3) {
+            settings.redactions = LegacyDefaults.name(settings.redactions);
         }
 
         if (version < 2) {
@@ -353,29 +377,22 @@ public final class TemplateCodec {
 
     private static HighlightRule parseHighlight(JsonObject object) {
         HighlightRule rule = new HighlightRule();
-        rule.id = string(object, "id");
-        rule.regex = string(object, "regex");
-        rule.target = enumValue(RuleTarget.class, object, "target");
+        parseRule(object, rule);
         rule.color = string(object, "color");
         rule.mode = enumValue(HighlightMode.class, object, "mode");
-        rule.matchMode = optionalMatchMode(object);
         return rule;
     }
 
     private static RedactionRule parseRedaction(JsonObject object) {
         RedactionRule rule = new RedactionRule();
-        rule.id = string(object, "id");
-        rule.regex = string(object, "regex");
-        rule.target = enumValue(RuleTarget.class, object, "target");
-        rule.useCaptureGroups = bool(object, "useCaptureGroups");
-        rule.selectedGroups = new ArrayList<>();
-        for (JsonElement group : asArray(object.get("selectedGroups"), "selectedGroups")) {
-            if (!group.isJsonPrimitive() || !group.getAsJsonPrimitive().isNumber()) {
-                throw new IllegalArgumentException("selectedGroups must contain numbers");
-            }
-            rule.selectedGroups.add(group.getAsInt());
+        List<Integer> groups = parseRule(object, rule);
+        if (groups != null) {
+            rule.useCaptureGroups = true;
+            rule.selectedGroups = groups;
+        } else if (!object.has("match")) {
+            rule.useCaptureGroups = bool(object, "useCaptureGroups");
+            rule.selectedGroups = numberList(object.get("selectedGroups"), "selectedGroups");
         }
-        rule.matchMode = optionalMatchMode(object);
         rule.mode = enumValue(RedactionMode.class, object, "mode");
         if (rule.mode == RedactionMode.OPAQUE) {
             rule.color = string(object, "color");
@@ -383,6 +400,46 @@ public final class TemplateCodec {
             rule.replacementText = string(object, "replacementText");
         }
         return rule;
+    }
+
+    /**
+     * Reads what all rules have: a {@code match} object, or the {@code regex} and single {@code target} of versions 0
+     * to 2. Returns the capture groups of a pattern match, or {@code null} if it has none.
+     */
+    private static List<Integer> parseRule(JsonObject object, Rule rule) {
+        rule.id = string(object, "id");
+        rule.name = object.has("name") ? string(object, "name") : "";
+        rule.enabled = optionalBoolean(object, "enabled", true);
+        if (!object.has("match")) {
+            rule.regex = string(object, "regex");
+            rule.targets = EnumSet.of(enumValue(RuleTarget.class, object, "target"));
+            rule.matchMode = optionalMatchMode(object);
+            return null;
+        }
+        JsonObject match = asObject(object.get("match"), "match");
+        rule.type = enumValue(RuleType.class, match, "type");
+        if (rule.type == RuleType.HEADER) {
+            rule.headers = stringList(match.get("headers"), "match.headers");
+            return null;
+        }
+        rule.targets = EnumSet.noneOf(RuleTarget.class);
+        for (String target : stringList(match.get("targets"), "match.targets")) {
+            rule.targets.add(Labeled.fromId(RuleTarget.class, target));
+        }
+        rule.regex = string(match, "regex");
+        rule.matchMode = optionalMatchMode(match);
+        return match.has("groups") ? numberList(match.get("groups"), "match.groups") : null;
+    }
+
+    private static List<Integer> numberList(JsonElement element, String name) {
+        List<Integer> values = new ArrayList<>();
+        for (JsonElement value : asArray(element, name)) {
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+                throw new IllegalArgumentException(name + " must contain numbers");
+            }
+            values.add(value.getAsInt());
+        }
+        return values;
     }
 
     private static MatchMode optionalMatchMode(JsonObject object) {
@@ -446,6 +503,12 @@ public final class TemplateCodec {
             values.add(item.getAsString());
         }
         return values;
+    }
+
+    private static JsonArray stringArray(List<String> values) {
+        JsonArray array = new JsonArray();
+        values.forEach(array::add);
+        return array;
     }
 
     private static Map<String, Visibility> parseVisibilityMap(JsonElement element, String name) {

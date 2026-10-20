@@ -4,6 +4,7 @@ import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
@@ -441,8 +442,14 @@ final class ScreenshotDialog extends JDialog {
             .toList();
     }
 
+    /** Opens the first redaction that failed, or just the Rules tab. */
     private void showRules() {
-        form.tabs().setSelectedIndex(SettingsForm.RULES);
+        List<RedactionRule> failed = failedRedactions();
+        if (failed.isEmpty()) {
+            form.tabs().setSelectedIndex(SettingsForm.RULES);
+        } else {
+            form.showRule(failed.getFirst());
+        }
     }
 
     /**
@@ -565,11 +572,18 @@ final class ScreenshotDialog extends JDialog {
      */
     private void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
         Settings settings = state.settings;
+        Rule added = null;
         switch (action) {
-            case HIGHLIGHT -> settings.highlights.addFirst(HighlightRule.create(selected, target, MatchMode.STRING));
-            case REDACT -> settings.redactions.addFirst(
-                RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING)
-            );
+            case HIGHLIGHT -> {
+                HighlightRule rule = HighlightRule.create(selected, target, MatchMode.STRING);
+                settings.highlights.addFirst(rule);
+                added = rule;
+            }
+            case REDACT -> {
+                RedactionRule rule = RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING);
+                settings.redactions.addFirst(rule);
+                added = rule;
+            }
             case HIDE_HEADER -> {
                 int colon = selected.indexOf(':');
                 String header = (colon > 0 ? selected.substring(0, colon) : selected).trim();
@@ -580,6 +594,10 @@ final class ScreenshotDialog extends JDialog {
             }
         }
         rebuildForm();
+        if (added != null) {
+            // Open, so its card shows what was added; the focus stays in the preview.
+            form.expand(added);
+        }
         render();
     }
 

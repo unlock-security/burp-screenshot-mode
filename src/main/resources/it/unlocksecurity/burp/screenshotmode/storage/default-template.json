@@ -26,151 +26,170 @@
         "redactions": [
           {
             "id": "default-redaction-1",
-            "regex": "(?<=\\n)(?i:User-Agent): (?<UserAgent>.+)",
-            "target": "request",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
+            "name": "Authorization credentials",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request"
+              ],
+              "regex": "(?<=\\n)(?i:(?:Proxy-)?Authorization): (?:(?<AuthScheme>\\S+) )?(?<AuthParameters>.+)",
+              "matchMode": "regex",
+              "groups": [
+                2
+              ]
+            },
             "mode": "replace",
-            "replacementText": "[OMITTED]"
+            "replacementText": "[REDACTED]"
           },
           {
             "id": "default-redaction-2",
-            "regex": "(?<=\\n)(?i:Cookie): (?<Cookies>.+)",
-            "target": "request",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
+            "name": "Cookie values",
+            "enabled": true,
+            "match": {
+              "type": "header",
+              "headers": [
+                "Cookie"
+              ]
+            },
             "mode": "replace",
             "replacementText": "[OMITTED]"
           },
           {
             "id": "default-redaction-3",
-            "regex": "(?<=\\n)(?i:(?:Proxy-)?Authorization): (?:(?<AuthScheme>\\S+) )?(?<AuthParameters>.+)",
-            "target": "request",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              2
-            ],
-            "matchMode": "regex",
+            "name": "Set-Cookie values",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "response"
+              ],
+              "regex": "(?<=\\n)(?i:Set-Cookie): [^=;\\n]+=(?<Value>[^;\\n]*)",
+              "matchMode": "regex",
+              "groups": [
+                1
+              ]
+            },
             "mode": "replace",
             "replacementText": "[REDACTED]"
           },
           {
             "id": "default-redaction-4",
-            "regex": "(?<=\\n)(?i:X-Api-Key|Api-Key|X-Auth-Token|X-Access-Token|X-Amz-Security-Token): (?<Token>.+)",
-            "target": "request",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
+            "name": "User-Agent",
+            "enabled": true,
+            "match": {
+              "type": "header",
+              "headers": [
+                "User-Agent"
+              ]
+            },
             "mode": "replace",
-            "replacementText": "[REDACTED]"
+            "replacementText": "[OMITTED]"
           },
           {
             "id": "default-redaction-5",
-            "regex": "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
-            "target": "request",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
+            "name": "API key headers",
+            "enabled": true,
+            "match": {
+              "type": "header",
+              "headers": [
+                "X-Api-Key",
+                "Api-Key",
+                "X-Auth-Token",
+                "X-Access-Token",
+                "X-Amz-Security-Token"
+              ]
+            },
             "mode": "replace",
             "replacementText": "[REDACTED]"
           },
           {
             "id": "default-redaction-6",
-            "regex": "\"(?i:password|passwd|pwd|secret|client_secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
-            "target": "request",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
+            "name": "Secrets in query string",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request",
+                "url"
+              ],
+              "regex": "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
+              "matchMode": "regex",
+              "groups": [
+                1
+              ]
+            },
             "mode": "replace",
             "replacementText": "[REDACTED]"
           },
           {
             "id": "default-redaction-7",
-            "regex": "(?<=[&\\n])(?i:password|passwd|pwd|client_secret)=(?<Value>[^&\\n]*)",
-            "target": "request",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
+            "name": "Passwords and secrets in JSON requests",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request"
+              ],
+              "regex": "\"(?i:password|passwd|pwd|secret|client_secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
+              "matchMode": "regex",
+              "groups": [
+                1
+              ]
+            },
             "mode": "replace",
             "replacementText": "[REDACTED]"
           },
           {
             "id": "default-redaction-8",
-            "regex": "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*",
-            "target": "request",
-            "useCaptureGroups": false,
-            "selectedGroups": [],
-            "matchMode": "regex",
+            "name": "Passwords in form data",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request"
+              ],
+              "regex": "(?<=[&\\n])(?i:password|passwd|pwd|client_secret)=(?<Value>[^&\\n]*)",
+              "matchMode": "regex",
+              "groups": [
+                1
+              ]
+            },
             "mode": "replace",
             "replacementText": "[REDACTED]"
           },
           {
             "id": "default-redaction-9",
-            "regex": "(?<=\\n)(?i:Set-Cookie): [^=;\\n]+=(?<Value>[^;\\n]*)",
-            "target": "response",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
+            "name": "Tokens in JSON responses",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "response"
+              ],
+              "regex": "\"(?i:access_token|refresh_token|id_token|token|session_?id|api_?key|secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
+              "matchMode": "regex",
+              "groups": [
+                1
+              ]
+            },
             "mode": "replace",
             "replacementText": "[REDACTED]"
           },
           {
             "id": "default-redaction-10",
-            "regex": "\"(?i:access_token|refresh_token|id_token|token|session_?id|api_?key|secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
-            "target": "response",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
-            "mode": "replace",
-            "replacementText": "[REDACTED]"
-          },
-          {
-            "id": "default-redaction-11",
-            "regex": "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*",
-            "target": "response",
-            "useCaptureGroups": false,
-            "selectedGroups": [],
-            "matchMode": "regex",
-            "mode": "replace",
-            "replacementText": "[REDACTED]"
-          },
-          {
-            "id": "default-redaction-12",
-            "regex": "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
-            "target": "url",
-            "useCaptureGroups": true,
-            "selectedGroups": [
-              1
-            ],
-            "matchMode": "regex",
-            "mode": "replace",
-            "replacementText": "[REDACTED]"
-          },
-          {
-            "id": "default-redaction-13",
-            "regex": "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*",
-            "target": "url",
-            "useCaptureGroups": false,
-            "selectedGroups": [],
-            "matchMode": "regex",
+            "name": "JSON Web Tokens",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request",
+                "response",
+                "url"
+              ],
+              "regex": "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*",
+              "matchMode": "regex"
+            },
             "mode": "replace",
             "replacementText": "[REDACTED]"
           }

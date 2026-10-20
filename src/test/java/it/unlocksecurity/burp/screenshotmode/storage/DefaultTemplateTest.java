@@ -37,7 +37,7 @@ class DefaultTemplateTest {
         Settings settings = DefaultTemplate.settings();
         settings.redactions.clear();
         settings.headers.groups.clear();
-        assertEquals(13, DefaultTemplate.settings().redactions.size());
+        assertEquals(10, DefaultTemplate.settings().redactions.size());
         assertEquals(8, DefaultTemplate.settings().headers.groups.size());
     }
 
@@ -79,9 +79,27 @@ class DefaultTemplateTest {
     private static String redact(String text, RuleTarget target) {
         List<RedactionRule> rules = DefaultTemplate.settings()
             .redactions.stream()
-            .filter(rule -> rule.target == target)
+            .filter(rule -> rule.appliesTo(target))
             .toList();
         return RuleEngine.apply(text, List.of(), rules).text();
+    }
+
+    @Test
+    void namesEveryDefaultRuleOnce() {
+        List<String> names = DefaultTemplate.settings()
+            .redactions.stream()
+            .map(rule -> rule.name)
+            .toList();
+        assertEquals(names.size(), names.stream().distinct().count(), names.toString());
+        assertTrue(names.stream().noneMatch(String::isBlank));
+    }
+
+    @Test
+    void namesOnlyHeadersOfTheCatalogInHeaderRules() {
+        HeaderCatalog catalog = HeaderCatalogFile.bundled();
+        for (RedactionRule rule : DefaultTemplate.settings().redactions) {
+            rule.headers.forEach(name -> assertTrue(catalog.header(name).isPresent(), name));
+        }
     }
 
     @Test

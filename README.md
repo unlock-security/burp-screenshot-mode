@@ -27,14 +27,18 @@ No external tools, no manual cropping and blurring.
   headers of the message on screen, and the tab title counts how many it hides. Headers that aren't in the catalog are
   listed first, as custom headers; one used in both messages can be hidden in only one of them. By default, security
   headers and anything that can take part in request smuggling stay visible, as they can be the finding.
-- **Highlights**: regex or literal patterns, painted as a translucent marker or as a rectangle, in any color.
-- **Redactions**: blur, opaque box or replacement text (`[REDACTED]`), optionally limited to selected capture
-  groups (e.g. `session=([0-9a-f]+)` redacts only the value).
+- **Highlights**: painted as a translucent marker or as a rectangle, in any color.
+- **Redactions**: blur, opaque box or replacement text (`[REDACTED]`).
+- **Two kinds of rules**, chosen when you add one with **+**: a **header** rule names one or more headers and
+  redacts their whole value (a highlight marks the whole line), in requests and responses; a **text pattern** rule
+  matches a regex or literal text in the request, the response, the URL or any of them, and a redaction can be
+  limited to selected capture groups (e.g. `session=([0-9a-f]+)` redacts only the value).
+- **One list of rules**: each rule has an optional name, an on/off checkbox and a one-line summary, and opens into
+  its editor when clicked. The default template comes with named redactions for credentials, cookies, API keys,
+  passwords, tokens and JWTs, including in the URL, so a secret in the request line doesn't show up above it.
 - **Rule checks**: in the screenshot window, each rule shows how many times it matched. A redaction with an invalid
-  or too slow pattern is flagged on its card, on the *Rules* tab and above the preview, and **Copy** and **Save** ask
+  or too slow pattern is flagged on its line, on the *Rules* tab and above the preview, and **Copy** and **Save** ask
   before exporting a screenshot it may not fully cover.
-- Each highlight or redaction applies to the **request**, the **response** or the **URL**. The default rules also
-  redact tokens and JWTs in the URL, so a secret hidden in the request line doesn't show up above it.
 - **Pretty view** for JSON, HTML, XML (SVG, RSS, SOAP, …), CSS and JavaScript bodies, like Burp's Pretty tab.
   Only line breaks and indentation change, so your rules still match and broken or malicious markup shows exactly as
   sent.

@@ -380,7 +380,12 @@ final class Widgets {
         }
     }
 
-    private record SwatchIcon(Color color) implements Icon {
+    /** A rounded color square. */
+    record SwatchIcon(Color color, int size) implements Icon {
+        SwatchIcon(Color color) {
+            this(color, 16);
+        }
+
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
@@ -394,12 +399,12 @@ final class Widgets {
 
         @Override
         public int getIconWidth() {
-            return 16;
+            return size;
         }
 
         @Override
         public int getIconHeight() {
-            return 16;
+            return size;
         }
     }
 
