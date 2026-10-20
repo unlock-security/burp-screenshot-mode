@@ -157,10 +157,9 @@ public final class Settings {
     private static final String JWT = "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*";
 
     /*
-     * Default redactions. The patterns must work in Caido too, which runs them as JavaScript regular expressions:
-     * no flags for the whole pattern like (?im), but scoped ones like (?i:...), which both support. (?<=\n) anchors
-     * header rules to the start of a line, and (?i:...) matches header names in HTTP/2 messages, which Burp shows in
-     * lowercase. No repeated alternation like (?:[^"\\]|\\.)*, which overflows the stack on long values.
+     * Default redactions. (?<=\n) anchors header rules to the start of a line (without the MULTILINE flag, ^ only
+     * matches the start of the message), and (?i:...) matches header names in any case, as Burp shows HTTP/2 headers
+     * in lowercase. No repeated alternation like (?:[^"\\]|\\.)*, which overflows the stack on long values.
      */
     private static List<RedactionRule> defaultRedactions() {
         return List.of(
@@ -235,9 +234,9 @@ public final class Settings {
     public List<RedactionRule> redactions = new ArrayList<>();
     public boolean showTimestamp = false;
     public boolean showResponseInfo = true;
-    /** Not part of the Caido plugin: Swing has no CSS theme to inherit, so the capture palette is selectable. */
+    /** The capture palette: Swing has no CSS theme to inherit, so it is selectable. */
     public ThemeMode theme = ThemeMode.AUTO;
-    /** Not part of the Caido plugin: Caido's editors cannot pretty print, Burp's can. */
+    /** Raw or Pretty, like the tabs of Burp's message editor. */
     public ViewMode view = ViewMode.RAW;
 
     public static Settings defaults() {

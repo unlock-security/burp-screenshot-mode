@@ -102,7 +102,7 @@ public final class TemplatesTab extends JPanel {
         setDefault.addActionListener(event -> selected().ifPresent(this::makeDefault));
         delete.addActionListener(event -> selected().ifPresent(this::delete));
         JButton importButton = Widgets.button("Import…");
-        importButton.setToolTipText("Add templates from a JSON export (this extension's or the Caido plugin's format)");
+        importButton.setToolTipText("Add templates from a JSON export");
         importButton.addActionListener(event -> importTemplates());
         JButton exportButton = Widgets.button("Export…");
         exportButton.addActionListener(event -> exportTemplates());

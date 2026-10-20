@@ -21,7 +21,7 @@ import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Port of the Caido plugin's schema and migration specs, against the shared JSON format. */
+/** Port of the Caido plugin's schema and migration specs. */
 class TemplateCodecTest {
 
     private static final String V2_SETTINGS = """
@@ -71,7 +71,7 @@ class TemplateCodecTest {
         assertTrue(settings.showTimestamp);
         assertFalse(settings.showResponseInfo);
         assertEquals(ThemeMode.AUTO, settings.theme);
-        assertEquals(ViewMode.RAW, settings.view, "Caido payloads have no view");
+        assertEquals(ViewMode.RAW, settings.view, "payloads without a view are raw");
 
         HighlightRule highlight = settings.highlights.getFirst();
         assertEquals(HighlightMode.RECTANGLE, highlight.mode);

@@ -11,11 +11,10 @@ template duplication, keyboard shortcuts, ...) and in UI (tabbed settings, Burp-
 is a reference, not a spec: design new behavior for Burp users and follow Burp's conventions, without trying to
 match Caido.
 
-Two things remain tied to Caido:
-- **The template format.** Templates must still round-trip with Caido's plugin (see Persistence below).
-- **Names in older code.** Some classes and comments still point to their Caido/TypeScript origin (`decorations.ts`,
-  `types.ts`, `useCrop`, "port of ...", "unlike Caido ..."). They are history, not a requirement: don't add new
-  "matches Caido" or "diverges from Caido" remarks, and drop stale ones when you rewrite the code around them.
+It is now an independent project: nothing, the template format included, has to stay compatible with Caido's plugin.
+Some classes and comments still point to their Caido/TypeScript origin (`decorations.ts`, `types.ts`, `useCrop`,
+"port of ...", "unlike Caido ..."). They are history, not a requirement: don't add new "matches Caido" or "diverges
+from Caido" remarks, and drop stale ones when you rewrite the code around them.
 
 ## Commands
 
@@ -83,7 +82,7 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its stored
   instances, which must be treated as read-only — copy `settings` before editing.
-- Enums implement `model.Labeled`: `id()` is the stable storage id shared with Caido's JSON format, `label()` is UI
+- Enums implement `model.Labeled`: `id()` is the stable id written to saved templates and exports, `label()` is UI
   text. Never change an existing `id()`.
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
   template id, split ratio, crop). Edits in the screenshot window affect only that session until the user explicitly
@@ -93,9 +92,9 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   stored form) drives the "Modified"/"Unsaved" state of both.
 
 **Persistence:** `TemplateStore` saves all templates as one JSON string under the Burp preference key
-`screenshot-mode.templates`. `TemplateCodec` reads/writes Caido's storage format (current `VERSION = 2`) and
-migrates v1 and unversioned v0 payloads; the same codec handles template import/export. Features Caido doesn't have
-are stored as extra, optional settings fields (`theme`, `view`) that Caido ignores and that default sensibly when
-missing; add new ones the same way. Any schema change must stay compatible with Caido's format in both directions and
-keep the migration chain working (covered by `TemplateCodecTest`).
+`screenshot-mode.templates`. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 2`) and
+migrates v1 and unversioned v0 payloads; the same codec handles template import/export. Optional settings fields
+(`theme`, `view`) default sensibly when missing. Any schema change must keep loading the templates users already saved
+or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
+`TemplateCodecTest`).
   

@@ -26,8 +26,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Reads and writes templates using the same JSON layout as the Caido plugin (storage version 2), including the
- * migrations from its legacy formats (version 1, and the unversioned single-settings object of version 0).
+ * Reads and writes templates as JSON (storage version 2), including the migrations from the legacy formats (version 1,
+ * and the unversioned single-settings object of version 0).
  */
 public final class TemplateCodec {
 
