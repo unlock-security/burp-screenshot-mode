@@ -70,8 +70,9 @@ What ends up in your report:
    **Extensions › Screenshot Mode › Screenshot**, or press **Ctrl+Shift+S**.
 2. Pick a template and tweak the rules (highlights and redactions), the hidden headers and the appearance, each in
    its own tab. The preview updates as you type.
-3. Click **Copy to clipboard** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**). Copy only copies the
-   screenshot when no text is selected; with a selection it copies the text as usual.
+3. Click **Copy image** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**). Copy only copies the
+   screenshot when no text is selected; with a selection it copies the text, with blurred and covered values replaced
+   by `[REDACTED]`.
 
 From a message editor, the screenshot shows what the editor currently holds, including unsent edits in Repeater.\
 When several rows are selected in a table, the first one is used.

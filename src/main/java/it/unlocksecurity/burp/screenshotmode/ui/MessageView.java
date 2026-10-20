@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
@@ -11,13 +12,18 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Shape;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import javax.swing.BorderFactory;
+import javax.swing.JComponent;
 import javax.swing.JTextPane;
+import javax.swing.TransferHandler;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultCaret;
@@ -35,6 +41,7 @@ import javax.swing.text.ViewFactory;
 /**
  * Read-only, line-wrapping text view of one HTTP message with syntax colors and screenshot decorations.
  * Blur has no Swing equivalent, so the affected rows are post-processed on an offscreen image while painting.
+ * Blur and opaque redactions only hide text on screen, so copying a selection replaces them with a placeholder.
  */
 final class MessageView extends JTextPane {
 
@@ -45,6 +52,8 @@ final class MessageView extends JTextPane {
     private final float lineSpacing;
     private String text = "";
     private List<Decorated.Span> blurSpans = List.of();
+    /** Blurred and covered ranges: still in the document, so never copied as they are. */
+    private List<Decorated.Span> hiddenSpans = List.of();
     private List<Rectangle2D> blurRects;
     private int blurRectsWidth = -1;
 
@@ -61,6 +70,52 @@ final class MessageView extends JTextPane {
         if (getCaret() instanceof DefaultCaret caret) {
             caret.setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
         }
+        // Copy and drag go through here: read-only, so nothing is ever imported.
+        setTransferHandler(
+            new TransferHandler() {
+                @Override
+                public int getSourceActions(JComponent component) {
+                    return COPY;
+                }
+
+                @Override
+                protected Transferable createTransferable(JComponent component) {
+                    return new StringSelection(copyText(getSelectionStart(), getSelectionEnd()));
+                }
+            }
+        );
+    }
+
+    /**
+     * The text between two offsets as it may leave the screenshot: each blurred or covered run becomes
+     * {@code [REDACTED]}, like a replace redaction.
+     */
+    String copyText(int from, int to) {
+        // Overlapping or touching ranges are one run, with one placeholder.
+        List<Decorated.Span> sorted = new ArrayList<>(hiddenSpans);
+        sorted.sort(Comparator.comparingInt(Decorated.Span::from));
+        List<int[]> runs = new ArrayList<>();
+        for (Decorated.Span span : sorted) {
+            if (!runs.isEmpty() && span.from() <= runs.getLast()[1]) {
+                runs.getLast()[1] = Math.max(runs.getLast()[1], span.to());
+            } else {
+                runs.add(new int[] { span.from(), span.to() });
+            }
+        }
+        StringBuilder copy = new StringBuilder();
+        int position = from;
+        for (int[] run : runs) {
+            if (run[1] <= position || run[0] >= to) {
+                continue;
+            }
+            copy.append(text, position, Math.max(position, run[0]));
+            copy.append(RedactionRule.DEFAULT_REPLACEMENT);
+            position = Math.min(run[1], to);
+        }
+        if (position < to) {
+            copy.append(text, position, to);
+        }
+        return copy.toString();
     }
 
     @Override
@@ -133,6 +188,11 @@ final class MessageView extends JTextPane {
         }
 
         blurSpans = decorated.spans(Decorated.Kind.BLUR);
+        hiddenSpans = decorated
+            .spans()
+            .stream()
+            .filter(span -> span.kind() == Decorated.Kind.BLUR || span.kind() == Decorated.Kind.OPAQUE)
+            .toList();
         blurRects = null;
     }
 

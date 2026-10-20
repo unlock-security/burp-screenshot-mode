@@ -116,7 +116,8 @@ final class SettingsForm extends JPanel {
             null,
             "No redactions yet. Add one with + or right-click selected text in the preview.",
             settings.redactions,
-            () -> RedactionRule.create("", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.REGEX),
+            // Replace, like right-click › Redact: blur and opaque only hide the text on screen.
+            () -> RedactionRule.create("", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX),
             (rule, change, delete) -> RuleCards.redactionCard(rule, change, delete, mono, statusLine(rule)),
             onChange
         );

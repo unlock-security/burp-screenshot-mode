@@ -185,7 +185,7 @@ final class ScreenshotDialog extends JDialog {
         JButton save = Widgets.button("Save PNG…");
         save.setToolTipText("Save the screenshot as a PNG file (" + shortcut(KeyEvent.VK_S) + ")");
         save.addActionListener(event -> takeScreenshot(false));
-        JButton copy = Widgets.primary(Widgets.button("Copy to clipboard"));
+        JButton copy = Widgets.primary(Widgets.button("Copy image"));
         copy.setToolTipText("Copy the screenshot to the clipboard (" + shortcut(KeyEvent.VK_C) + ")");
         copy.addActionListener(event -> takeScreenshot(true));
 
@@ -532,7 +532,7 @@ final class ScreenshotDialog extends JDialog {
             BufferedImage image = ImageCapture.render(content);
             if (toClipboard) {
                 ImageCapture.copyToClipboard(image);
-                showStatus("Copied to clipboard", false);
+                showStatus("Image copied", false);
                 return;
             }
 
