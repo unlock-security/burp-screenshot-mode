@@ -447,22 +447,28 @@ final class ScreenshotDialog extends JDialog {
         }
         String message =
             "One or more redaction rules did not fully apply.\nWhat they should hide may be visible in the screenshot.";
-        String export = toClipboard ? "Copy anyway" : "Save anyway";
-        Object[] options = { export, "Show rules" };
-        int answer = JOptionPane.showOptionDialog(
-            this,
+        JButton export = Widgets.button(toClipboard ? "Copy anyway" : "Save anyway");
+        // The safe choice is the primary, default one.
+        JButton show = Widgets.primary(Widgets.button("Show rules"));
+        JOptionPane pane = new JOptionPane(
             message,
-            toClipboard ? "Copy Screenshot" : "Save Screenshot",
-            JOptionPane.DEFAULT_OPTION,
             JOptionPane.WARNING_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
             null,
-            options,
-            options[1]
+            new Object[] { export, show },
+            show
         );
-        if (answer == 1) {
+        // Custom option buttons don't close the pane on their own.
+        export.addActionListener(event -> pane.setValue(export));
+        show.addActionListener(event -> pane.setValue(show));
+        JDialog dialog = pane.createDialog(this, toClipboard ? "Copy Screenshot" : "Save Screenshot");
+        dialog.getRootPane().setDefaultButton(show);
+        dialog.setVisible(true);
+        dialog.dispose();
+        if (pane.getValue() == show) {
             showRules();
         }
-        return answer == 0;
+        return pane.getValue() == export;
     }
 
     private void flushRender() {
