@@ -47,7 +47,7 @@ class TemplateStoreTest {
 
     @Test
     void reloadsPersistedTemplates() {
-        Template created = store.createTemplate("Report", Settings.defaults());
+        Template created = store.createTemplate("Report", DefaultTemplate.settings());
         TemplateStore reloaded = new TemplateStore(preferences, message -> {});
         reloaded.initialize();
         assertEquals("Report", reloaded.getTemplateById(created.id).orElseThrow().name);
@@ -55,7 +55,7 @@ class TemplateStoreTest {
 
     @Test
     void createCopiesSettings() {
-        Settings settings = Settings.defaults();
+        Settings settings = DefaultTemplate.settings();
         Template created = store.createTemplate("Copy", settings);
         settings.showTimestamp = true;
         assertFalse(created.settings.showTimestamp);
@@ -67,7 +67,7 @@ class TemplateStoreTest {
         AtomicInteger notifications = new AtomicInteger();
         store.addListener(notifications::incrementAndGet);
         Template created = store.createTemplate("A", null);
-        Settings settings = Settings.defaults();
+        Settings settings = DefaultTemplate.settings();
         settings.showTimestamp = true;
         store.updateTemplate(created.id, null, settings);
         store.updateTemplate(created.id, "B", null);

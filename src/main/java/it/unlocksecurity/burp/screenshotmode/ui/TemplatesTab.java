@@ -3,6 +3,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
@@ -172,7 +173,7 @@ public final class TemplatesTab extends JPanel {
      */
     private JComponent buildEditor(Template template, boolean duplicate) {
         boolean editing = template != null && !duplicate;
-        Settings original = template != null ? template.settings.copy() : Settings.defaults();
+        Settings original = template != null ? template.settings.copy() : DefaultTemplate.settings();
         Settings working = original.copy();
         String originalName = editing ? template.name : duplicate ? copyName(template.name) : "";
 

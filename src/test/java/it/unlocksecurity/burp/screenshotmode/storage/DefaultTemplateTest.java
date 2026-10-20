@@ -1,9 +1,13 @@
-package it.unlocksecurity.burp.screenshotmode.model;
+package it.unlocksecurity.burp.screenshotmode.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import it.unlocksecurity.burp.screenshotmode.model.HiddenHeaders;
+import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -12,11 +16,26 @@ import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class SettingsTest {
+class DefaultTemplateTest {
+
+    @Test
+    void isStoredInTheCurrentFormat() {
+        // Bump the file together with TemplateCodec.VERSION: a migrated default would lose settings.
+        assertFalse(TemplateCodec.decode(DefaultTemplate.json()).migrated());
+    }
+
+    @Test
+    void givesEachCallerItsOwnCopy() {
+        Settings settings = DefaultTemplate.settings();
+        settings.redactions.clear();
+        settings.headersToHide.both.clear();
+        assertEquals(11, DefaultTemplate.settings().redactions.size());
+        assertEquals(10, DefaultTemplate.settings().headersToHide.both.size());
+    }
 
     @Test
     void hidesDefaultHeadersOnlyInTheMessagesTheyBelongTo() {
-        HiddenHeaders headers = Settings.defaults().headersToHide;
+        HiddenHeaders headers = DefaultTemplate.settings().headersToHide;
         assertTrue(headers.rulesFor(RuleTarget.REQUEST).contains("Sec-Fetch-Mode"));
         assertFalse(headers.rulesFor(RuleTarget.RESPONSE).contains("Sec-Fetch-Mode"));
         assertTrue(headers.rulesFor(RuleTarget.RESPONSE).contains("ETag"));
@@ -27,7 +46,7 @@ class SettingsTest {
 
     @Test
     void listsEachDefaultHeaderOnce() {
-        HiddenHeaders headers = Settings.defaults().headersToHide;
+        HiddenHeaders headers = DefaultTemplate.settings().headersToHide;
         List<String> all = new ArrayList<>(headers.both);
         all.addAll(headers.request);
         all.addAll(headers.response);
@@ -45,7 +64,7 @@ class SettingsTest {
     private static final String JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln";
 
     private static String redact(String text, RuleTarget target) {
-        List<RedactionRule> rules = Settings.defaults()
+        List<RedactionRule> rules = DefaultTemplate.settings()
             .redactions.stream()
             .filter(rule -> rule.target == target)
             .toList();
@@ -54,7 +73,7 @@ class SettingsTest {
 
     @Test
     void defaultRedactionsAreValidPatterns() {
-        for (RedactionRule rule : Settings.defaults().redactions) {
+        for (RedactionRule rule : DefaultTemplate.settings().redactions) {
             assertEquals(Optional.empty(), RuleEngine.validate(rule.regex, rule.matchMode), rule.regex);
         }
     }

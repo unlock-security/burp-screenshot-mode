@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
 import it.unlocksecurity.burp.screenshotmode.storage.PreferenceStore;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.Component;
@@ -75,7 +76,7 @@ class RenderPreviewTest {
     }
 
     static Settings sampleSettings() {
-        Settings settings = Settings.defaults();
+        Settings settings = DefaultTemplate.settings();
         settings.showTimestamp = true;
 
         HighlightRule role = HighlightRule.create("\"role\": \"admin\"", RuleTarget.REQUEST, MatchMode.STRING);
@@ -194,11 +195,11 @@ class RenderPreviewTest {
 
     @Test
     void blurAltersThePixelsItCovers() throws Exception {
-        Settings blurred = Settings.defaults();
+        Settings blurred = DefaultTemplate.settings();
         blurred.redactions.add(
             RedactionRule.create("Mallory", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.STRING)
         );
-        Settings plain = Settings.defaults();
+        Settings plain = DefaultTemplate.settings();
         BufferedImage a = render(blurred, Palette.DARK, 800, 700);
         BufferedImage b = render(plain, Palette.DARK, 800, 700);
         int differing = 0;
@@ -261,7 +262,7 @@ class RenderPreviewTest {
             layoutTree(tab);
             saveComponent(tab, "templates-tab.png");
 
-            Settings empty = Settings.defaults();
+            Settings empty = DefaultTemplate.settings();
             empty.highlights.clear();
             empty.redactions.clear();
             saveForm(sampleSettings(), false, "form-sidebar.png");

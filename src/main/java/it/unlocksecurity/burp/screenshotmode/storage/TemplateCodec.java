@@ -40,7 +40,7 @@ public final class TemplateCodec {
     private TemplateCodec() {}
 
     public static StoredData createDefault() {
-        Template template = Template.create("Default", Settings.defaults());
+        Template template = Template.create("Default", DefaultTemplate.settings());
         return new StoredData(new ArrayList<>(List.of(template)), template.id);
     }
 

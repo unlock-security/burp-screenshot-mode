@@ -101,7 +101,10 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 
 **Persistence:** `TemplateStore` saves all templates as one JSON string under the Burp preference key
 `screenshot-mode.templates`. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 2`) and
-migrates v1 and unversioned v0 payloads; the same codec handles template import/export. Optional settings fields
+migrates v1 and unversioned v0 payloads; the same codec handles template import/export. New templates start from
+`storage/default-template.json` in `src/main/resources`, an ordinary template export read by `storage.DefaultTemplate`:
+edit the default hidden headers and rules there, and update the file whenever `VERSION` changes (`DefaultTemplateTest`
+fails otherwise). Optional settings fields
 (`theme`, `view`) default sensibly when missing. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`).

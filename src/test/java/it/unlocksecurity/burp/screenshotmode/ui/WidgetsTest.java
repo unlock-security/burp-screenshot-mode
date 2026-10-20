@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Font;
@@ -36,7 +37,7 @@ class WidgetsTest {
     /** Burp shows the markup of {@code <html>} labels instead of rendering it. */
     @Test
     void settingsAndTemplatesUseNoHtmlLabels() throws Exception {
-        Settings settings = Settings.defaults();
+        Settings settings = DefaultTemplate.settings();
         settings.highlights.clear();
         settings.redactions.clear();
         List<String> html = new ArrayList<>();

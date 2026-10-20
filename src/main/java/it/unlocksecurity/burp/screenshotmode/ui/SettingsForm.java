@@ -11,6 +11,7 @@ import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -160,7 +161,7 @@ final class SettingsForm extends JPanel {
         restore.putClientProperty("JButton.buttonType", "borderless");
         restore.setToolTipText("Replace all three lists with the default list of noisy headers");
         restore.addActionListener(event -> {
-            settings.headersToHide = Settings.defaults().headersToHide;
+            settings.headersToHide = DefaultTemplate.settings().headersToHide;
             load.run();
             relabelPicker.run();
             onChange.run();

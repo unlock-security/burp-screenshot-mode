@@ -47,7 +47,7 @@ public final class TemplateStore {
     }
 
     public Template createTemplate(String name, Settings settings) {
-        Template template = Template.create(name, (settings == null ? Settings.defaults() : settings).copy());
+        Template template = Template.create(name, (settings == null ? DefaultTemplate.settings() : settings).copy());
         templates.add(template);
         persistAndNotify();
         return template;
@@ -94,7 +94,7 @@ public final class TemplateStore {
     public Template getDefaultTemplate() {
         return getTemplateById(defaultTemplateId)
             .or(() -> templates.stream().findFirst())
-            .orElseGet(() -> new Template("", "Default", Settings.defaults()));
+            .orElseGet(() -> new Template("", "Default", DefaultTemplate.settings()));
     }
 
     public Optional<Template> getTemplateById(String id) {
