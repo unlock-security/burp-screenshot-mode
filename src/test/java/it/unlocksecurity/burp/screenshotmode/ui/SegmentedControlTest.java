@@ -1,6 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
@@ -48,6 +49,24 @@ class SegmentedControlTest {
     }
 
     @Test
+    void isOneTabStopOnTheSelectedButton() {
+        SegmentedControl<ThemeMode> control = new SegmentedControl<>(ThemeMode.values(), ThemeMode.AUTO, value -> {});
+        assertTrue(control.button(ThemeMode.AUTO).isFocusable());
+        assertFalse(control.button(ThemeMode.DARK).isFocusable());
+        control.click(ThemeMode.DARK);
+        assertTrue(control.button(ThemeMode.DARK).isSelected());
+        assertTrue(control.button(ThemeMode.DARK).isFocusable());
+        assertFalse(control.button(ThemeMode.AUTO).isFocusable());
+    }
+
+    @Test
+    void showsItsTooltipOnEveryButton() {
+        SegmentedControl<ThemeMode> control = new SegmentedControl<>(ThemeMode.values(), ThemeMode.AUTO, value -> {});
+        control.setToolTipText("Colors of the screenshot");
+        assertEquals("Colors of the screenshot", control.button(ThemeMode.LIGHT).getToolTipText());
+    }
+
+    @Test
     void labelsCanChangeAndResizeTheControl() {
         SegmentedControl<Disposition> control = new SegmentedControl<>(
             Disposition.values(),
@@ -59,9 +78,11 @@ class SegmentedControlTest {
         assertTrue(control.getPreferredSize().width > before);
     }
 
-    private static void press(SegmentedControl<?> control, int key) {
-        KeyEvent event = new KeyEvent(control, KeyEvent.KEY_PRESSED, 0, 0, key, KeyEvent.CHAR_UNDEFINED);
-        for (var listener : control.getKeyListeners()) {
+    /** Keys reach the selected button, the group's only Tab stop. */
+    private static void press(SegmentedControl<ThemeMode> control, int key) {
+        var button = control.button(control.value());
+        KeyEvent event = new KeyEvent(button, KeyEvent.KEY_PRESSED, 0, 0, key, KeyEvent.CHAR_UNDEFINED);
+        for (var listener : button.getKeyListeners()) {
             listener.keyPressed(event);
         }
     }
