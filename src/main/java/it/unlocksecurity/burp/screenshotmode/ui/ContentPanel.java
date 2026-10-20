@@ -1,6 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
@@ -13,6 +14,7 @@ import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.render.pretty.PrettyPrinter;
+import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
@@ -238,7 +240,8 @@ final class ContentPanel extends JPanel {
                 errorListener.accept("Could not pretty print the " + target.id() + ", showing it raw: " + e);
             }
         }
-        String filtered = HeaderFilter.filter(text, settings.headersToHide.rulesFor(target));
+        HeaderCatalog catalog = HeaderCatalogFile.bundled();
+        String filtered = HeaderFilter.filter(text, name -> settings.headers.hides(name, target, catalog));
         Decorated decorated = decorate(filtered, target, settings);
         pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
     }

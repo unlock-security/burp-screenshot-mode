@@ -4,15 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import it.unlocksecurity.burp.screenshotmode.model.HiddenHeaders;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderVisibility;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -37,37 +36,42 @@ class DefaultTemplateTest {
     void givesEachCallerItsOwnCopy() {
         Settings settings = DefaultTemplate.settings();
         settings.redactions.clear();
-        settings.headersToHide.both.clear();
+        settings.headers.groups.clear();
         assertEquals(13, DefaultTemplate.settings().redactions.size());
-        assertEquals(10, DefaultTemplate.settings().headersToHide.both.size());
+        assertEquals(8, DefaultTemplate.settings().headers.groups.size());
     }
 
     @Test
-    void hidesDefaultHeadersOnlyInTheMessagesTheyBelongTo() {
-        HiddenHeaders headers = DefaultTemplate.settings().headersToHide;
-        assertTrue(headers.rulesFor(RuleTarget.REQUEST).contains("Sec-Fetch-Mode"));
-        assertFalse(headers.rulesFor(RuleTarget.RESPONSE).contains("Sec-Fetch-Mode"));
-        assertTrue(headers.rulesFor(RuleTarget.RESPONSE).contains("ETag"));
-        assertFalse(headers.rulesFor(RuleTarget.REQUEST).contains("ETag"));
-        assertTrue(headers.rulesFor(RuleTarget.REQUEST).contains("Date"));
-        assertTrue(headers.rulesFor(RuleTarget.RESPONSE).contains("Date"));
+    void hidesNoiseAndKeepsWhatCanBeEvidence() {
+        HeaderVisibility headers = DefaultTemplate.settings().headers;
+        HeaderCatalog catalog = HeaderCatalogFile.bundled();
+        for (String hidden : List.of("Sec-Fetch-Mode", "ETag", "Date", "Accept", "CF-RAY", "Sec-CH-UA")) {
+            assertEquals(Visibility.HIDE, headers.of(hidden, catalog), hidden);
+        }
+        // Security headers, technology and anything that can take part in request smuggling stay visible.
+        for (String shown : List.of(
+            "Content-Length",
+            "Transfer-Encoding",
+            "TE",
+            "Host",
+            "Strict-Transport-Security",
+            "Content-Security-Policy",
+            "X-Powered-By",
+            "Server",
+            "Set-Cookie",
+            "Location",
+            "X-Unknown"
+        )) {
+            assertEquals(Visibility.SHOW, headers.of(shown, catalog), shown);
+        }
     }
 
     @Test
-    void listsEachDefaultHeaderOnce() {
-        HiddenHeaders headers = DefaultTemplate.settings().headersToHide;
-        List<String> all = new ArrayList<>(headers.both);
-        all.addAll(headers.request);
-        all.addAll(headers.response);
-        assertEquals(
-            all.size(),
-            new HashSet<>(
-                all
-                    .stream()
-                    .map(h -> h.toLowerCase(Locale.ROOT))
-                    .toList()
-            ).size()
-        );
+    void namesOnlyGroupsOfTheCatalog() {
+        HeaderCatalog catalog = HeaderCatalogFile.bundled();
+        Settings settings = DefaultTemplate.settings();
+        settings.headers.groups.keySet().forEach(id -> assertTrue(catalog.group(id).isPresent(), id));
+        settings.headers.headers.keySet().forEach(name -> assertTrue(catalog.header(name).isPresent(), name));
     }
 
     private static final String JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln";

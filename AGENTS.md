@@ -73,7 +73,7 @@ tests construct the full UI and render images without Burp — keep new Burp dep
 `MessageText.fromBytes` (UTF-8 with ISO-8859-1 fallback, `\n` line breaks, truncation) →
 `pretty.PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`; only adds line breaks
 and indentation) →
-`HeaderFilter.filter` (hide headers; `!`-prefixed rules force-show) →
+`HeaderFilter.filter` (hides the headers `HeaderVisibility` hides in that message) →
 `RuleEngine.apply` (highlights + redactions → `Decorated` text + spans) →
 `HttpSyntax.tokenize` → `MessagePane`/`MessageView` paint it with a `Palette`.
 The URL bar is a `MessageView` too: `RuleEngine.apply` with the rules whose target is `URL`, no header filter and no
@@ -105,12 +105,20 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 
 **Persistence:** `TemplateStore` saves all templates as one JSON string under the Burp preference key
 `screenshot-mode.templates`. If that value can't be read at startup, it is copied to `screenshot-mode.templates.unreadable`
-before the default template replaces it, and the suite tab offers to export the copy. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 2`) and
-migrates v1 and unversioned v0 payloads; the same codec handles template import/export. New templates start from
+before the default template replaces it, and the suite tab offers to export the copy. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
+migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. New templates start from
 `storage/default-template.json` in `src/main/resources`, an ordinary template export read by `storage.DefaultTemplate`:
 edit the default hidden headers and rules there, and update the file whenever `VERSION` changes (`DefaultTemplateTest`
 fails otherwise). Optional settings fields
 (`theme`, `view`, `url`) default sensibly when missing. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`).
+
+**Header catalog:** `storage/header-catalog.json` (read by `storage.HeaderCatalogFile` into a `model.HeaderCatalog`)
+lists the known headers in groups, with the messages each is used in and where it is defined. It is reference data,
+read at every start and never stored in templates: templates only store `HeaderVisibility`, i.e. hidden groups by id
+and per-header settings by name, so a release can add headers to a group and every template follows. Never change or
+reuse a group `id`. Header settings that repeat their group's are dropped, so equal choices store the same; headers
+the catalog doesn't know are kept even when shown. The v2-to-v3 migration needs the catalog: a group whose headers
+were all hidden becomes a hidden group.
   

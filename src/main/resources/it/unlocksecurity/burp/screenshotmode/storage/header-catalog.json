@@ -1,0 +1,854 @@
+{
+  "format": "screenshot-mode/header-catalog",
+  "version": 1,
+  "groups": [
+    {
+      "id": "credentials",
+      "label": "Credentials and session",
+      "headers": [
+        {
+          "name": "Authorization",
+          "in": "request",
+          "spec": "RFC 9110 §11.6.2"
+        },
+        {
+          "name": "Proxy-Authorization",
+          "in": "request",
+          "spec": "RFC 9110 §11.7.2"
+        },
+        {
+          "name": "Cookie",
+          "in": "request",
+          "spec": "RFC 6265 §5.4"
+        },
+        {
+          "name": "Set-Cookie",
+          "in": "response",
+          "spec": "RFC 6265 §4.1"
+        },
+        {
+          "name": "WWW-Authenticate",
+          "in": "response",
+          "spec": "RFC 9110 §11.6.1"
+        },
+        {
+          "name": "Proxy-Authenticate",
+          "in": "response",
+          "spec": "RFC 9110 §11.7.1"
+        },
+        {
+          "name": "Authentication-Info",
+          "in": "response",
+          "spec": "RFC 9110 §11.6.3"
+        },
+        {
+          "name": "X-Api-Key",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "Api-Key",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-Auth-Token",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-Access-Token",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-Amz-Security-Token",
+          "in": "request",
+          "spec": "AWS Signature V4"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "in": "both",
+          "spec": "Common practice"
+        }
+      ]
+    },
+    {
+      "id": "client",
+      "label": "Client identity",
+      "headers": [
+        {
+          "name": "User-Agent",
+          "in": "request",
+          "spec": "RFC 9110 §10.1.5"
+        },
+        {
+          "name": "From",
+          "in": "request",
+          "spec": "RFC 9110 §10.1.2"
+        }
+      ]
+    },
+    {
+      "id": "routing",
+      "label": "Routing and origin",
+      "headers": [
+        {
+          "name": "Host",
+          "in": "request",
+          "spec": "RFC 9110 §7.2"
+        },
+        {
+          "name": "Origin",
+          "in": "request",
+          "spec": "RFC 6454 §7"
+        },
+        {
+          "name": "Referer",
+          "in": "request",
+          "spec": "RFC 9110 §10.1.3"
+        },
+        {
+          "name": "Forwarded",
+          "in": "request",
+          "spec": "RFC 7239"
+        },
+        {
+          "name": "X-Forwarded-For",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-Forwarded-Host",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-Forwarded-Proto",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-Real-IP",
+          "in": "request",
+          "spec": "Common practice"
+        },
+        {
+          "name": "Max-Forwards",
+          "in": "request",
+          "spec": "RFC 9110 §7.6.2"
+        },
+        {
+          "name": "Location",
+          "in": "response",
+          "spec": "RFC 9110 §10.2.2"
+        }
+      ]
+    },
+    {
+      "id": "framing",
+      "label": "Message framing",
+      "note": "Kept visible: these headers can be the evidence of request smuggling and other desync attacks.",
+      "headers": [
+        {
+          "name": "Content-Length",
+          "in": "both",
+          "spec": "RFC 9110 §8.6"
+        },
+        {
+          "name": "Transfer-Encoding",
+          "in": "both",
+          "spec": "RFC 9112 §6.1"
+        },
+        {
+          "name": "TE",
+          "in": "request",
+          "spec": "RFC 9110 §10.1.4"
+        },
+        {
+          "name": "Trailer",
+          "in": "both",
+          "spec": "RFC 9110 §6.6.2"
+        },
+        {
+          "name": "Connection",
+          "in": "both",
+          "spec": "RFC 9110 §7.6.1"
+        },
+        {
+          "name": "Keep-Alive",
+          "in": "both",
+          "spec": "RFC 2068 §19.7.1"
+        },
+        {
+          "name": "Upgrade",
+          "in": "both",
+          "spec": "RFC 9110 §7.8"
+        },
+        {
+          "name": "Expect",
+          "in": "request",
+          "spec": "RFC 9110 §10.1.1"
+        },
+        {
+          "name": "HTTP2-Settings",
+          "in": "request",
+          "spec": "RFC 7540 §3.2.1"
+        },
+        {
+          "name": "Proxy-Connection",
+          "in": "request",
+          "spec": "Non-standard"
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "label": "Content",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "in": "both",
+          "spec": "RFC 9110 §8.3"
+        },
+        {
+          "name": "Content-Encoding",
+          "in": "both",
+          "spec": "RFC 9110 §8.4"
+        },
+        {
+          "name": "Content-Language",
+          "in": "both",
+          "spec": "RFC 9110 §8.5"
+        },
+        {
+          "name": "Content-Location",
+          "in": "both",
+          "spec": "RFC 9110 §8.7"
+        },
+        {
+          "name": "Content-Range",
+          "in": "both",
+          "spec": "RFC 9110 §14.4"
+        },
+        {
+          "name": "Content-Disposition",
+          "in": "both",
+          "spec": "RFC 6266"
+        },
+        {
+          "name": "Range",
+          "in": "request",
+          "spec": "RFC 9110 §14.2"
+        },
+        {
+          "name": "Allow",
+          "in": "response",
+          "spec": "RFC 9110 §10.2.1"
+        },
+        {
+          "name": "Retry-After",
+          "in": "response",
+          "spec": "RFC 9110 §10.2.3"
+        }
+      ]
+    },
+    {
+      "id": "technology",
+      "label": "Server and technology",
+      "headers": [
+        {
+          "name": "Server",
+          "in": "response",
+          "spec": "RFC 9110 §10.2.4"
+        },
+        {
+          "name": "X-Powered-By",
+          "in": "response",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-AspNet-Version",
+          "in": "response",
+          "spec": "ASP.NET"
+        },
+        {
+          "name": "X-AspNetMvc-Version",
+          "in": "response",
+          "spec": "ASP.NET MVC"
+        },
+        {
+          "name": "X-Generator",
+          "in": "response",
+          "spec": "Common practice"
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "label": "Security policy",
+      "headers": [
+        {
+          "name": "Strict-Transport-Security",
+          "in": "response",
+          "spec": "RFC 6797"
+        },
+        {
+          "name": "Content-Security-Policy",
+          "in": "response",
+          "spec": "W3C CSP Level 3"
+        },
+        {
+          "name": "Content-Security-Policy-Report-Only",
+          "in": "response",
+          "spec": "W3C CSP Level 3"
+        },
+        {
+          "name": "X-Frame-Options",
+          "in": "response",
+          "spec": "RFC 7034"
+        },
+        {
+          "name": "X-Content-Type-Options",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Referrer-Policy",
+          "in": "response",
+          "spec": "W3C Referrer Policy"
+        },
+        {
+          "name": "Permissions-Policy",
+          "in": "response",
+          "spec": "W3C Permissions Policy"
+        },
+        {
+          "name": "Cross-Origin-Opener-Policy",
+          "in": "response",
+          "spec": "WHATWG HTML"
+        },
+        {
+          "name": "Cross-Origin-Embedder-Policy",
+          "in": "response",
+          "spec": "WHATWG HTML"
+        },
+        {
+          "name": "Cross-Origin-Resource-Policy",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Origin-Agent-Cluster",
+          "in": "response",
+          "spec": "WHATWG HTML"
+        },
+        {
+          "name": "X-XSS-Protection",
+          "in": "response",
+          "spec": "Non-standard, deprecated"
+        },
+        {
+          "name": "X-Permitted-Cross-Domain-Policies",
+          "in": "response",
+          "spec": "Adobe"
+        },
+        {
+          "name": "X-Download-Options",
+          "in": "response",
+          "spec": "Microsoft"
+        },
+        {
+          "name": "X-DNS-Prefetch-Control",
+          "in": "response",
+          "spec": "Non-standard"
+        },
+        {
+          "name": "Expect-CT",
+          "in": "response",
+          "spec": "RFC 9163, obsolete"
+        }
+      ]
+    },
+    {
+      "id": "cors",
+      "label": "CORS",
+      "headers": [
+        {
+          "name": "Access-Control-Allow-Origin",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Access-Control-Allow-Credentials",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Access-Control-Allow-Methods",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Access-Control-Allow-Headers",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Access-Control-Expose-Headers",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Access-Control-Max-Age",
+          "in": "response",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Access-Control-Request-Method",
+          "in": "request",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Access-Control-Request-Headers",
+          "in": "request",
+          "spec": "WHATWG Fetch"
+        }
+      ]
+    },
+    {
+      "id": "negotiation",
+      "label": "Content negotiation",
+      "headers": [
+        {
+          "name": "Accept",
+          "in": "both",
+          "spec": "RFC 9110 §12.5.1"
+        },
+        {
+          "name": "Accept-Encoding",
+          "in": "both",
+          "spec": "RFC 9110 §12.5.3"
+        },
+        {
+          "name": "Accept-Charset",
+          "in": "request",
+          "spec": "RFC 9110 §12.5.2"
+        },
+        {
+          "name": "Accept-Language",
+          "in": "request",
+          "spec": "RFC 9110 §12.5.4"
+        },
+        {
+          "name": "Accept-Ranges",
+          "in": "response",
+          "spec": "RFC 9110 §14.3"
+        }
+      ]
+    },
+    {
+      "id": "caching",
+      "label": "Caching",
+      "headers": [
+        {
+          "name": "Cache-Control",
+          "in": "both",
+          "spec": "RFC 9111 §5.2"
+        },
+        {
+          "name": "Pragma",
+          "in": "both",
+          "spec": "RFC 9111 §5.4"
+        },
+        {
+          "name": "Expires",
+          "in": "response",
+          "spec": "RFC 9111 §5.3"
+        },
+        {
+          "name": "Age",
+          "in": "response",
+          "spec": "RFC 9111 §5.1"
+        },
+        {
+          "name": "ETag",
+          "in": "response",
+          "spec": "RFC 9110 §8.8.3"
+        },
+        {
+          "name": "Last-Modified",
+          "in": "response",
+          "spec": "RFC 9110 §8.8.2"
+        },
+        {
+          "name": "Vary",
+          "in": "response",
+          "spec": "RFC 9110 §12.5.5"
+        },
+        {
+          "name": "Cache-Status",
+          "in": "response",
+          "spec": "RFC 9211"
+        },
+        {
+          "name": "CDN-Cache-Control",
+          "in": "response",
+          "spec": "RFC 9213"
+        },
+        {
+          "name": "Warning",
+          "in": "response",
+          "spec": "RFC 7234, obsolete"
+        }
+      ]
+    },
+    {
+      "id": "conditional",
+      "label": "Conditional requests",
+      "headers": [
+        {
+          "name": "If-Match",
+          "in": "request",
+          "spec": "RFC 9110 §13.1.1"
+        },
+        {
+          "name": "If-None-Match",
+          "in": "request",
+          "spec": "RFC 9110 §13.1.2"
+        },
+        {
+          "name": "If-Modified-Since",
+          "in": "request",
+          "spec": "RFC 9110 §13.1.3"
+        },
+        {
+          "name": "If-Unmodified-Since",
+          "in": "request",
+          "spec": "RFC 9110 §13.1.4"
+        },
+        {
+          "name": "If-Range",
+          "in": "request",
+          "spec": "RFC 9110 §13.1.5"
+        }
+      ]
+    },
+    {
+      "id": "client-hints",
+      "label": "Client hints",
+      "headers": [
+        {
+          "name": "Sec-CH-UA",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Arch",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Bitness",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Form-Factors",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Full-Version",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Full-Version-List",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Mobile",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Model",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Platform",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-Platform-Version",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-UA-WoW64",
+          "in": "request",
+          "spec": "WICG UA Client Hints"
+        },
+        {
+          "name": "Sec-CH-Prefers-Color-Scheme",
+          "in": "request",
+          "spec": "WICG User Preference Media Features"
+        },
+        {
+          "name": "Sec-CH-Prefers-Reduced-Motion",
+          "in": "request",
+          "spec": "WICG User Preference Media Features"
+        },
+        {
+          "name": "Device-Memory",
+          "in": "request",
+          "spec": "W3C Device Memory"
+        },
+        {
+          "name": "Downlink",
+          "in": "request",
+          "spec": "WICG Network Information"
+        },
+        {
+          "name": "DPR",
+          "in": "request",
+          "spec": "RFC 8942"
+        },
+        {
+          "name": "ECT",
+          "in": "request",
+          "spec": "WICG Network Information"
+        },
+        {
+          "name": "RTT",
+          "in": "request",
+          "spec": "WICG Network Information"
+        },
+        {
+          "name": "Viewport-Width",
+          "in": "request",
+          "spec": "RFC 8942"
+        },
+        {
+          "name": "Accept-CH",
+          "in": "response",
+          "spec": "RFC 8942 §3.1"
+        },
+        {
+          "name": "Critical-CH",
+          "in": "response",
+          "spec": "IETF draft, Client Hint Reliability"
+        }
+      ]
+    },
+    {
+      "id": "fetch",
+      "label": "Fetch metadata and hints",
+      "headers": [
+        {
+          "name": "Sec-Fetch-Dest",
+          "in": "request",
+          "spec": "W3C Fetch Metadata"
+        },
+        {
+          "name": "Sec-Fetch-Mode",
+          "in": "request",
+          "spec": "W3C Fetch Metadata"
+        },
+        {
+          "name": "Sec-Fetch-Site",
+          "in": "request",
+          "spec": "W3C Fetch Metadata"
+        },
+        {
+          "name": "Sec-Fetch-User",
+          "in": "request",
+          "spec": "W3C Fetch Metadata"
+        },
+        {
+          "name": "Sec-Fetch-Storage-Access",
+          "in": "request",
+          "spec": "W3C Fetch Metadata"
+        },
+        {
+          "name": "Sec-Purpose",
+          "in": "request",
+          "spec": "WHATWG Fetch"
+        },
+        {
+          "name": "Purpose",
+          "in": "request",
+          "spec": "Legacy prefetch hint"
+        },
+        {
+          "name": "Upgrade-Insecure-Requests",
+          "in": "request",
+          "spec": "W3C Upgrade Insecure Requests"
+        },
+        {
+          "name": "Priority",
+          "in": "both",
+          "spec": "RFC 9218 §5"
+        },
+        {
+          "name": "Early-Data",
+          "in": "request",
+          "spec": "RFC 8470"
+        }
+      ]
+    },
+    {
+      "id": "privacy",
+      "label": "Privacy signals",
+      "headers": [
+        {
+          "name": "DNT",
+          "in": "request",
+          "spec": "W3C Tracking Preference, withdrawn"
+        },
+        {
+          "name": "Sec-GPC",
+          "in": "request",
+          "spec": "Global Privacy Control"
+        },
+        {
+          "name": "Sec-Browsing-Topics",
+          "in": "request",
+          "spec": "WICG Topics API"
+        }
+      ]
+    },
+    {
+      "id": "reporting",
+      "label": "Reporting and timing",
+      "headers": [
+        {
+          "name": "NEL",
+          "in": "response",
+          "spec": "W3C Network Error Logging"
+        },
+        {
+          "name": "Report-To",
+          "in": "response",
+          "spec": "W3C Reporting API, legacy"
+        },
+        {
+          "name": "Reporting-Endpoints",
+          "in": "response",
+          "spec": "W3C Reporting API"
+        },
+        {
+          "name": "Server-Timing",
+          "in": "response",
+          "spec": "W3C Server Timing"
+        },
+        {
+          "name": "Timing-Allow-Origin",
+          "in": "response",
+          "spec": "W3C Resource Timing"
+        }
+      ]
+    },
+    {
+      "id": "infrastructure",
+      "label": "CDN and infrastructure",
+      "headers": [
+        {
+          "name": "Via",
+          "in": "both",
+          "spec": "RFC 9110 §7.6.3"
+        },
+        {
+          "name": "Alt-Svc",
+          "in": "response",
+          "spec": "RFC 7838"
+        },
+        {
+          "name": "Proxy-Status",
+          "in": "response",
+          "spec": "RFC 9209"
+        },
+        {
+          "name": "X-Request-Id",
+          "in": "both",
+          "spec": "Common practice"
+        },
+        {
+          "name": "CF-RAY",
+          "in": "response",
+          "spec": "Cloudflare"
+        },
+        {
+          "name": "CF-Cache-Status",
+          "in": "response",
+          "spec": "Cloudflare"
+        },
+        {
+          "name": "X-Amz-Cf-Id",
+          "in": "response",
+          "spec": "Amazon CloudFront"
+        },
+        {
+          "name": "X-Amz-Cf-Pop",
+          "in": "response",
+          "spec": "Amazon CloudFront"
+        },
+        {
+          "name": "X-Amz-Id-2",
+          "in": "response",
+          "spec": "Amazon S3"
+        },
+        {
+          "name": "X-Amz-Request-Id",
+          "in": "response",
+          "spec": "Amazon S3"
+        },
+        {
+          "name": "X-Cache",
+          "in": "response",
+          "spec": "Common practice"
+        },
+        {
+          "name": "X-Served-By",
+          "in": "response",
+          "spec": "Fastly"
+        },
+        {
+          "name": "X-Timer",
+          "in": "response",
+          "spec": "Fastly"
+        },
+        {
+          "name": "X-Duckduckgo-Privacy-Random-Ac",
+          "in": "response",
+          "spec": "DuckDuckGo"
+        }
+      ]
+    },
+    {
+      "id": "general",
+      "label": "General",
+      "headers": [
+        {
+          "name": "Date",
+          "in": "both",
+          "spec": "RFC 9110 §6.6.1"
+        },
+        {
+          "name": "Content-Digest",
+          "in": "both",
+          "spec": "RFC 9530"
+        },
+        {
+          "name": "Repr-Digest",
+          "in": "both",
+          "spec": "RFC 9530"
+        }
+      ]
+    }
+  ]
+}

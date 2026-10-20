@@ -10,7 +10,7 @@ public final class Settings {
     public static final int MIN_PIXEL_WIDTH = 200;
     public static final int MAX_PIXEL_WIDTH = 2000;
 
-    public HiddenHeaders headersToHide = new HiddenHeaders();
+    public HeaderVisibility headers = new HeaderVisibility();
     public Disposition disposition = Disposition.HORIZONTAL;
     public WidthMode widthMode = WidthMode.FULL;
     /** Only meaningful when {@link #widthMode} is {@link WidthMode#PIXEL}. */
@@ -36,7 +36,7 @@ public final class Settings {
 
     public Settings copy() {
         Settings copy = new Settings();
-        copy.headersToHide = headersToHide.copy();
+        copy.headers = headers.copy();
         copy.disposition = disposition;
         copy.widthMode = widthMode;
         copy.widthPixels = widthPixels;

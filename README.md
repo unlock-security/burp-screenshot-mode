@@ -22,8 +22,11 @@ No external tools, no manual cropping and blurring.
 
 - **Live preview** of the request and response in a dedicated window, laid out side by side or stacked, with line
   numbers, wrapping and HTTP/JSON/XML/HTML syntax colors.
-- **Hide noisy headers** (`Accept-*`, `Sec-*`, CDN headers, …) for both messages or only the request/response.
-  Prefix a header with `!` to always show it.
+- **Hide noisy headers** from a catalog of about 150 common headers in groups (content negotiation, caching, client
+  hints, fetch metadata, CDNs, …): uncheck a header, or a whole group, to hide it. The screenshot window lists the
+  headers of the message on screen, and the tab title counts how many it hides. Headers that aren't in the catalog are
+  listed first, as custom headers; one used in both messages can be hidden in only one of them. By default, security
+  headers and anything that can take part in request smuggling stay visible, as they can be the finding.
 - **Highlights**: regex or literal patterns, painted as a translucent marker or as a rectangle, in any color.
 - **Redactions**: blur, opaque box or replacement text (`[REDACTED]`), optionally limited to selected capture
   groups (e.g. `session=([0-9a-f]+)` redacts only the value).

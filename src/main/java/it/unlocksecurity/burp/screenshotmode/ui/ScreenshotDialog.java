@@ -7,9 +7,11 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
+import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
@@ -269,7 +271,13 @@ final class ScreenshotDialog extends JDialog {
 
     private void rebuildForm() {
         formHolder.removeAll();
-        form = new SettingsForm(state.settings, renderTimer::restart, host.editorFont().get(), false);
+        form = new SettingsForm(
+            state.settings,
+            renderTimer::restart,
+            host.editorFont().get(),
+            false,
+            HeadersTab.InMessage.of(data)
+        );
         form.tabs().setSelectedIndex(selectedTab);
         form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
         formHolder.add(form, BorderLayout.CENTER);
@@ -565,10 +573,10 @@ final class ScreenshotDialog extends JDialog {
             case HIDE_HEADER -> {
                 int colon = selected.indexOf(':');
                 String header = (colon > 0 ? selected.substring(0, colon) : selected).trim();
-                if (header.isEmpty() || settings.headersToHide.both.contains(header)) {
+                if (header.isEmpty()) {
                     return;
                 }
-                settings.headersToHide.both.add(header);
+                settings.headers.set(header, Visibility.HIDE, HeaderCatalogFile.bundled());
             }
         }
         rebuildForm();

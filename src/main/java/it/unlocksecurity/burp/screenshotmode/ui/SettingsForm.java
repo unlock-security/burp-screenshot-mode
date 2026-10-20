@@ -1,7 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
-import it.unlocksecurity.burp.screenshotmode.model.HeaderHideTarget;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
@@ -13,7 +12,7 @@ import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -21,13 +20,10 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.util.Arrays;
 import java.util.IdentityHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -59,10 +55,15 @@ final class SettingsForm extends JPanel {
     private final Badge headersCount = new Badge();
     /** The status line under each rule card, keyed by the rule itself. */
     private final Map<Object, JTextArea> statusLines = new IdentityHashMap<>();
+    private final HeadersTab headers;
     private int failedRules;
-    private boolean updatingHeaders;
 
     SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide) {
+        this(settings, onChange, mono, wide, null);
+    }
+
+    /** @param message the headers of the message on screen, or {@code null} in the template editor */
+    SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide, HeadersTab.InMessage message) {
         super(new BorderLayout());
         this.settings = settings;
         this.mono = mono;
@@ -73,7 +74,8 @@ final class SettingsForm extends JPanel {
         setOpaque(false);
 
         tabs.addTab("Rules", scrollable(rulesTab(wide)));
-        tabs.addTab("Headers", headersTab());
+        headers = new HeadersTab(settings, HeaderCatalogFile.bundled(), message, this.onChange);
+        tabs.addTab("Headers", headers);
         tabs.addTab("Appearance", scrollable(appearanceTab()));
         tabs.setTabComponentAt(RULES, tabTitle("Rules", rulesCount));
         tabs.setTabComponentAt(HEADERS, tabTitle("Headers", headersCount));
@@ -94,11 +96,7 @@ final class SettingsForm extends JPanel {
                 : String.valueOf(settings.highlights.size() + settings.redactions.size())
         );
         rulesCount.repaint();
-        int headers =
-            settings.headersToHide.both.size() +
-            settings.headersToHide.request.size() +
-            settings.headersToHide.response.size();
-        headersCount.setText(String.valueOf(headers));
+        headersCount.setText(headers.hiddenCount() + " hidden");
     }
 
     private JComponent rulesTab(boolean wide) {
@@ -176,77 +174,6 @@ final class SettingsForm extends JPanel {
             case 1 -> "1 match";
             default -> status.matches() + " matches";
         };
-    }
-
-    /** One list per target, picked with "Hide in"; each option shows how many headers its list hides. */
-    private JComponent headersTab() {
-        JTextArea text = new JTextArea(12, 20);
-        text.setFont(mono);
-        HeaderHideTarget[] target = { HeaderHideTarget.BOTH };
-        Runnable load = () -> {
-            updatingHeaders = true;
-            text.setText(String.join("\n", settings.headersToHide.get(target[0])));
-            text.setCaretPosition(0);
-            updatingHeaders = false;
-        };
-        SegmentedControl<HeaderHideTarget> picker = new SegmentedControl<>(
-            HeaderHideTarget.values(),
-            target[0],
-            this::headerListLabel,
-            value -> {
-                target[0] = value;
-                load.run();
-            }
-        );
-        picker.setToolTipText("Which list to edit: headers hidden in both messages, or only in one of them");
-        Runnable relabelPicker = () -> {
-            for (HeaderHideTarget value : HeaderHideTarget.values()) {
-                picker.setLabel(value, headerListLabel(value));
-            }
-        };
-        load.run();
-        Widgets.onTextChange(text, value -> {
-            if (updatingHeaders) {
-                return;
-            }
-            List<String> headers = Arrays.stream(value.split("\n"))
-                .map(String::trim)
-                .filter(header -> !header.isEmpty())
-                .toList();
-            settings.headersToHide.set(target[0], headers);
-            relabelPicker.run();
-            onChange.run();
-        });
-
-        JButton restore = Widgets.button("Restore defaults");
-        restore.putClientProperty("JButton.buttonType", "borderless");
-        restore.setToolTipText("Replace all three lists with the default list of noisy headers");
-        restore.addActionListener(event -> {
-            settings.headersToHide = DefaultTemplate.settings().headersToHide;
-            load.run();
-            relabelPicker.run();
-            onChange.run();
-        });
-
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        top.setOpaque(false);
-        top.add(Widgets.title("Hide in"));
-        top.add(picker);
-
-        // Wraps the button under the hint when the sidebar is narrow, instead of cutting the hint.
-        JPanel bottom = Widgets.row(Widgets.hint("One header per line. Prefix with ! to always show it."), restore);
-
-        JPanel panel = new JPanel(new BorderLayout(0, 10));
-        panel.setOpaque(false);
-        panel.setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
-        panel.add(top, BorderLayout.NORTH);
-        panel.add(new JScrollPane(text), BorderLayout.CENTER);
-        panel.add(bottom, BorderLayout.SOUTH);
-        return panel;
-    }
-
-    private String headerListLabel(HeaderHideTarget target) {
-        return target.label() + " " + settings.headersToHide.get(target).size();
     }
 
     /** Settings that change how the screenshot looks, as a label / control grid. */
