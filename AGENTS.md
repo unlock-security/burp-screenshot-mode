@@ -45,6 +45,14 @@ every push to `main`, which only accepts pull requests from `dev`. The version l
 version number in `build.gradle.kts` or elsewhere — Gradle reads it from `-PreleaseVersion`, defaulting to
 `0.0.0-SNAPSHOT`. GitHub Actions in workflows are pinned to commit SHAs with the version in a trailing comment.
 
+## UI/UX changes
+
+Before making any UI/UX change, even a small one the user asks for, check it against UI/UX guidelines: Nielsen's
+usability heuristics, the conventions of Swing/FlatLaf and of Burp's own UI (which controls Burp uses for the same job),
+and accessibility (keyboard access, contrast, not relying on color or tooltips alone). If the change violates any of
+them, don't implement it yet: warn the user, explain which guideline it breaks and why, propose an alternative that
+doesn't, and ask which one to implement. Only go ahead directly when nothing is violated.
+
 ## Architecture
 
 Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
