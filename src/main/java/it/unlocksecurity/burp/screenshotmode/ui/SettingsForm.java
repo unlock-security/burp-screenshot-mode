@@ -12,6 +12,7 @@ import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -21,7 +22,10 @@ import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -34,6 +38,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.UIManager;
 
 /**
  * Editors for every screenshot setting, mutating the given {@link Settings} in place, in three tabs ordered by how
@@ -50,8 +55,11 @@ final class SettingsForm extends JPanel {
     private final Runnable onChange;
     private final Font mono;
     private final JTabbedPane tabs = new JTabbedPane();
-    private final JLabel rulesCount = badge();
-    private final JLabel headersCount = badge();
+    private final Badge rulesCount = new Badge();
+    private final Badge headersCount = new Badge();
+    /** The status line under each rule card, keyed by the rule itself. */
+    private final Map<Object, JTextArea> statusLines = new IdentityHashMap<>();
+    private int failedRules;
     private boolean updatingHeaders;
 
     SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide) {
@@ -78,7 +86,14 @@ final class SettingsForm extends JPanel {
     }
 
     private void updateCounts() {
-        rulesCount.setText(String.valueOf(settings.highlights.size() + settings.redactions.size()));
+        // A failed rule turns the count into a warning, so it shows whichever tab is open.
+        rulesCount.warn = failedRules > 0;
+        rulesCount.setText(
+            failedRules > 0
+                ? "⚠ " + failedRules
+                : String.valueOf(settings.highlights.size() + settings.redactions.size())
+        );
+        rulesCount.repaint();
         int headers =
             settings.headersToHide.both.size() +
             settings.headersToHide.request.size() +
@@ -93,7 +108,7 @@ final class SettingsForm extends JPanel {
             "No highlights yet. Add one with + or right-click selected text in the preview.",
             settings.highlights,
             () -> HighlightRule.create("", RuleTarget.REQUEST, MatchMode.REGEX),
-            (rule, change, delete) -> RuleCards.highlightCard(rule, change, delete, mono),
+            (rule, change, delete) -> RuleCards.highlightCard(rule, change, delete, mono, statusLine(rule)),
             onChange
         );
         JPanel redactions = RuleCards.section(
@@ -102,7 +117,7 @@ final class SettingsForm extends JPanel {
             "No redactions yet. Add one with + or right-click selected text in the preview.",
             settings.redactions,
             () -> RedactionRule.create("", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.REGEX),
-            (rule, change, delete) -> RuleCards.redactionCard(rule, change, delete, mono),
+            (rule, change, delete) -> RuleCards.redactionCard(rule, change, delete, mono, statusLine(rule)),
             onChange
         );
         if (wide) {
@@ -116,6 +131,50 @@ final class SettingsForm extends JPanel {
         stack.addItem(highlights);
         stack.addItem(redactions);
         return stack;
+    }
+
+    /** A rule card's status line, empty and hidden until {@link #showRuleStatuses} fills it. */
+    private JTextArea statusLine(Object rule) {
+        JTextArea line = Widgets.wrappingHint("", 260);
+        line.setVisible(false);
+        statusLines.put(rule, line);
+        return line;
+    }
+
+    /**
+     * Shows under each rule card what it did in the screenshot: its matches, or why it did not fully apply. Rules
+     * without a status (as in the template editor, which renders no message) show nothing.
+     */
+    void showRuleStatuses(Map<Object, RuleStatus> statuses) {
+        statusLines.forEach((rule, line) -> {
+            RuleStatus status = statuses.get(rule);
+            line.setVisible(status != null);
+            if (status != null) {
+                line.setText(describe(status));
+                line.setForeground(status.failed() ? Widgets.errorColor() : Widgets.mutedColor());
+            }
+        });
+        failedRules = (int) Stream.concat(settings.highlights.stream(), settings.redactions.stream())
+            .map(statuses::get)
+            .filter(status -> status != null && status.failed())
+            .count();
+        updateCounts();
+        revalidate();
+        repaint();
+    }
+
+    static String describe(RuleStatus status) {
+        if (status.problem() == RuleStatus.Problem.INVALID) {
+            return "⚠ Not applied: invalid regex" + (status.detail() == null ? "" : " (" + status.detail() + ")");
+        }
+        if (status.problem() == RuleStatus.Problem.STOPPED) {
+            return "⚠ Partly applied: matching stopped early, the pattern is too slow for this message";
+        }
+        return switch (status.matches()) {
+            case 0 -> "No matches";
+            case 1 -> "1 match";
+            default -> status.matches() + " matches";
+        };
     }
 
     /** One list per target, picked with "Hide in"; each option shows how many headers its list hides. */
@@ -323,24 +382,33 @@ final class SettingsForm extends JPanel {
         return panel;
     }
 
-    /** A neutral count pill for tab titles. */
-    private static JLabel badge() {
-        JLabel label = new JLabel() {
-            @Override
-            protected void paintComponent(java.awt.Graphics graphics) {
-                java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
-                g.setRenderingHint(
-                    java.awt.RenderingHints.KEY_ANTIALIASING,
-                    java.awt.RenderingHints.VALUE_ANTIALIAS_ON
-                );
-                g.setColor(Widgets.themeColor("Colors.palette.mono.3", new java.awt.Color(0xe6e6e6)));
-                g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
-                g.dispose();
-                super.paintComponent(graphics);
-            }
-        };
-        label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 2));
-        label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
-        return label;
+    /** A count pill for tab titles: neutral, or in the theme's warning tones (like the "Modified" chip). */
+    private static final class Badge extends JLabel {
+
+        boolean warn;
+
+        Badge() {
+            setFont(getFont().deriveFont(Font.BOLD, getFont().getSize2D() - 2));
+            setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+        }
+
+        @Override
+        protected void paintComponent(java.awt.Graphics graphics) {
+            java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(
+                warn
+                    ? Widgets.themeColor("Colors.palette.warning.7", new java.awt.Color(0xf3e2c9))
+                    : Widgets.themeColor("Colors.palette.mono.3", new java.awt.Color(0xe6e6e6))
+            );
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            g.dispose();
+            setForeground(
+                warn
+                    ? Widgets.themeColor("Colors.palette.warning.2", new java.awt.Color(0x976a14))
+                    : UIManager.getColor("Label.foreground")
+            );
+            super.paintComponent(graphics);
+        }
     }
 }

@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -35,6 +36,9 @@ public final class RuleEngine {
 
     record Match(int from, int to, List<Group> groups) {}
 
+    /** The matches of one pattern, and why matching did not complete, if it did not. */
+    record Found(List<Match> matches, RuleStatus.Problem problem) {}
+
     private record Replacement(int from, int to, String text) {}
 
     private record Segment(int sourceFrom, int sourceTo, int displayFrom, int displayTo) {}
@@ -42,11 +46,23 @@ public final class RuleEngine {
     private RuleEngine() {}
 
     public static Decorated apply(String text, List<HighlightRule> highlights, List<RedactionRule> redactions) {
+        return apply(text, highlights, redactions, (rule, status) -> {});
+    }
+
+    /** Like {@link #apply(String, List, List)}, also reporting what each rule did. */
+    public static Decorated apply(
+        String text,
+        List<HighlightRule> highlights,
+        List<RedactionRule> redactions,
+        BiConsumer<Object, RuleStatus> statuses
+    ) {
         List<List<Range>> redactionRanges = new ArrayList<>();
         List<Range> redacted = new ArrayList<>();
         for (RedactionRule rule : redactions) {
             List<Range> ranges = new ArrayList<>();
-            for (Match match : findMatches(text, rule.regex, rule.matchMode)) {
+            Found found = findMatches(text, rule.regex, rule.matchMode);
+            statuses.accept(rule, status(found, rule.regex, rule.matchMode));
+            for (Match match : found.matches()) {
                 ranges.addAll(redactionRanges(match, rule.useCaptureGroups, rule.selectedGroups));
             }
             redactionRanges.add(ranges);
@@ -58,7 +74,9 @@ public final class RuleEngine {
             Decorated.Kind kind =
                 rule.mode == HighlightMode.RECTANGLE ? Decorated.Kind.RECTANGLE : Decorated.Kind.HIGHLIGHT;
             Color color = parseColor(rule.color, Color.YELLOW);
-            for (Match match : findMatches(text, rule.regex, rule.matchMode)) {
+            Found found = findMatches(text, rule.regex, rule.matchMode);
+            statuses.accept(rule, status(found, rule.regex, rule.matchMode));
+            for (Match match : found.matches()) {
                 Range range = new Range(match.from(), match.to());
                 if (redacted.stream().noneMatch(range::overlaps)) {
                     sourceSpans.add(new Decorated.Span(match.from(), match.to(), kind, color));
@@ -172,11 +190,20 @@ public final class RuleEngine {
         return ranges;
     }
 
-    static List<Match> findMatches(String text, String pattern, MatchMode matchMode) {
+    private static RuleStatus status(Found found, String pattern, MatchMode matchMode) {
+        return new RuleStatus(
+            found.matches().size(),
+            found.problem(),
+            found.problem() == RuleStatus.Problem.INVALID ? validate(pattern, matchMode).orElse(null) : null
+        );
+    }
+
+    static Found findMatches(String text, String pattern, MatchMode matchMode) {
         List<Match> matches = new ArrayList<>();
         Optional<Pattern> compiled = compile(pattern, matchMode);
         if (compiled.isEmpty()) {
-            return matches;
+            boolean invalid = validate(pattern, matchMode).isPresent();
+            return new Found(matches, invalid ? RuleStatus.Problem.INVALID : null);
         }
 
         Matcher matcher = compiled
@@ -197,9 +224,10 @@ public final class RuleEngine {
             }
         } catch (DeadlineCharSequence.TimeoutException | StackOverflowError e) {
             // Keep whatever matched before the budget ran out, or before a pattern that recurses once per character,
-            // like (a|b)*, overflowed the stack on a long match.
+            // like (a|b)*, overflowed the stack on a long match, and say so.
+            return new Found(matches, RuleStatus.Problem.STOPPED);
         }
-        return matches;
+        return new Found(matches, null);
     }
 
     private static Optional<Pattern> compile(String pattern, MatchMode matchMode) {

@@ -9,6 +9,7 @@ import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
@@ -32,6 +33,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
+import java.util.List;
 import java.util.Objects;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -45,6 +47,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.JTextComponent;
@@ -78,9 +81,11 @@ final class ScreenshotDialog extends JDialog {
     private final JButton revert = Widgets.button("Revert");
     private final JButton update = Widgets.button("Update template");
     private final JLabel output = Widgets.hint("");
+    private final JButton failedRules = new JButton();
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
     private int selectedTab = SettingsForm.RULES;
+    private SettingsForm form;
 
     private boolean updatingCombo;
     private boolean rendered;
@@ -226,8 +231,15 @@ final class ScreenshotDialog extends JDialog {
         tip.setToolTipText(
             "Select text in the request or response, then right-click to highlight it, redact it or hide its header"
         );
+        failedRules.putClientProperty("JButton.buttonType", "borderless");
+        failedRules.setForeground(Widgets.errorColor());
+        failedRules.setToolTipText("Show the rules");
+        failedRules.setVisible(false);
+        failedRules.addActionListener(event -> showRules());
+
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         left.add(output);
+        left.add(failedRules);
         left.add(tip);
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.add(fit);
@@ -251,7 +263,7 @@ final class ScreenshotDialog extends JDialog {
 
     private void rebuildForm() {
         formHolder.removeAll();
-        SettingsForm form = new SettingsForm(state.settings, renderTimer::restart, host.editorFont().get(), false);
+        form = new SettingsForm(state.settings, renderTimer::restart, host.editorFont().get(), false);
         form.tabs().setSelectedIndex(selectedTab);
         form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
         formHolder.add(form, BorderLayout.CENTER);
@@ -297,7 +309,8 @@ final class ScreenshotDialog extends JDialog {
             return false;
         }
         e.consume();
-        takeScreenshot(true);
+        // Later, not inside the key dispatch: the screenshot may first open a confirmation dialog.
+        SwingUtilities.invokeLater(() -> takeScreenshot(true));
         return true;
     }
 
@@ -336,11 +349,58 @@ final class ScreenshotDialog extends JDialog {
         rendered = true;
 
         preview.setMaxContentWidth(maxWidth);
+        form.showRuleStatuses(content.ruleStatuses());
+        int failed = failedRedactions().size();
+        failedRules.setText("⚠ " + failed + (failed == 1 ? " redaction rule failed" : " redaction rules failed"));
+        failedRules.setVisible(failed > 0);
         updateTemplateState();
         updateOutputLabel(settings);
         preview.setBackground(palette.canvas());
         preview.setHandleColors(palette.canvas(), palette.muted());
         previewScroll.getViewport().setBackground(palette.canvas());
+    }
+
+    /** The redaction rules that did not fully apply in the last render. */
+    private List<RedactionRule> failedRedactions() {
+        return state.settings.redactions
+            .stream()
+            .filter(rule -> {
+                RuleStatus status = content.ruleStatuses().get(rule);
+                return status != null && status.failed();
+            })
+            .toList();
+    }
+
+    private void showRules() {
+        form.tabs().setSelectedIndex(SettingsForm.RULES);
+    }
+
+    /**
+     * Asks before exporting a screenshot in which some redactions did not fully apply: what they should hide may show.
+     * The user decides; nothing is blocked.
+     */
+    private boolean confirmFailedRedactions(boolean toClipboard) {
+        if (failedRedactions().isEmpty()) {
+            return true;
+        }
+        String message =
+            "One or more redaction rules did not fully apply.\nWhat they should hide may be visible in the screenshot.";
+        String export = toClipboard ? "Copy anyway" : "Save anyway";
+        Object[] options = { export, "Show rules" };
+        int answer = JOptionPane.showOptionDialog(
+            this,
+            message,
+            toClipboard ? "Copy Screenshot" : "Save Screenshot",
+            JOptionPane.DEFAULT_OPTION,
+            JOptionPane.WARNING_MESSAGE,
+            null,
+            options,
+            options[1]
+        );
+        if (answer == 1) {
+            showRules();
+        }
+        return answer == 0;
     }
 
     private void flushRender() {
@@ -465,6 +525,9 @@ final class ScreenshotDialog extends JDialog {
 
     private void takeScreenshot(boolean toClipboard) {
         flushRender();
+        if (!confirmFailedRedactions(toClipboard)) {
+            return;
+        }
         try {
             BufferedImage image = ImageCapture.render(content);
             if (toClipboard) {

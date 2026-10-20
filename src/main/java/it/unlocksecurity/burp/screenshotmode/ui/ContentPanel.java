@@ -11,6 +11,7 @@ import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.render.pretty.PrettyPrinter;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -22,7 +23,9 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 import javax.swing.BorderFactory;
@@ -57,6 +60,8 @@ final class ContentPanel extends JPanel {
     private DoubleConsumer splitRatioListener = ratio -> {};
     private Consumer<String> errorListener = message -> {};
     private MessagePane.SelectionListener selectionListener = (action, text, target) -> {};
+    /** What each rule did in the last render, keyed by the rule object itself. */
+    private final Map<Object, RuleStatus> ruleStatuses = new IdentityHashMap<>();
 
     ContentPanel() {
         super(new BorderLayout());
@@ -160,6 +165,7 @@ final class ContentPanel extends JPanel {
     ) {
         setBorder(BorderFactory.createLineBorder(palette.border()));
         setBackground(palette.background());
+        ruleStatuses.clear();
 
         urlHeader.setBackground(palette.headerBackground());
         urlHeader.setBorder(
@@ -252,8 +258,8 @@ final class ContentPanel extends JPanel {
         return url.length();
     }
 
-    /** Applies the highlight and redaction rules meant for {@code target}. */
-    private static Decorated decorate(String text, RuleTarget target, Settings settings) {
+    /** Applies the highlight and redaction rules meant for {@code target}, recording what each one did. */
+    private Decorated decorate(String text, RuleTarget target, Settings settings) {
         return RuleEngine.apply(
             text,
             settings.highlights
@@ -263,8 +269,14 @@ final class ContentPanel extends JPanel {
             settings.redactions
                 .stream()
                 .filter(rule -> rule.target == target)
-                .toList()
+                .toList(),
+            ruleStatuses::put
         );
+    }
+
+    /** What each highlight and redaction rule did in the last {@link #render}, keyed by the rule itself. */
+    Map<Object, RuleStatus> ruleStatuses() {
+        return ruleStatuses;
     }
 
     void setCaptureMode(boolean capturing) {

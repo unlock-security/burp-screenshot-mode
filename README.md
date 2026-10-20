@@ -27,6 +27,9 @@ No external tools, no manual cropping and blurring.
 - **Highlights**: regex or literal patterns, painted as a translucent marker or as a rectangle, in any color.
 - **Redactions**: blur, opaque box or replacement text (`[REDACTED]`), optionally limited to selected capture
   groups (e.g. `session=([0-9a-f]+)` redacts only the value).
+- **Rule checks**: in the screenshot window, each rule shows how many times it matched. A redaction with an invalid
+  or too slow pattern is flagged on its card, on the *Rules* tab and above the preview, and **Copy** and **Save** ask
+  before exporting a screenshot it may not fully cover.
 - Each highlight or redaction applies to the **request**, the **response** or the **URL**. The default rules also
   redact tokens and JWTs in the URL, so a secret hidden in the request line doesn't show up above it.
 - **Pretty view** for JSON, HTML, XML (SVG, RSS, SOAP, …), CSS and JavaScript bodies, like Burp's Pretty tab.

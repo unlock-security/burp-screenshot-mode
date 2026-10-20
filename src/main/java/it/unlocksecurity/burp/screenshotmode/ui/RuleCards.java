@@ -76,8 +76,17 @@ final class RuleCards {
         JComponent create(R rule, Runnable onChange, Runnable onDelete);
     }
 
-    /** Two rows: the pattern (with its regex toggle) and delete; then where and how it applies. */
-    static JComponent highlightCard(HighlightRule rule, Runnable onChange, Runnable onDelete, Font mono) {
+    /**
+     * Two rows: the pattern (with its regex toggle) and delete; then where and how it applies. {@code status}, below
+     * them, shows what the rule did in the screenshot.
+     */
+    static JComponent highlightCard(
+        HighlightRule rule,
+        Runnable onChange,
+        Runnable onDelete,
+        Font mono,
+        JComponent status
+    ) {
         JTextField pattern = patternField(rule.regex, rule.matchMode, mono);
         Widgets.onTextChange(pattern, text -> {
             rule.regex = text;
@@ -107,11 +116,18 @@ final class RuleCards {
         JPanel card = Widgets.card(new BorderLayout(0, 6));
         card.add(patternRow(pattern, regex, onDelete), BorderLayout.NORTH);
         card.add(Widgets.row(target, mode, color), BorderLayout.CENTER);
+        card.add(status, BorderLayout.SOUTH);
         return card;
     }
 
     /** Like {@link #highlightCard}, plus a capture group row shown only while the regex has groups. */
-    static JComponent redactionCard(RedactionRule rule, Runnable onChange, Runnable onDelete, Font mono) {
+    static JComponent redactionCard(
+        RedactionRule rule,
+        Runnable onChange,
+        Runnable onDelete,
+        Font mono,
+        JComponent status
+    ) {
         JTextField pattern = patternField(rule.regex, rule.matchMode, mono);
         JPanel groups = new JPanel(new WrapLayout(6, 0));
         groups.setOpaque(false);
@@ -200,6 +216,7 @@ final class RuleCards {
         JPanel card = Widgets.card(new BorderLayout(0, 6));
         card.add(patternRow(pattern, regex, onDelete), BorderLayout.NORTH);
         card.add(lower, BorderLayout.CENTER);
+        card.add(status, BorderLayout.SOUTH);
         return card;
     }
 

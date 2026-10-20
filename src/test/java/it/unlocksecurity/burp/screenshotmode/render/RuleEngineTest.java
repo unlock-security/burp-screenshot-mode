@@ -1,6 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.render;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
@@ -10,7 +11,9 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import java.awt.Color;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -197,12 +200,56 @@ class RuleEngineTest {
         assertEquals(List.of(), RuleEngine.groupLabels("(", MatchMode.REGEX));
     }
 
+    private static Map<Object, RuleStatus> statuses(
+        String text,
+        List<HighlightRule> highlights,
+        List<RedactionRule> redactions
+    ) {
+        Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
+        RuleEngine.apply(text, highlights, redactions, statuses::put);
+        return statuses;
+    }
+
+    @Test
+    void reportsHowManyTimesEachRuleMatched() {
+        HighlightRule twice = highlight("e", MatchMode.STRING);
+        RedactionRule none = redaction("absent", RedactionMode.BLUR);
+        Map<Object, RuleStatus> statuses = statuses(TEXT, List.of(twice), List.of(none));
+        assertEquals(new RuleStatus(7, null, null), statuses.get(twice));
+        assertEquals(new RuleStatus(0, null, null), statuses.get(none));
+        assertFalse(statuses.get(none).failed(), "no match is not a failure");
+    }
+
+    @Test
+    void reportsInvalidPatternsWithTheirError() {
+        RedactionRule invalid = redaction("session=(", RedactionMode.BLUR);
+        RedactionRule empty = redaction("", RedactionMode.BLUR);
+        RedactionRule literal = RedactionRule.create("(", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.STRING);
+        Map<Object, RuleStatus> statuses = statuses(TEXT, List.of(), List.of(invalid, empty, literal));
+        assertEquals(RuleStatus.Problem.INVALID, statuses.get(invalid).problem());
+        assertTrue(statuses.get(invalid).detail().startsWith("Unclosed group"), statuses.get(invalid).detail());
+        assertFalse(statuses.get(empty).failed(), "an empty draft rule is not a failure");
+        assertFalse(statuses.get(literal).failed(), "a literal string is never an invalid regex");
+    }
+
+    @Test
+    @Timeout(5)
+    void reportsRulesThatStoppedEarly() {
+        // The backreference turns off the memoization that keeps (a+)+b fast on Java 21.
+        RedactionRule slow = redaction("(a+)+\\1b", RedactionMode.BLUR);
+        RedactionRule deep = redaction("x(a|b)*y", RedactionMode.BLUR);
+        String text = "a".repeat(40) + "!\nx" + "ab".repeat(50_000) + "y";
+        Map<Object, RuleStatus> statuses = statuses(text, List.of(), List.of(slow, deep));
+        assertEquals(RuleStatus.Problem.STOPPED, statuses.get(slow).problem());
+        assertEquals(RuleStatus.Problem.STOPPED, statuses.get(deep).problem());
+    }
+
     @Test
     @Timeout(5)
     void catastrophicBacktrackingIsCutShort() {
         String text = "a".repeat(40) + "!";
         assertTrue(
-            RuleEngine.apply(text, List.of(highlight("(a+)+b", MatchMode.REGEX)), List.of())
+            RuleEngine.apply(text, List.of(highlight("(a+)+\\1b", MatchMode.REGEX)), List.of())
                 .spans()
                 .isEmpty()
         );

@@ -12,9 +12,11 @@ import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
 import java.awt.Font;
 import java.lang.reflect.InvocationTargetException;
+import java.util.List;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
@@ -83,6 +85,33 @@ class ContentPanelTest {
         Settings settings = DefaultTemplate.settings();
         settings.url = UrlMode.HIDDEN;
         assertFalse(rendered("https://example.com/", settings).urlBar().isVisible());
+    }
+
+    @Test
+    void recordsWhatEachRuleDidAcrossRequestResponseAndUrl() throws Throwable {
+        Settings settings = new Settings();
+        RedactionRule url = RedactionRule.create("abc", RuleTarget.URL, RedactionMode.REPLACE, MatchMode.STRING);
+        RedactionRule request = RedactionRule.create("GET", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.STRING);
+        RedactionRule invalid = RedactionRule.create("(", RuleTarget.RESPONSE, RedactionMode.BLUR, MatchMode.REGEX);
+        settings.redactions.addAll(List.of(url, request, invalid));
+        ContentPanel content = rendered("https://example.com/?t=abc&u=abc", settings);
+        assertEquals(2, content.ruleStatuses().get(url).matches());
+        assertEquals(1, content.ruleStatuses().get(request).matches());
+        assertTrue(content.ruleStatuses().get(invalid).failed());
+    }
+
+    @Test
+    void describesRuleStatusesInWords() {
+        assertEquals("No matches", SettingsForm.describe(new RuleStatus(0, null, null)));
+        assertEquals("1 match", SettingsForm.describe(new RuleStatus(1, null, null)));
+        assertEquals("3 matches", SettingsForm.describe(new RuleStatus(3, null, null)));
+        assertEquals(
+            "⚠ Not applied: invalid regex (Unclosed group near index 1)",
+            SettingsForm.describe(new RuleStatus(0, RuleStatus.Problem.INVALID, "Unclosed group near index 1"))
+        );
+        assertTrue(
+            SettingsForm.describe(new RuleStatus(2, RuleStatus.Problem.STOPPED, null)).startsWith("⚠ Partly applied")
+        );
     }
 
     @Test
