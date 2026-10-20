@@ -98,15 +98,29 @@ public final class RuleEngine {
             }
         }
 
-        // Overlapping replacements cannot both apply: keep the earliest one.
-        replacements.sort(Comparator.comparingInt(Replacement::from).thenComparingInt(Replacement::to));
+        // Overlapping replacements cannot both apply: merge them into one, with the text of the one starting first (the
+        // longest, if they start together), so no part of either match stays visible.
+        replacements.sort(
+            Comparator.comparingInt(Replacement::from).thenComparing(
+                Comparator.comparingInt(Replacement::to).reversed()
+            )
+        );
+        List<Replacement> merged = new ArrayList<>();
+        for (Replacement replacement : replacements) {
+            Replacement last = merged.isEmpty() ? null : merged.getLast();
+            if (last != null && replacement.from() < last.to()) {
+                merged.set(
+                    merged.size() - 1,
+                    new Replacement(last.from(), Math.max(last.to(), replacement.to()), last.text())
+                );
+            } else {
+                merged.add(replacement);
+            }
+        }
         StringBuilder display = new StringBuilder(text.length());
         List<Segment> segments = new ArrayList<>();
         int position = 0;
-        for (Replacement replacement : replacements) {
-            if (replacement.from() < position) {
-                continue;
-            }
+        for (Replacement replacement : merged) {
             display.append(text, position, replacement.from());
             int displayFrom = display.length();
             display.append(replacement.text());

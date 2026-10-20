@@ -112,12 +112,22 @@ class RuleEngineTest {
     }
 
     @Test
-    void overlappingReplacementsKeepTheEarliest() {
+    void overlappingReplacementsMergeIntoTheEarliest() {
         RedactionRule first = redaction("session=s3cr3t", RedactionMode.REPLACE);
         RedactionRule second = redaction("s3cr3t; theme", RedactionMode.REPLACE);
         second.replacementText = "SECOND";
         Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(second, first));
-        assertTrue(result.text().endsWith("Cookie: [REDACTED]; theme=dark"), result.text());
+        // Nothing of either match is left visible.
+        assertTrue(result.text().endsWith("Cookie: [REDACTED]=dark"), result.text());
+    }
+
+    @Test
+    void aShorterReplacementInsideALongerOneIsAbsorbed() {
+        RedactionRule header = redaction("(?<=Cookie: ).+", RedactionMode.REPLACE);
+        header.replacementText = "[OMITTED]";
+        RedactionRule prefix = redaction("session=s3cr3t", RedactionMode.REPLACE);
+        Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(prefix, header));
+        assertTrue(result.text().endsWith("Cookie: [OMITTED]"), result.text());
     }
 
     @Test
