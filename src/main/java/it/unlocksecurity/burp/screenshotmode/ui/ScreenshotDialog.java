@@ -35,6 +35,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -162,18 +163,23 @@ final class ScreenshotDialog extends JDialog {
     private JComponent buildTopBar() {
         templateCombo.addActionListener(event -> {
             if (
-                !updatingCombo &&
-                templateCombo.getSelectedItem() instanceof Template template &&
-                !template.id.equals(state.templateId)
+                updatingCombo ||
+                !(templateCombo.getSelectedItem() instanceof Template template) ||
+                template.id.equals(state.templateId)
             ) {
-                state.templateId = template.id;
-                state.settings = template.settings.copy();
-                rebuildForm();
-                render();
+                return;
             }
+            if (hasUnsavedChanges() && !confirmSwitch(template)) {
+                selectCurrentTemplate();
+                return;
+            }
+            state.templateId = template.id;
+            state.settings = template.settings.copy();
+            selectCurrentTemplate();
+            rebuildForm();
+            render();
         });
         templateCombo.setPrototypeDisplayValue(new Template("", "Client report – redacted tokens", null));
-        modified.setToolTipText("These settings differ from the template. They apply to this message only.");
         revert.setToolTipText("Discard the changes and go back to the template's settings");
         revert.addActionListener(event -> resetToTemplate());
         update.setToolTipText("Save the current settings into the selected template");
@@ -273,13 +279,69 @@ final class ScreenshotDialog extends JDialog {
 
     /** Shows whether the settings differ from the selected template; Revert and Update only make sense if so. */
     private void updateTemplateState() {
-        boolean differs = store
-            .getTemplateById(state.templateId)
-            .map(template -> !TemplateCodec.sameSettings(template.settings, state.settings))
+        Optional<Template> template = store.getTemplateById(state.templateId);
+        boolean differs = template
+            .map(selected -> !TemplateCodec.sameSettings(selected.settings, state.settings))
             .orElse(false);
-        modified.setVisible(differs);
+        // Deleted in the suite tab while this window is open: these settings now exist only here.
+        boolean deleted = template.isEmpty();
+        modified.setText(deleted ? "Template deleted" : "Modified");
+        modified.setToolTipText(
+            deleted
+                ? "The template was deleted. These settings apply to this message only: save them as a new template to keep them."
+                : "These settings differ from the template. They apply to this message only."
+        );
+        modified.setVisible(differs || deleted);
         revert.setEnabled(differs);
         update.setEnabled(differs);
+    }
+
+    /** Whether switching template would lose settings: changed for this message, or left by a deleted template. */
+    private boolean hasUnsavedChanges() {
+        return store
+            .getTemplateById(state.templateId)
+            .map(template -> !TemplateCodec.sameSettings(template.settings, state.settings))
+            .orElse(true);
+    }
+
+    /**
+     * Asks before switching template would discard this message's settings, like the template editor does before
+     * discarding its edits. Keep editing is the default.
+     *
+     * @return whether to switch to {@code target}
+     */
+    private boolean confirmSwitch(Template target) {
+        JButton discard = Widgets.button("Discard and switch");
+        // The safe choice is the primary, default one.
+        JButton keep = Widgets.primary(Widgets.button("Keep editing"));
+        JOptionPane pane = new JOptionPane(
+            "You changed the settings of this screenshot.\nSwitching to \"" +
+                target.name +
+                "\" discards those changes.",
+            JOptionPane.WARNING_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { discard, keep },
+            keep
+        );
+        // Custom option buttons don't close the pane on their own.
+        discard.addActionListener(event -> pane.setValue(discard));
+        keep.addActionListener(event -> pane.setValue(keep));
+        JDialog dialog = pane.createDialog(this, "Switch Template");
+        dialog.getRootPane().setDefaultButton(keep);
+        dialog.setVisible(true);
+        dialog.dispose();
+        return pane.getValue() == discard;
+    }
+
+    /** Shows the session's template in the combo box without treating it as a new choice. */
+    private void selectCurrentTemplate() {
+        updatingCombo = true;
+        try {
+            templateCombo.setSelectedItem(store.getTemplateById(state.templateId).orElse(null));
+        } finally {
+            updatingCombo = false;
+        }
     }
 
     private void updateOutputLabel(Settings settings) {

@@ -79,8 +79,8 @@ When several rows are selected in a table, the first one is used.
 
 Settings changed in the screenshot window apply to that message only, and are remembered if you screenshot the
 same message again; a **Modified** label shows when they differ from the template. Use **Update template** or
-**Save as new…** to keep them, or **Revert** to go back to the template. The **Screenshot Mode** suite tab
-manages the templates.
+**Save as new…** to keep them, or **Revert** to go back to the template. Switching template while they differ asks
+first, so they aren't lost by accident. The **Screenshot Mode** suite tab manages the templates.
 
 ## Installation
 
