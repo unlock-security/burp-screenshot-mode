@@ -19,6 +19,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.util.ArrayList;
@@ -175,6 +176,7 @@ public final class TemplateCodec {
         object.addProperty("showResponseInfo", settings.showResponseInfo);
         object.addProperty("theme", settings.theme.id());
         object.addProperty("view", settings.view.id());
+        object.addProperty("url", settings.url.id());
         return object;
     }
 
@@ -243,6 +245,10 @@ public final class TemplateCodec {
             view != null && isString(view)
                 ? lenientEnum(ViewMode.class, view.getAsString(), ViewMode.RAW)
                 : ViewMode.RAW;
+
+        JsonElement url = object.get("url");
+        settings.url =
+            url != null && isString(url) ? lenientEnum(UrlMode.class, url.getAsString(), UrlMode.FULL) : UrlMode.FULL;
         return settings;
     }
 

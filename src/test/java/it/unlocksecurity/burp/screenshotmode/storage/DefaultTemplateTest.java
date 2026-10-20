@@ -25,6 +25,15 @@ class DefaultTemplateTest {
     }
 
     @Test
+    void isWhatTheCodecWrites() {
+        // So no setting is missing from the file and silently left to its fallback.
+        assertEquals(
+            DefaultTemplate.json().strip(),
+            TemplateCodec.encode(TemplateCodec.decode(DefaultTemplate.json()).data())
+        );
+    }
+
+    @Test
     void givesEachCallerItsOwnCopy() {
         Settings settings = DefaultTemplate.settings();
         settings.redactions.clear();

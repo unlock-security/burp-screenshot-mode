@@ -259,7 +259,8 @@
         "showTimestamp": false,
         "showResponseInfo": true,
         "theme": "auto",
-        "view": "raw"
+        "view": "raw",
+        "url": "full"
       }
     }
   ],

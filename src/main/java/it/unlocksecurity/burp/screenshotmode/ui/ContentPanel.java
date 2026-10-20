@@ -3,6 +3,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 import javax.swing.BorderFactory;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
@@ -169,8 +171,14 @@ final class ContentPanel extends JPanel {
         urlLabel.setFont(ui.deriveFont(Font.BOLD, ui.getSize2D() - 2));
         urlLabel.setForeground(palette.muted());
         urlBox.setBackground(palette.codeBackground());
-        String urlText = data.url() == null ? "" : data.url();
-        url.render(decorate(urlText, RuleTarget.URL, settings), List.of(), palette, mono);
+        urlHeader.setVisible(settings.url != UrlMode.HIDDEN);
+        urlLabel.setText(settings.url == UrlMode.PATH ? "Path" : "URL");
+        Decorated decoratedUrl = decorate(data.url() == null ? "" : data.url(), RuleTarget.URL, settings);
+        if (settings.url == UrlMode.PATH) {
+            // Cut after the rules ran, so only already redacted text can show: rules match the same in both modes.
+            decoratedUrl = decoratedUrl.from(pathStart(decoratedUrl.text()));
+        }
+        url.render(decoratedUrl, List.of(), palette, mono);
         url.setBackground(palette.codeBackground());
 
         renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
@@ -229,6 +237,21 @@ final class ContentPanel extends JPanel {
         pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
     }
 
+    /** Where the path starts in a URL: after the scheme, host and port, at the first "/", "?" or "#". */
+    static int pathStart(String url) {
+        int scheme = url.indexOf("://");
+        if (scheme < 0) {
+            return 0;
+        }
+        for (int i = scheme + 3; i < url.length(); i++) {
+            char c = url.charAt(i);
+            if (c == '/' || c == '?' || c == '#') {
+                return i;
+            }
+        }
+        return url.length();
+    }
+
     /** Applies the highlight and redaction rules meant for {@code target}. */
     private static Decorated decorate(String text, RuleTarget target, Settings settings) {
         return RuleEngine.apply(
@@ -258,6 +281,14 @@ final class ContentPanel extends JPanel {
 
     MessageView urlView() {
         return url;
+    }
+
+    JComponent urlBar() {
+        return urlHeader;
+    }
+
+    JLabel urlLabel() {
+        return urlLabel;
     }
 
     MessagePane requestPane() {

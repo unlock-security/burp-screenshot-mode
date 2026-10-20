@@ -107,7 +107,7 @@ migrates v1 and unversioned v0 payloads; the same codec handles template import/
 `storage/default-template.json` in `src/main/resources`, an ordinary template export read by `storage.DefaultTemplate`:
 edit the default hidden headers and rules there, and update the file whenever `VERSION` changes (`DefaultTemplateTest`
 fails otherwise). Optional settings fields
-(`theme`, `view`) default sensibly when missing. Any schema change must keep loading the templates users already saved
+(`theme`, `view`, `url`) default sensibly when missing. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`).
   

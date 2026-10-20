@@ -23,6 +23,7 @@ public final class Settings {
     public ThemeMode theme = ThemeMode.AUTO;
     /** Raw or Pretty, like the tabs of Burp's message editor. */
     public ViewMode view = ViewMode.RAW;
+    public UrlMode url = UrlMode.FULL;
 
     /** Maximum width of the captured content in pixels, or {@code null} for full width. */
     public Integer maxContentWidth() {
@@ -45,6 +46,7 @@ public final class Settings {
         copy.showResponseInfo = showResponseInfo;
         copy.theme = theme;
         copy.view = view;
+        copy.url = url;
         return copy;
     }
 }

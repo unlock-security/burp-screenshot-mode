@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.util.List;
@@ -95,12 +96,14 @@ class TemplateCodecTest {
         original.templates().getFirst().settings.theme = ThemeMode.LIGHT;
         original.templates().getFirst().settings.view = ViewMode.PRETTY;
         original.templates().getFirst().settings.redactions.getFirst().target = RuleTarget.URL;
+        original.templates().getFirst().settings.url = UrlMode.PATH;
         String encoded = TemplateCodec.encode(original);
         StoredData decoded = TemplateCodec.decode(encoded).data();
         assertEquals(encoded, TemplateCodec.encode(decoded));
         assertEquals(ThemeMode.LIGHT, decoded.templates().getFirst().settings.theme);
         assertEquals(ViewMode.PRETTY, decoded.templates().getFirst().settings.view);
         assertEquals(RuleTarget.URL, decoded.templates().getFirst().settings.redactions.getFirst().target);
+        assertEquals(UrlMode.PATH, decoded.templates().getFirst().settings.url);
         assertFalse(encoded.contains("\"color\": \"#000000\""), "mode-specific fields only for their mode");
     }
 
@@ -133,6 +136,7 @@ class TemplateCodecTest {
         assertFalse(settings.showTimestamp);
         assertTrue(settings.showResponseInfo);
         assertEquals(ThemeMode.DARK, settings.theme);
+        assertEquals(UrlMode.FULL, settings.url, "templates saved before the URL bar option show the full URL");
     }
 
     @Test

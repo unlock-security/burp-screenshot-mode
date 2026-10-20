@@ -36,6 +36,9 @@ No external tools, no manual cropping and blurring.
 - **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
 - **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
 - **Metadata footer**: request timestamp and response size/round-trip time.
+- **URL bar**: the full URL, only the path and query (the label reads *Path*), or no URL bar at all. Path only leaves
+  out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
+  redact those too if it must not show.
 - **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
   suite tab, and import/export them as JSON.
 - **Export** as a 2× PNG file or straight to the clipboard.

@@ -9,6 +9,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
@@ -213,6 +214,12 @@ final class SettingsForm extends JPanel {
             onChange.run();
         });
         addRow(grid, row++, "Theme", theme, "Colors of the screenshot");
+
+        SegmentedControl<UrlMode> url = Widgets.segmented(UrlMode.values(), settings.url, value -> {
+            settings.url = value;
+            onChange.run();
+        });
+        addRow(grid, row++, "URL bar", url, null);
 
         addRow(grid, row, "Footer", footerControl(), "Metadata shown below the messages");
 
