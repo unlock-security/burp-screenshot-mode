@@ -112,7 +112,8 @@ class TemplateCodecTest {
         assertFalse(TemplateCodec.sameSettings(settings, copy), "a rule edit counts");
 
         Settings full = Settings.defaults();
-        Settings fullWithStalePixels = Settings.defaults();
+        // A copy: each Settings.defaults() gets its own rule ids.
+        Settings fullWithStalePixels = full.copy();
         fullWithStalePixels.widthPixels = 1234;
         assertTrue(TemplateCodec.sameSettings(full, fullWithStalePixels), "pixels are not stored in full width");
     }

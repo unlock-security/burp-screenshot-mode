@@ -150,6 +150,82 @@ public final class Settings {
         "X-XSS-Protection"
     );
 
+    /** Replacement for values that are only noise in a report, as opposed to secrets ({@code [REDACTED]}). */
+    private static final String OMITTED = "[OMITTED]";
+
+    /** A JSON Web Token anywhere: base64url header and payload, both JSON objects, so both start with "eyJ". */
+    private static final String JWT = "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*";
+
+    /*
+     * Default redactions. The patterns must work in Caido too, which runs them as JavaScript regular expressions:
+     * no flags for the whole pattern like (?im), but scoped ones like (?i:...), which both support. (?<=\n) anchors
+     * header rules to the start of a line, and (?i:...) matches header names in HTTP/2 messages, which Burp shows in
+     * lowercase. No repeated alternation like (?:[^"\\]|\\.)*, which overflows the stack on long values.
+     */
+    private static List<RedactionRule> defaultRedactions() {
+        return List.of(
+            replace("(?<=\\n)(?i:User-Agent): (?<UserAgent>.+)", RuleTarget.REQUEST, OMITTED, 1),
+            replace("(?<=\\n)(?i:Cookie): (?<Cookies>.+)", RuleTarget.REQUEST, OMITTED, 1),
+            // Proxy-Authorization too; the scheme (Basic, Bearer, Digest) stays visible, a bare token doesn't.
+            replace(
+                "(?<=\\n)(?i:(?:Proxy-)?Authorization): (?:(?<AuthScheme>\\S+) )?(?<AuthParameters>.+)",
+                RuleTarget.REQUEST,
+                RedactionRule.DEFAULT_REPLACEMENT,
+                2
+            ),
+            replace(
+                "(?<=\\n)(?i:X-Api-Key|Api-Key|X-Auth-Token|X-Access-Token|X-Amz-Security-Token): (?<Token>.+)",
+                RuleTarget.REQUEST,
+                RedactionRule.DEFAULT_REPLACEMENT,
+                1
+            ),
+            replace(
+                "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|" +
+                    "X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
+                RuleTarget.REQUEST,
+                RedactionRule.DEFAULT_REPLACEMENT,
+                1
+            ),
+            replace(
+                "\"(?i:password|passwd|pwd|secret|client_secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
+                RuleTarget.REQUEST,
+                RedactionRule.DEFAULT_REPLACEMENT,
+                1
+            ),
+            replace(
+                "(?<=[&\\n])(?i:password|passwd|pwd|client_secret)=(?<Value>[^&\\n]*)",
+                RuleTarget.REQUEST,
+                RedactionRule.DEFAULT_REPLACEMENT,
+                1
+            ),
+            replace(JWT, RuleTarget.REQUEST, RedactionRule.DEFAULT_REPLACEMENT),
+            // The cookie name and attributes (Secure, HttpOnly, SameSite) stay visible: they are often the finding.
+            replace(
+                "(?<=\\n)(?i:Set-Cookie): [^=;\\n]+=(?<Value>[^;\\n]*)",
+                RuleTarget.RESPONSE,
+                RedactionRule.DEFAULT_REPLACEMENT,
+                1
+            ),
+            replace(
+                "\"(?i:access_token|refresh_token|id_token|token|session_?id|api_?key|secret)\"\\s*:\\s*\"" +
+                    "(?<Value>[^\"]*)\"",
+                RuleTarget.RESPONSE,
+                RedactionRule.DEFAULT_REPLACEMENT,
+                1
+            ),
+            replace(JWT, RuleTarget.RESPONSE, RedactionRule.DEFAULT_REPLACEMENT)
+        );
+    }
+
+    /** @param groups the capture groups to replace, or none for the whole match */
+    private static RedactionRule replace(String regex, RuleTarget target, String text, Integer... groups) {
+        RedactionRule rule = RedactionRule.create(regex, target, RedactionMode.REPLACE, MatchMode.REGEX);
+        rule.replacementText = text;
+        rule.useCaptureGroups = groups.length > 0;
+        rule.selectedGroups = new ArrayList<>(List.of(groups));
+        return rule;
+    }
+
     public HiddenHeaders headersToHide = new HiddenHeaders();
     public Disposition disposition = Disposition.HORIZONTAL;
     public WidthMode widthMode = WidthMode.FULL;
@@ -169,6 +245,7 @@ public final class Settings {
         settings.headersToHide.both = new ArrayList<>(DEFAULT_HEADERS_TO_HIDE);
         settings.headersToHide.request = new ArrayList<>(DEFAULT_REQUEST_HEADERS_TO_HIDE);
         settings.headersToHide.response = new ArrayList<>(DEFAULT_RESPONSE_HEADERS_TO_HIDE);
+        settings.redactions = new ArrayList<>(defaultRedactions());
         return settings;
     }
 
