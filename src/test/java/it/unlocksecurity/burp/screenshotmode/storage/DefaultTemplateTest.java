@@ -29,7 +29,7 @@ class DefaultTemplateTest {
         Settings settings = DefaultTemplate.settings();
         settings.redactions.clear();
         settings.headersToHide.both.clear();
-        assertEquals(11, DefaultTemplate.settings().redactions.size());
+        assertEquals(13, DefaultTemplate.settings().redactions.size());
         assertEquals(10, DefaultTemplate.settings().headersToHide.both.size());
     }
 
@@ -120,6 +120,18 @@ class DefaultTemplateTest {
         assertEquals(
             "GET / HTTP/1.1\nauthorization: [REDACTED]",
             redact("GET / HTTP/1.1\nauthorization: s3cr3t", RuleTarget.REQUEST)
+        );
+    }
+
+    @Test
+    void redactsSecretsInTheUrl() {
+        assertEquals(
+            "https://example.com:443/reset?access_token=[REDACTED]&id=1",
+            redact("https://example.com:443/reset?access_token=abc&id=1", RuleTarget.URL)
+        );
+        assertEquals(
+            "https://example.com:443/s/[REDACTED]/view",
+            redact("https://example.com:443/s/" + JWT + "/view", RuleTarget.URL)
         );
     }
 

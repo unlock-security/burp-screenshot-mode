@@ -19,13 +19,15 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
@@ -39,7 +41,8 @@ final class ContentPanel extends JPanel {
     private final JPanel urlHeader = new JPanel(new BorderLayout(10, 0));
     private final JLabel urlLabel = new JLabel("URL");
     private final RoundedPanel urlBox = new RoundedPanel(new BorderLayout());
-    private final JTextArea url = new JTextArea();
+    /** No extra line spacing, like the single-line bar it replaces. */
+    private final MessageView url = new MessageView(0);
     private final MessagePane requestPane = new MessagePane("Request", RuleTarget.REQUEST);
     private final MessagePane responsePane = new MessagePane("Response", RuleTarget.RESPONSE);
     private final PlainSplitPane split = new PlainSplitPane(requestPane, responsePane);
@@ -51,16 +54,28 @@ final class ContentPanel extends JPanel {
     private boolean applyingRatio;
     private DoubleConsumer splitRatioListener = ratio -> {};
     private Consumer<String> errorListener = message -> {};
+    private MessagePane.SelectionListener selectionListener = (action, text, target) -> {};
 
     ContentPanel() {
         super(new BorderLayout());
 
-        url.setEditable(false);
-        url.setLineWrap(true);
-        url.setWrapStyleWord(false);
-        url.setOpaque(false);
-        url.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        // The view is opaque (blur paints it offscreen), so it sits inside the rounded box rather than covering it.
+        url.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        urlBox.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
         urlBox.add(url, BorderLayout.CENTER);
+        url.addMouseListener(
+            new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    MessagePane.showSelectionMenu(e, url, RuleTarget.URL, selectionListener);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    MessagePane.showSelectionMenu(e, url, RuleTarget.URL, selectionListener);
+                }
+            }
+        );
         JPanel labelHolder = new JPanel(new BorderLayout());
         labelHolder.setOpaque(false);
         labelHolder.add(urlLabel, BorderLayout.NORTH);
@@ -108,6 +123,7 @@ final class ContentPanel extends JPanel {
     }
 
     void setSelectionListener(MessagePane.SelectionListener listener) {
+        selectionListener = listener;
         requestPane.setSelectionListener(listener);
         responsePane.setSelectionListener(listener);
     }
@@ -153,9 +169,9 @@ final class ContentPanel extends JPanel {
         urlLabel.setFont(ui.deriveFont(Font.BOLD, ui.getSize2D() - 2));
         urlLabel.setForeground(palette.muted());
         urlBox.setBackground(palette.codeBackground());
-        url.setFont(mono);
-        url.setForeground(palette.text());
-        url.setText(data.url());
+        String urlText = data.url() == null ? "" : data.url();
+        url.render(decorate(urlText, RuleTarget.URL, settings), List.of(), palette, mono);
+        url.setBackground(palette.codeBackground());
 
         renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
         renderPane(responsePane, data.responseText(), RuleTarget.RESPONSE, settings, palette, mono, ui);
@@ -209,8 +225,14 @@ final class ContentPanel extends JPanel {
             }
         }
         String filtered = HeaderFilter.filter(text, settings.headersToHide.rulesFor(target));
-        Decorated decorated = RuleEngine.apply(
-            filtered,
+        Decorated decorated = decorate(filtered, target, settings);
+        pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
+    }
+
+    /** Applies the highlight and redaction rules meant for {@code target}. */
+    private static Decorated decorate(String text, RuleTarget target, Settings settings) {
+        return RuleEngine.apply(
+            text,
             settings.highlights
                 .stream()
                 .filter(rule -> rule.target == target)
@@ -220,16 +242,22 @@ final class ContentPanel extends JPanel {
                 .filter(rule -> rule.target == target)
                 .toList()
         );
-        pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
     }
 
     void setCaptureMode(boolean capturing) {
+        if (capturing) {
+            url.select(0, 0);
+        }
         requestPane.setCaptureMode(capturing);
         responsePane.setCaptureMode(capturing);
     }
 
     boolean isSideBySide() {
         return split.getOrientation() == JSplitPane.HORIZONTAL_SPLIT;
+    }
+
+    MessageView urlView() {
+        return url;
     }
 
     MessagePane requestPane() {

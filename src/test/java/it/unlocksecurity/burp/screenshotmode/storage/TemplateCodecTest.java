@@ -94,11 +94,13 @@ class TemplateCodecTest {
         StoredData original = TemplateCodec.decode(v2(V2_SETTINGS)).data();
         original.templates().getFirst().settings.theme = ThemeMode.LIGHT;
         original.templates().getFirst().settings.view = ViewMode.PRETTY;
+        original.templates().getFirst().settings.redactions.getFirst().target = RuleTarget.URL;
         String encoded = TemplateCodec.encode(original);
         StoredData decoded = TemplateCodec.decode(encoded).data();
         assertEquals(encoded, TemplateCodec.encode(decoded));
         assertEquals(ThemeMode.LIGHT, decoded.templates().getFirst().settings.theme);
         assertEquals(ViewMode.PRETTY, decoded.templates().getFirst().settings.view);
+        assertEquals(RuleTarget.URL, decoded.templates().getFirst().settings.redactions.getFirst().target);
         assertFalse(encoded.contains("\"color\": \"#000000\""), "mode-specific fields only for their mode");
     }
 

@@ -28,6 +28,9 @@ public final class HiddenHeaders {
 
     /** Rules applying to the given message: the shared ones followed by the target-specific ones. */
     public List<String> rulesFor(RuleTarget target) {
+        if (target == RuleTarget.URL) {
+            return List.of();
+        }
         List<String> rules = new ArrayList<>(both);
         rules.addAll(target == RuleTarget.REQUEST ? request : response);
         return rules;

@@ -150,6 +150,14 @@ final class MessagePane extends JPanel {
     }
 
     private void maybeShowMenu(MouseEvent e) {
+        showSelectionMenu(e, view, target, selectionListener);
+    }
+
+    /**
+     * On a popup trigger over selected text, offers the actions that create a rule for it. The URL bar has no
+     * headers, so it only offers Highlight and Redact.
+     */
+    static void showSelectionMenu(MouseEvent e, MessageView view, RuleTarget target, SelectionListener listener) {
         if (!e.isPopupTrigger()) {
             return;
         }
@@ -159,8 +167,11 @@ final class MessagePane extends JPanel {
         }
         JPopupMenu menu = new JPopupMenu();
         for (SelectionAction action : SelectionAction.values()) {
+            if (action == SelectionAction.HIDE_HEADER && target == RuleTarget.URL) {
+                continue;
+            }
             JMenuItem item = new JMenuItem(action.label);
-            item.addActionListener(event -> selectionListener.onSelectionAction(action, selected, target));
+            item.addActionListener(event -> listener.onSelectionAction(action, selected, target));
             menu.add(item);
         }
         menu.show(view, e.getX(), e.getY());

@@ -42,12 +42,19 @@ final class MessageView extends JTextPane {
     /** CSS {@code blur(4px)}, approximated by three box blur passes. */
     private static final double BLUR_RADIUS = 4;
 
+    private final float lineSpacing;
     private String text = "";
     private List<Decorated.Span> blurSpans = List.of();
     private List<Rectangle2D> blurRects;
     private int blurRectsWidth = -1;
 
     MessageView() {
+        this(LINE_SPACING);
+    }
+
+    /** @param lineSpacing extra space between rows, as a fraction of the font height */
+    MessageView(float lineSpacing) {
+        this.lineSpacing = lineSpacing;
         setEditorKit(new WrapAnywhereEditorKit());
         setEditable(false);
         setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
@@ -79,7 +86,7 @@ final class MessageView extends JTextPane {
         }
 
         SimpleAttributeSet paragraph = new SimpleAttributeSet();
-        StyleConstants.setLineSpacing(paragraph, LINE_SPACING);
+        StyleConstants.setLineSpacing(paragraph, lineSpacing);
         document.setParagraphAttributes(0, text.length(), paragraph, false);
 
         for (HttpSyntax.Token token : tokens) {

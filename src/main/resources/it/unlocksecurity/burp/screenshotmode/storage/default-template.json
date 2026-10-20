@@ -232,6 +232,28 @@
             "matchMode": "regex",
             "mode": "replace",
             "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-12",
+            "regex": "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
+            "target": "url",
+            "useCaptureGroups": true,
+            "selectedGroups": [
+              1
+            ],
+            "matchMode": "regex",
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-13",
+            "regex": "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*",
+            "target": "url",
+            "useCaptureGroups": false,
+            "selectedGroups": [],
+            "matchMode": "regex",
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
           }
         ],
         "showTimestamp": false,

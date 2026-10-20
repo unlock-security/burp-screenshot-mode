@@ -76,6 +76,8 @@ and indentation) →
 `HeaderFilter.filter` (hide headers; `!`-prefixed rules force-show) →
 `RuleEngine.apply` (highlights + redactions → `Decorated` text + spans) →
 `HttpSyntax.tokenize` → `MessagePane`/`MessageView` paint it with a `Palette`.
+The URL bar is a `MessageView` too: `RuleEngine.apply` with the rules whose target is `URL`, no header filter and no
+syntax colors.
 `render.pretty` holds one formatter per body format behind `PrettyPrinter`, its only public class, writing through
 `IndentWriter` (lazy line breaks and indentation, output capped at `MessageText.MAX_CHARS`).
 `RuleEngine` applies `replace` redactions to the text itself, so all other spans are remapped from source to display
