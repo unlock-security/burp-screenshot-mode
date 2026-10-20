@@ -43,6 +43,22 @@ class TemplateStoreTest {
         assertEquals(1, store.templates().size());
         assertEquals(store.templates().getFirst().id, store.defaultTemplateId());
         assertNotNull(backing.get(TemplateStore.STORAGE_KEY));
+        assertTrue(store.unreadableTemplates().isEmpty(), "a first start is not a failure");
+        assertFalse(backing.containsKey(TemplateStore.UNREADABLE_KEY));
+    }
+
+    @Test
+    void keepsTemplatesItCannotReadInsteadOfOverwritingThem() {
+        for (String stored : new String[] { "garbage", "{}", "{\"version\": 99, \"templates\": []}" }) {
+            backing.clear();
+            backing.put(TemplateStore.STORAGE_KEY, stored);
+            TemplateStore reloaded = new TemplateStore(preferences, message -> {});
+            reloaded.initialize();
+            assertEquals(stored, backing.get(TemplateStore.UNREADABLE_KEY), "the original data is kept");
+            assertEquals(stored, reloaded.unreadableTemplates().orElseThrow(), "and offered for export");
+            assertEquals(1, reloaded.templates().size(), "work goes on with the default template");
+            assertEquals("Default", reloaded.templates().getFirst().name);
+        }
     }
 
     @Test

@@ -45,15 +45,6 @@ public final class TemplateCodec {
         return new StoredData(new ArrayList<>(List.of(template)), template.id);
     }
 
-    /** Port of {@code migrateStorage}: never fails, falling back to a fresh default template. */
-    public static Decoded decodeOrDefault(String json) {
-        try {
-            return decode(json);
-        } catch (IllegalArgumentException e) {
-            return new Decoded(createDefault(), true);
-        }
-    }
-
     /**
      * Decodes any supported version.
      *
@@ -71,6 +62,20 @@ public final class TemplateCodec {
             throw new IllegalArgumentException("Invalid JSON: " + e.getMessage(), e);
         }
         JsonObject object = asObject(root, "root");
+        JsonElement version = object.get("version");
+        if (
+            version != null &&
+            version.isJsonPrimitive() &&
+            version.getAsJsonPrimitive().isNumber() &&
+            version.getAsDouble() > VERSION
+        ) {
+            throw new IllegalArgumentException(
+                "Saved by a newer version of Screenshot Mode (storage version " +
+                    version.getAsString() +
+                    "); this version reads up to " +
+                    VERSION
+            );
+        }
 
         List<String> errors = new ArrayList<>();
         try {

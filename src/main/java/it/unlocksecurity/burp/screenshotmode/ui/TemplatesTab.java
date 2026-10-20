@@ -32,6 +32,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
@@ -158,6 +159,12 @@ public final class TemplatesTab extends JPanel {
         JPanel top = new JPanel(new BorderLayout(0, 10));
         top.add(header, BorderLayout.NORTH);
         top.add(toolbar, BorderLayout.CENTER);
+        store.unreadableTemplates().ifPresent(json -> {
+            JPanel intro = new JPanel(new BorderLayout(0, 10));
+            intro.add(unreadableNotice(json), BorderLayout.NORTH);
+            intro.add(header, BorderLayout.CENTER);
+            top.add(intro, BorderLayout.NORTH);
+        });
 
         JPanel panel = new JPanel(new BorderLayout(0, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 12, 16));
@@ -394,28 +401,64 @@ public final class TemplatesTab extends JPanel {
     }
 
     private void exportTemplates() {
+        File file = writeJson("Export Templates", "screenshot-mode-templates.json", store.exportJson());
+        if (file != null) {
+            showStatus("Exported " + store.templates().size() + " templates to " + file.getName(), false);
+        }
+    }
+
+    /**
+     * Shown when the saved templates could not be read at startup: the default template replaced them, and the
+     * original data can be saved to a file to recover it.
+     */
+    private JComponent unreadableNotice(String json) {
+        JTextArea text = Widgets.wrappingHint(
+            "Your saved templates could not be read, so Screenshot Mode started from the default template. " +
+                "A copy of the original data was kept.",
+            900
+        );
+        text.setForeground(Widgets.errorColor());
+        JButton export = Widgets.button("Export copy…");
+        export.setToolTipText("Save the templates that could not be read to a file");
+        export.addActionListener(event -> {
+            File file = writeJson("Export Copy", "screenshot-mode-templates-unreadable.json", json);
+            if (file != null) {
+                showStatus("Saved the copy to " + file.getName(), false);
+            }
+        });
+        JPanel notice = new JPanel(new BorderLayout(10, 0));
+        notice.add(text, BorderLayout.CENTER);
+        JPanel holder = new JPanel(new BorderLayout());
+        holder.add(export, BorderLayout.NORTH);
+        notice.add(holder, BorderLayout.EAST);
+        return notice;
+    }
+
+    /** Asks where to save {@code json} and writes it; {@code null} if cancelled or failed (after saying so). */
+    private File writeJson(String title, String defaultName, String json) {
         JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Export Templates");
+        chooser.setDialogTitle(title);
         chooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
-        chooser.setSelectedFile(new File("screenshot-mode-templates.json"));
+        chooser.setSelectedFile(new File(defaultName));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
-            return;
+            return null;
         }
         File file = chooser.getSelectedFile();
         if (!file.getName().toLowerCase().endsWith(".json")) {
             file = new File(file.getParentFile(), file.getName() + ".json");
         }
         try {
-            Files.writeString(file.toPath(), store.exportJson(), StandardCharsets.UTF_8);
-            showStatus("Exported " + store.templates().size() + " templates to " + file.getName(), false);
+            Files.writeString(file.toPath(), json, StandardCharsets.UTF_8);
+            return file;
         } catch (IOException e) {
-            host.logError().accept("Template export failed: " + e);
+            host.logError().accept(title + " failed: " + e);
             JOptionPane.showMessageDialog(
                 this,
-                "Could not export templates:\n" + e.getMessage(),
-                "Export Templates",
+                "Could not save the file:\n" + e.getMessage(),
+                title,
                 JOptionPane.ERROR_MESSAGE
             );
+            return null;
         }
     }
 

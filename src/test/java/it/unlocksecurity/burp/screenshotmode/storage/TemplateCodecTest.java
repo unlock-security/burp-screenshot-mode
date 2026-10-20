@@ -223,16 +223,11 @@ class TemplateCodecTest {
     }
 
     @Test
-    void fallsBackToDefaultsForUnknownInput() {
-        for (String input : new String[] { null, "", "{}", "{\"foo\": 1}", "garbage" }) {
-            TemplateCodec.Decoded decoded = TemplateCodec.decodeOrDefault(input);
-            assertTrue(decoded.migrated());
-            assertEquals(1, decoded.data().templates().size());
-            Template template = decoded.data().templates().getFirst();
-            assertEquals("Default", template.name);
-            assertEquals(template.id, decoded.data().defaultTemplateId());
-            assertTrue(template.settings.headersToHide.request.contains("Sec-Fetch-Mode"));
-        }
+    void rejectsTemplatesFromANewerVersionSayingSo() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+            TemplateCodec.decode("{\"version\": 3, \"templates\": [], \"defaultTemplateId\": \"x\"}")
+        );
+        assertTrue(error.getMessage().startsWith("Saved by a newer version of Screenshot Mode"), error.getMessage());
     }
 
     @Test

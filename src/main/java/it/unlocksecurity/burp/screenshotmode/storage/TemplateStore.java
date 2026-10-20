@@ -15,6 +15,8 @@ import java.util.function.Consumer;
 public final class TemplateStore {
 
     static final String STORAGE_KEY = "screenshot-mode.templates";
+    /** Where saved templates that could not be read are kept, so the defaults never overwrite the only copy. */
+    static final String UNREADABLE_KEY = "screenshot-mode.templates.unreadable";
 
     private final PreferenceStore preferences;
     private final Consumer<String> log;
@@ -22,6 +24,7 @@ public final class TemplateStore {
 
     private List<Template> templates = new ArrayList<>();
     private String defaultTemplateId = "";
+    private String unreadable;
 
     public TemplateStore(PreferenceStore preferences, Consumer<String> log) {
         this.preferences = preferences;
@@ -29,13 +32,37 @@ public final class TemplateStore {
     }
 
     public void initialize() {
-        TemplateCodec.Decoded decoded = TemplateCodec.decodeOrDefault(preferences.get(STORAGE_KEY));
+        String stored = preferences.get(STORAGE_KEY);
+        TemplateCodec.Decoded decoded;
+        if (stored == null || stored.isBlank()) {
+            decoded = new TemplateCodec.Decoded(TemplateCodec.createDefault(), true);
+        } else {
+            try {
+                decoded = TemplateCodec.decode(stored);
+            } catch (IllegalArgumentException e) {
+                preferences.set(UNREADABLE_KEY, stored);
+                unreadable = stored;
+                log.accept(
+                    "Could not read the saved templates (" +
+                        e.getMessage() +
+                        "). Started from the default template; the original data is kept in the preference " +
+                        UNREADABLE_KEY +
+                        "."
+                );
+                decoded = new TemplateCodec.Decoded(TemplateCodec.createDefault(), true);
+            }
+        }
         templates = new ArrayList<>(decoded.data().templates());
         defaultTemplateId = decoded.data().defaultTemplateId();
         if (decoded.migrated()) {
             log.accept("Initialized template storage (version " + TemplateCodec.VERSION + ")");
             persist();
         }
+    }
+
+    /** The saved templates that could not be read at startup, as stored, so they can be exported; empty if none. */
+    public Optional<String> unreadableTemplates() {
+        return Optional.ofNullable(unreadable);
     }
 
     public List<Template> templates() {
