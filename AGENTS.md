@@ -119,6 +119,10 @@ or exported: bump `VERSION` with a migration when needed, and keep the migration
 `TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced
 by the named rules of the current default (`storage.LegacyDefaults`); rules the user edited are kept as they are.
 
+The Headers tab only shows or hides headers: every redaction and highlight is a rule of the Rules tab. A header row
+says which rules redact or highlight it: the header rules naming it, and the rules that changed its line in the message
+on screen (`ContentPanel.headerHits`). Its actions open that rule, or add a header rule, through `HeadersTab.Links`.
+
 **Header catalog:** `storage/header-catalog.json` (read by `storage.HeaderCatalogFile` into a `model.HeaderCatalog`)
 lists the known headers in groups, with the messages each is used in and where it is defined. It is reference data,
 read at every start and never stored in templates: templates only store `HeaderVisibility`, i.e. hidden groups by id

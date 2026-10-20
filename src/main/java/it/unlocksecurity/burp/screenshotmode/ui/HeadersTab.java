@@ -2,7 +2,12 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Direction;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
+import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
+import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
@@ -34,8 +39,10 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -100,6 +107,23 @@ final class HeadersTab extends JPanel {
         MIXED,
     }
 
+    /** What the tab asks of the Rules tab, where every rule is edited. */
+    interface Links {
+        Links NONE = new Links() {
+            @Override
+            public void create(Rule rule, String notice) {}
+
+            @Override
+            public void open(Rule rule, String notice) {}
+        };
+
+        /** Adds a new rule at the top of its list and opens it, saying so with {@code notice}. */
+        void create(Rule rule, String notice);
+
+        /** Opens an existing rule, saying why with {@code notice}. */
+        void open(Rule rule, String notice);
+    }
+
     /** The id of the group of headers the catalog doesn't know. */
     private static final String CUSTOM = "";
 
@@ -132,13 +156,22 @@ final class HeadersTab extends JPanel {
     private final JPanel details = Widgets.card(new BorderLayout());
     private final JLabel summary = Widgets.hint("");
     private final Set<String> expanded = new HashSet<>(Set.of(CUSTOM));
+    private final Links links;
+    /** The rules that changed each header line of the message on screen, by message and header name. */
+    private Map<RuleTarget, Map<String, Set<Rule>>> hits = Map.of();
+    private boolean openedGroupsWithRules;
     /** In the screenshot window only. */
     private final SegmentedControl<View> views;
     private View view;
 
     /** @param message the headers of the message on screen, or {@code null} in the template editor */
     HeadersTab(Settings settings, HeaderCatalog catalog, InMessage message, Runnable onChange) {
+        this(settings, catalog, message, onChange, Links.NONE);
+    }
+
+    HeadersTab(Settings settings, HeaderCatalog catalog, InMessage message, Runnable onChange, Links links) {
         super(new BorderLayout(0, 10));
+        this.links = links;
         this.settings = settings;
         this.catalog = catalog;
         this.message = message;
@@ -257,6 +290,96 @@ final class HeadersTab extends JPanel {
         return details;
     }
 
+    /**
+     * Takes what the rules changed in the message on screen, after each render. The first time, the groups of the
+     * headers a rule changed open, as those are the ones to check.
+     */
+    void showHits(Map<RuleTarget, Map<String, Set<Rule>>> hits) {
+        this.hits = hits;
+        if (!openedGroupsWithRules && message != null) {
+            openedGroupsWithRules = true;
+            for (List<String> names : List.of(message.request(), message.response())) {
+                for (String name : names) {
+                    if (!rulesFor(name, true).isEmpty() || !rulesFor(name, false).isEmpty()) {
+                        expanded.add(catalog.groupOf(name).map(HeaderCatalog.Group::id).orElse(CUSTOM));
+                    }
+                }
+            }
+        }
+        refresh();
+    }
+
+    /**
+     * The rules that redact (or highlight) a header: the header rules naming it, and the rules that changed its line
+     * in the message on screen. Rules that are off don't count.
+     */
+    List<Rule> rulesFor(String name, boolean redactions) {
+        List<? extends Rule> rules = redactions ? settings.redactions : settings.highlights;
+        List<Rule> found = new ArrayList<>();
+        for (Rule rule : rules) {
+            boolean names = rule.type == RuleType.HEADER && rule.headers.stream().anyMatch(name::equalsIgnoreCase);
+            boolean changed = hits
+                .values()
+                .stream()
+                .anyMatch(side -> side.getOrDefault(name, Set.of()).contains(rule));
+            if (rule.enabled && (names || changed)) {
+                found.add(rule);
+            }
+        }
+        return found;
+    }
+
+    /**
+     * The rule that already redacts (or highlights) these headers, if any: for one header, any rule changing it; for
+     * a group, a header rule naming all of them. Acting on a header opens that rule instead of adding a duplicate.
+     */
+    Rule existingRule(List<String> names, boolean redactions) {
+        if (names.size() == 1) {
+            List<Rule> rules = rulesFor(names.getFirst(), redactions);
+            return rules.isEmpty() ? null : rules.getFirst();
+        }
+        List<? extends Rule> rules = redactions ? settings.redactions : settings.highlights;
+        for (Rule rule : rules) {
+            if (
+                rule.enabled &&
+                rule.type == RuleType.HEADER &&
+                names.stream().allMatch(name -> rule.headers.stream().anyMatch(name::equalsIgnoreCase))
+            ) {
+                return rule;
+            }
+        }
+        return null;
+    }
+
+    /** Opens the rule that redacts (or highlights) these headers, or adds a header rule for them. */
+    void act(List<String> names, String label, boolean redaction) {
+        Rule existing = existingRule(names, redaction);
+        if (existing != null) {
+            links.open(existing, "This rule " + (redaction ? "redacts " : "highlights ") + label + ".");
+        } else {
+            links.create(
+                redaction ? RedactionRule.forHeaders(names, RedactionMode.REPLACE) : HighlightRule.forHeaders(names),
+                (redaction ? "Redaction" : "Highlight") + " created for " + label + "."
+            );
+        }
+    }
+
+    /** The headers an action on a row applies to: one header, or all the headers of a group. */
+    private List<String> headersOf(Object row) {
+        if (row instanceof HeaderRow header) {
+            return List.of(header.name());
+        }
+        GroupRow group = (GroupRow) row;
+        if (group.isCustom()) {
+            return group.headers.stream().map(HeaderRow::name).toList();
+        }
+        return catalog.group(group.id).orElseThrow().headers().stream().map(HeaderCatalog.Header::name).toList();
+    }
+
+    private static String labelOf(Object row) {
+        return row instanceof HeaderRow header ? header.name() : ((GroupRow) row).label;
+    }
+
     State state(HeaderRow row) {
         Visibility visibility = settings.headers.of(row.name(), catalog);
         boolean request = row.sides() != Direction.RESPONSE;
@@ -321,6 +444,24 @@ final class HeadersTab extends JPanel {
         table.addMouseListener(
             new MouseAdapter() {
                 @Override
+                public void mousePressed(MouseEvent e) {
+                    popup(e);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    popup(e);
+                }
+
+                private void popup(MouseEvent e) {
+                    int row = table.rowAtPoint(e.getPoint());
+                    if (e.isPopupTrigger() && row >= 0) {
+                        selectRow(row);
+                        showMenu(model.rows.get(row), table, e.getX(), e.getY());
+                    }
+                }
+
+                @Override
                 public void mouseClicked(MouseEvent e) {
                     int row = table.rowAtPoint(e.getPoint());
                     if (row < 0 || e.getButton() != MouseEvent.BUTTON1) {
@@ -340,6 +481,13 @@ final class HeadersTab extends JPanel {
         );
 
         bind("SPACE", "toggleShow", () -> selectedRow().ifPresent(this::toggle));
+        Runnable menuKey = () ->
+            selectedRow().ifPresent(row -> {
+                Rectangle cell = table.getCellRect(table.getSelectedRow(), 0, false);
+                showMenu(row, table, cell.x + indent(), cell.y + cell.height);
+            });
+        bind("CONTEXT_MENU", "showMenu", menuKey);
+        bind("shift F10", "showMenuShiftF10", menuKey);
         bind("LEFT", "collapse", () ->
             selectedRow().ifPresent(row -> {
                 if (row instanceof GroupRow group) {
@@ -501,10 +649,13 @@ final class HeadersTab extends JPanel {
         if (row instanceof HeaderRow header) {
             content.add(Widgets.title(header.name()), BorderLayout.NORTH);
             content.add(Widgets.wrappingHint(describe(header), 400), BorderLayout.CENTER);
+            Widgets.Stack lower = new Widgets.Stack(4, true);
             JComponent actions = headerActions(header);
             if (actions != null) {
-                content.add(actions, BorderLayout.SOUTH);
+                lower.addItem(actions);
             }
+            lower.addItem(ruleActions(header));
+            content.add(lower, BorderLayout.SOUTH);
         } else if (row instanceof GroupRow group) {
             content.add(Widgets.title(group.label), BorderLayout.NORTH);
             content.add(
@@ -516,6 +667,7 @@ final class HeadersTab extends JPanel {
                 ),
                 BorderLayout.CENTER
             );
+            content.add(ruleActions(group), BorderLayout.SOUTH);
         } else {
             content.add(
                 Widgets.wrappingHint("Uncheck a header, or a whole group, to hide it in the screenshot.", 400),
@@ -575,6 +727,81 @@ final class HeadersTab extends JPanel {
             actions.add(remove);
         }
         return actions.isEmpty() ? null : Widgets.row(actions.toArray(Component[]::new));
+    }
+
+    /**
+     * For each kind of rule, the rules that already redact or highlight the row, each with "Edit ›" to open it, or
+     * else a button adding one. Rules are edited in the Rules tab only.
+     */
+    private JComponent ruleActions(Object row) {
+        Widgets.Stack stack = new Widgets.Stack(2, true);
+        List<Component> buttons = new ArrayList<>();
+        for (boolean redaction : List.of(true, false)) {
+            List<Rule> rules =
+                row instanceof HeaderRow header
+                    ? rulesFor(header.name(), redaction)
+                    : Optional.ofNullable(existingRule(headersOf(row), redaction))
+                          .stream()
+                          .toList();
+            for (Rule rule : rules) {
+                JLabel by = new JLabel((redaction ? "Redacted by “" : "Highlighted by “") + RuleList.title(rule) + "”");
+                by.setToolTipText(by.getText());
+                JButton edit = Widgets.button("Edit ›");
+                edit.putClientProperty("JButton.buttonType", "borderless");
+                edit.getAccessibleContext().setAccessibleName("Edit the rule " + RuleList.title(rule));
+                edit.addActionListener(event ->
+                    links.open(rule, "This rule " + (redaction ? "redacts " : "highlights ") + labelOf(row) + ".")
+                );
+                JPanel line = new JPanel(new BorderLayout(8, 0));
+                line.setOpaque(false);
+                line.add(by, BorderLayout.CENTER);
+                line.add(edit, BorderLayout.EAST);
+                stack.addItem(line);
+            }
+            if (rules.isEmpty()) {
+                String text = redaction ? (row instanceof GroupRow ? "Redact values…" : "Redact value…") : "Highlight…";
+                JButton add = Widgets.button(text);
+                add.setToolTipText(
+                    "Add a header rule that " +
+                        (redaction ? "redacts the value of " : "highlights ") +
+                        (row instanceof GroupRow ? "every header in the group" : "this header")
+                );
+                add.addActionListener(event -> act(headersOf(row), labelOf(row), redaction));
+                buttons.add(add);
+            }
+        }
+        if (!buttons.isEmpty()) {
+            stack.addItem(Widgets.row(buttons.toArray(Component[]::new)));
+        }
+        return stack;
+    }
+
+    /** The row's actions, on right-click or with the context menu key: show or hide, and its rules. */
+    private void showMenu(Object row, Component invoker, int x, int y) {
+        JPopupMenu menu = new JPopupMenu();
+        boolean shown =
+            row instanceof HeaderRow header ? state(header) == State.SHOWN : state((GroupRow) row) == State.SHOWN;
+        JMenuItem visibility = new JMenuItem(shown ? "Hide" : "Show");
+        visibility.addActionListener(event -> toggle(row));
+        menu.add(visibility);
+        menu.addSeparator();
+        for (boolean redaction : List.of(true, false)) {
+            Rule existing = existingRule(headersOf(row), redaction);
+            JMenuItem item = new JMenuItem(
+                existing != null
+                    ? redaction
+                        ? "Edit redaction rule"
+                        : "Edit highlight rule"
+                    : redaction
+                      ? row instanceof GroupRow
+                          ? "Redact values…"
+                          : "Redact value…"
+                      : "Highlight…"
+            );
+            item.addActionListener(event -> act(headersOf(row), labelOf(row), redaction));
+            menu.add(item);
+        }
+        menu.show(invoker, x, y);
     }
 
     /** Asks for a header name and hides it, then shows its row. */
@@ -707,13 +934,27 @@ final class HeadersTab extends JPanel {
             return this;
         }
 
+        /** Where it is used, then in words what hides or changes it: "request · redacted". */
         private String where(HeaderRow header, State state) {
-            String sides = header.entry() == null && view == View.ALL ? "" : header.sides().id();
-            if (state != State.MIXED) {
-                return sides;
+            List<String> parts = new ArrayList<>();
+            if (header.entry() != null || view == View.MESSAGE) {
+                parts.add(header.sides().id());
             }
-            Direction hiddenIn = settings.headers.of(header.name(), catalog).hiddenIn();
-            return sides + " · hidden in " + (hiddenIn == Direction.REQUEST ? "requests" : "responses");
+            if (state == State.MIXED) {
+                Direction hiddenIn = settings.headers.of(header.name(), catalog).hiddenIn();
+                parts.add("hidden in " + (hiddenIn == Direction.REQUEST ? "requests" : "responses"));
+            }
+            List<String> effects = new ArrayList<>();
+            if (!rulesFor(header.name(), true).isEmpty()) {
+                effects.add("redacted");
+            }
+            if (!rulesFor(header.name(), false).isEmpty()) {
+                effects.add("highlighted");
+            }
+            if (!effects.isEmpty()) {
+                parts.add(String.join(", ", effects));
+            }
+            return String.join(" · ", parts);
         }
     }
 

@@ -39,22 +39,38 @@ public final class HeaderFilter {
         return out.toString();
     }
 
+    /** A header line of a message: its name, and where the line starts and ends. */
+    public record Line(String name, int from, int to) {}
+
+    /** The header lines of a message, in order. */
+    public static List<Line> lines(String text) {
+        List<Line> lines = new ArrayList<>();
+        int start = text.indexOf('\n') + 1; // after the start line
+        while (start > 0 && start < text.length()) {
+            int end = text.indexOf('\n', start);
+            if (end < 0) {
+                end = text.length();
+            }
+            if (end == start) {
+                break; // the end of the headers
+            }
+            String name = name(text.substring(start, end));
+            if (name != null) {
+                lines.add(new Line(name, start, end));
+            }
+            start = end + 1;
+        }
+        return lines;
+    }
+
     /** The header names of a message, in order, each once (ignoring case) as first written. */
     public static List<String> names(String text) {
         List<String> names = new ArrayList<>();
         TreeSet<String> seen = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
-        int start = text.indexOf('\n') + 1; // after the start line
-        while (start > 0 && start < text.length()) {
-            int end = text.indexOf('\n', start);
-            String line = text.substring(start, end < 0 ? text.length() : end);
-            if (line.isEmpty()) {
-                break;
+        for (Line line : lines(text)) {
+            if (seen.add(line.name())) {
+                names.add(line.name());
             }
-            String name = name(line);
-            if (name != null && seen.add(name)) {
-                names.add(name);
-            }
-            start = end + 1;
         }
         return names;
     }

@@ -26,7 +26,9 @@ No external tools, no manual cropping and blurring.
   hints, fetch metadata, CDNs, …): uncheck a header, or a whole group, to hide it. The screenshot window lists the
   headers of the message on screen, and the tab title counts how many it hides. Headers that aren't in the catalog are
   listed first, as custom headers; one used in both messages can be hidden in only one of them. By default, security
-  headers and anything that can take part in request smuggling stay visible, as they can be the finding.
+  headers and anything that can take part in request smuggling stay visible, as they can be the finding. Each header
+  also says in words whether a rule redacts or highlights it, and links to that rule, or adds one with **Redact
+  value…** or **Highlight…**.
 - **Highlights**: painted as a translucent marker or as a rectangle, in any color.
 - **Redactions**: blur, opaque box or replacement text (`[REDACTED]`).
 - **Two kinds of rules**, chosen when you add one with **+**: a **header** rule names one or more headers and
@@ -42,7 +44,8 @@ No external tools, no manual cropping and blurring.
 - **Pretty view** for JSON, HTML, XML (SVG, RSS, SOAP, …), CSS and JavaScript bodies, like Burp's Pretty tab.
   Only line breaks and indentation change, so your rules still match and broken or malicious markup shows exactly as
   sent.
-- **Right-click selected text** in the preview to highlight it, redact it or hide its header in one click.
+- **Right-click** in the preview to highlight or redact the selected text, or to hide, redact or highlight the header
+  under the pointer, in one click.
 - **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
 - **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
 - **Metadata footer**: request timestamp and response size/round-trip time.

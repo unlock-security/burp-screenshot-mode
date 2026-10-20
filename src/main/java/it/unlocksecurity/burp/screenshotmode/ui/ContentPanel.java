@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
@@ -25,9 +26,13 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 import javax.swing.BorderFactory;
@@ -64,6 +69,8 @@ final class ContentPanel extends JPanel {
     private MessagePane.SelectionListener selectionListener = (action, text, target) -> {};
     /** What each rule did in the last render, keyed by the rule object itself. */
     private final Map<Object, RuleStatus> ruleStatuses = new IdentityHashMap<>();
+    /** The rules that changed each header line, by message and header name (ignoring case). */
+    private final Map<RuleTarget, Map<String, Set<Rule>>> headerHits = new EnumMap<>(RuleTarget.class);
 
     ContentPanel() {
         super(new BorderLayout());
@@ -168,6 +175,7 @@ final class ContentPanel extends JPanel {
         setBorder(BorderFactory.createLineBorder(palette.border()));
         setBackground(palette.background());
         ruleStatuses.clear();
+        headerHits.clear();
 
         urlHeader.setBackground(palette.headerBackground());
         urlHeader.setBorder(
@@ -181,7 +189,12 @@ final class ContentPanel extends JPanel {
         urlBox.setBackground(palette.codeBackground());
         urlHeader.setVisible(settings.url != UrlMode.HIDDEN);
         urlLabel.setText(settings.url == UrlMode.PATH ? "Path" : "URL");
-        Decorated decoratedUrl = decorate(data.url() == null ? "" : data.url(), RuleTarget.URL, settings);
+        Decorated decoratedUrl = decorate(
+            data.url() == null ? "" : data.url(),
+            RuleTarget.URL,
+            settings,
+            (rule, from, to) -> {}
+        );
         if (settings.url == UrlMode.PATH) {
             // Cut after the rules ran, so only already redacted text can show: rules match the same in both modes.
             decoratedUrl = decoratedUrl.from(pathStart(decoratedUrl.text()));
@@ -242,7 +255,17 @@ final class ContentPanel extends JPanel {
         }
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
         String filtered = HeaderFilter.filter(text, name -> settings.headers.hides(name, target, catalog));
-        Decorated decorated = decorate(filtered, target, settings);
+        List<HeaderFilter.Line> lines = HeaderFilter.lines(filtered);
+        Map<String, Set<Rule>> hits = headerHits.computeIfAbsent(target, side ->
+            new TreeMap<>(String.CASE_INSENSITIVE_ORDER)
+        );
+        Decorated decorated = decorate(filtered, target, settings, (rule, from, to) -> {
+            for (HeaderFilter.Line line : lines) {
+                if (from < line.to() && line.from() < to) {
+                    hits.computeIfAbsent(line.name(), name -> new HashSet<>()).add(rule);
+                }
+            }
+        });
         pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
     }
 
@@ -262,7 +285,7 @@ final class ContentPanel extends JPanel {
     }
 
     /** Applies the highlight and redaction rules meant for {@code target}, recording what each one did. */
-    private Decorated decorate(String text, RuleTarget target, Settings settings) {
+    private Decorated decorate(String text, RuleTarget target, Settings settings, RuleEngine.HitListener hits) {
         return RuleEngine.apply(
             text,
             settings.highlights
@@ -273,13 +296,28 @@ final class ContentPanel extends JPanel {
                 .stream()
                 .filter(rule -> rule.appliesTo(target))
                 .toList(),
-            ruleStatuses::put
+            // A rule can apply to several parts (a header rule to both messages): add up what it did in each.
+            (rule, status) -> ruleStatuses.merge(rule, status, ContentPanel::combine),
+            hits
+        );
+    }
+
+    private static RuleStatus combine(RuleStatus a, RuleStatus b) {
+        return new RuleStatus(
+            a.matches() + b.matches(),
+            a.problem() != null ? a.problem() : b.problem(),
+            a.detail() != null ? a.detail() : b.detail()
         );
     }
 
     /** What each highlight and redaction rule did in the last {@link #render}, keyed by the rule itself. */
     Map<Object, RuleStatus> ruleStatuses() {
         return ruleStatuses;
+    }
+
+    /** The rules that changed each header line in the last {@link #render}, by message and header name. */
+    Map<RuleTarget, Map<String, Set<Rule>>> headerHits() {
+        return headerHits;
     }
 
     void setCaptureMode(boolean capturing) {

@@ -151,6 +151,94 @@ class HeadersTabTest {
         );
     }
 
+    private record Link(String kind, it.unlocksecurity.burp.screenshotmode.model.Rule rule, String notice) {}
+
+    private final List<Link> links = new ArrayList<>();
+
+    private HeadersTab linked(HeadersTab.InMessage message) {
+        return new HeadersTab(
+            settings,
+            CATALOG,
+            message,
+            () -> changes++,
+            new HeadersTab.Links() {
+                @Override
+                public void create(it.unlocksecurity.burp.screenshotmode.model.Rule rule, String notice) {
+                    links.add(new Link("create", rule, notice));
+                }
+
+                @Override
+                public void open(it.unlocksecurity.burp.screenshotmode.model.Rule rule, String notice) {
+                    links.add(new Link("open", rule, notice));
+                }
+            }
+        );
+    }
+
+    @Test
+    void findsTheRulesNamingAHeaderOrChangingIt() {
+        HeadersTab tab = linked(MESSAGE);
+        assertEquals(
+            List.of("User-Agent"),
+            tab
+                .rulesFor("user-agent", true)
+                .stream()
+                .map(rule -> rule.name)
+                .toList()
+        );
+        assertTrue(tab.rulesFor("host", true).isEmpty());
+
+        var authorization = settings.redactions
+            .stream()
+            .filter(r -> r.name.equals("Authorization credentials"))
+            .findFirst()
+            .orElseThrow();
+        java.util.Map<String, java.util.Set<it.unlocksecurity.burp.screenshotmode.model.Rule>> request =
+            new java.util.TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        request.put("host", java.util.Set.of(authorization));
+        tab.showHits(java.util.Map.of(it.unlocksecurity.burp.screenshotmode.model.RuleTarget.REQUEST, request));
+        assertEquals(List.of(authorization), tab.rulesFor("Host", true));
+        assertTrue(labels(tab).contains("Host"), "the group of a header a rule changed opens");
+
+        authorization.enabled = false;
+        assertTrue(tab.rulesFor("Host", true).isEmpty(), "rules that are off don't count");
+    }
+
+    @Test
+    void createsAHeaderRuleOrOpensTheOneThatExists() {
+        HeadersTab tab = linked(MESSAGE);
+        tab.act(List.of("X-Backend"), "X-Backend", true);
+        Link created = links.getLast();
+        assertEquals("create", created.kind());
+        assertEquals(List.of("X-Backend"), created.rule().headers);
+        assertEquals("Redaction created for X-Backend.", created.notice());
+
+        tab.act(List.of("User-Agent"), "User-Agent", true);
+        assertEquals("open", links.getLast().kind());
+        assertEquals("User-Agent", links.getLast().rule().name);
+        assertEquals("This rule redacts User-Agent.", links.getLast().notice());
+
+        tab.act(List.of("User-Agent"), "User-Agent", false);
+        assertEquals("create", links.getLast().kind(), "nothing highlights it yet");
+        assertTrue(links.getLast().rule() instanceof it.unlocksecurity.burp.screenshotmode.model.HighlightRule);
+    }
+
+    @Test
+    void offersRuleActionsInTheDetails() {
+        HeadersTab tab = linked(MESSAGE);
+        tab.select("Client identity");
+        press(tab, "expand");
+        tab.select("user-agent");
+        List<String> texts = texts(tab.details());
+        assertTrue(texts.contains("Redacted by “User-Agent”"), texts.toString());
+        assertTrue(texts.contains("Edit ›"));
+        assertTrue(texts.contains("Highlight…"));
+        assertFalse(texts.contains("Redact value…"), "a rule already redacts it");
+
+        tab.select("Caching");
+        assertTrue(texts(tab.details()).contains("Redact values…"));
+    }
+
     @Test
     void describesTheSelectedHeader() {
         HeadersTab tab = tab(MESSAGE);
@@ -167,6 +255,8 @@ class HeadersTabTest {
         for (Component component : container.getComponents()) {
             if (component instanceof JLabel label) {
                 texts.add(label.getText());
+            } else if (component instanceof javax.swing.AbstractButton button) {
+                texts.add(button.getText());
             } else if (component instanceof JTextComponent text) {
                 texts.add(text.getText());
             }

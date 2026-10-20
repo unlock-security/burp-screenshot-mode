@@ -164,17 +164,21 @@ final class RuleList<R extends Rule> extends JPanel {
         return rows.containsKey(rule);
     }
 
+    /** Adds a rule at the top and opens it. */
+    void addFirst(R rule) {
+        rules.addFirst(rule);
+        rebuild();
+        onChange.run();
+        reveal(rule);
+    }
+
     void addRuleForTests(RuleType type) {
         addRule(type);
     }
 
     private void addRule(RuleType type) {
         // At the top, right below the button, rather than at the end of a possibly long list.
-        R rule = factory.apply(type);
-        rules.addFirst(rule);
-        rebuild();
-        onChange.run();
-        reveal(rule);
+        addFirst(factory.apply(type));
     }
 
     private void rebuild() {

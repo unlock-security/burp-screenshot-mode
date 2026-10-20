@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -59,6 +60,15 @@ final class SettingsForm extends JPanel {
     private RuleList<HighlightRule> highlightList;
     private RuleList<RedactionRule> redactionList;
     private final HeadersTab headers;
+    /** Above the rules after a jump from the Headers tab, with the way back. */
+    private final JPanel notice = new JPanel(new BorderLayout(8, 0)) {
+        @Override
+        public java.awt.Color getBackground() {
+            // Resolved at paint time, so it follows Burp's theme switches.
+            return Widgets.themeColor("Table.selectionBackground", new java.awt.Color(0xcadaf0));
+        }
+    };
+    private final JLabel noticeText = new JLabel();
     private int failedRules;
 
     SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide) {
@@ -77,13 +87,65 @@ final class SettingsForm extends JPanel {
         setOpaque(false);
 
         tabs.addTab("Rules", scrollable(rulesTab(wide)));
-        headers = new HeadersTab(settings, HeaderCatalogFile.bundled(), message, this.onChange);
+        headers = new HeadersTab(
+            settings,
+            HeaderCatalogFile.bundled(),
+            message,
+            this.onChange,
+            new HeadersTab.Links() {
+                @Override
+                public void create(Rule rule, String text) {
+                    if (rule instanceof HighlightRule highlight) {
+                        highlightList.addFirst(highlight);
+                    } else {
+                        redactionList.addFirst((RedactionRule) rule);
+                    }
+                    showRule(rule);
+                    showNotice(text);
+                }
+
+                @Override
+                public void open(Rule rule, String text) {
+                    showRule(rule);
+                    showNotice(text);
+                }
+            }
+        );
         tabs.addTab("Headers", headers);
         tabs.addTab("Appearance", scrollable(appearanceTab()));
         tabs.setTabComponentAt(RULES, tabTitle("Rules", rulesCount));
         tabs.setTabComponentAt(HEADERS, tabTitle("Headers", headersCount));
         updateCounts();
         add(tabs, BorderLayout.CENTER);
+        // The notice is about the jump that just happened: leaving the Rules tab ends it.
+        tabs.addChangeListener(event -> {
+            if (tabs.getSelectedIndex() != RULES) {
+                notice.setVisible(false);
+            }
+        });
+    }
+
+    HeadersTab headersTab() {
+        return headers;
+    }
+
+    JPanel notice() {
+        return notice;
+    }
+
+    JLabel noticeText() {
+        return noticeText;
+    }
+
+    /** Takes what the rules changed in the header lines of the message on screen. */
+    void showHeaderHits(Map<RuleTarget, Map<String, java.util.Set<Rule>>> hits) {
+        headers.showHits(hits);
+    }
+
+    private void showNotice(String text) {
+        noticeText.setText(text);
+        notice.setVisible(true);
+        notice.revalidate();
     }
 
     JTabbedPane tabs() {
@@ -131,17 +193,38 @@ final class SettingsForm extends JPanel {
             onChange,
             mono
         );
+        buildNotice();
         if (wide) {
             JPanel columns = new JPanel(new GridLayout(1, 2, 24, 0));
             columns.setOpaque(false);
             columns.add(highlightList);
             columns.add(redactionList);
-            return columns;
+            JPanel wideTab = new JPanel(new BorderLayout(0, 16));
+            wideTab.setOpaque(false);
+            wideTab.add(notice, BorderLayout.NORTH);
+            wideTab.add(columns, BorderLayout.CENTER);
+            return wideTab;
         }
         Widgets.Stack stack = new Widgets.Stack(20, false);
+        stack.addItem(notice());
         stack.addItem(highlightList);
         stack.addItem(redactionList);
         return stack;
+    }
+
+    /** "‹ Back to Headers" returns to the header the user came from, still selected there. */
+    private void buildNotice() {
+        JButton back = Widgets.button("‹ Back to Headers");
+        back.putClientProperty("JButton.buttonType", "borderless");
+        back.addActionListener(event -> {
+            tabs.setSelectedIndex(HEADERS);
+            headers.table().requestFocusInWindow();
+        });
+        notice.setOpaque(true);
+        notice.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 6));
+        // The link moves under the text when the sidebar is too narrow for both.
+        notice.add(Widgets.row(noticeText, back), BorderLayout.CENTER);
+        notice.setVisible(false);
     }
 
     RuleList<HighlightRule> highlightList() {

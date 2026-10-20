@@ -421,6 +421,7 @@ final class ScreenshotDialog extends JDialog {
 
         preview.setMaxContentWidth(maxWidth);
         form.showRuleStatuses(content.ruleStatuses());
+        form.showHeaderHits(content.headerHits());
         int failed = failedRedactions().size();
         failedRules.setText("⚠ " + failed + (failed == 1 ? " redaction rule failed" : " redaction rules failed"));
         failedRules.setVisible(failed > 0);
@@ -567,8 +568,8 @@ final class ScreenshotDialog extends JDialog {
     }
 
     /**
-     * Port of the Caido selection context menu actions. Unlike Caido, new rules go first, like the ones added with the
-     * "+" button in {@link RuleCards#section}.
+     * The actions of the preview's right-click menu. New rules go first, like the ones added with +, and open; when a
+     * rule already redacts or highlights the header, that rule is shown instead of adding a duplicate.
      */
     private void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
         Settings settings = state.settings;
@@ -584,13 +585,24 @@ final class ScreenshotDialog extends JDialog {
                 settings.redactions.addFirst(rule);
                 added = rule;
             }
-            case HIDE_HEADER -> {
-                int colon = selected.indexOf(':');
-                String header = (colon > 0 ? selected.substring(0, colon) : selected).trim();
-                if (header.isEmpty()) {
+            case HIDE_HEADER -> settings.headers.set(selected, Visibility.HIDE, HeaderCatalogFile.bundled());
+            case REDACT_HEADER, HIGHLIGHT_HEADER -> {
+                boolean redaction = action == MessagePane.SelectionAction.REDACT_HEADER;
+                Rule existing = form.headersTab().existingRule(List.of(selected), redaction);
+                if (existing != null) {
+                    // Already done by a rule: show it rather than add a duplicate.
+                    form.showRule(existing);
                     return;
                 }
-                settings.headers.set(header, Visibility.HIDE, HeaderCatalogFile.bundled());
+                if (redaction) {
+                    RedactionRule rule = RedactionRule.forHeaders(List.of(selected), RedactionMode.REPLACE);
+                    settings.redactions.addFirst(rule);
+                    added = rule;
+                } else {
+                    HighlightRule rule = HighlightRule.forHeaders(List.of(selected));
+                    settings.highlights.addFirst(rule);
+                    added = rule;
+                }
             }
         }
         rebuildForm();

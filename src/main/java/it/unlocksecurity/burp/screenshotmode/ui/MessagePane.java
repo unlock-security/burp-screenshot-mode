@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
+import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import java.awt.BorderLayout;
@@ -25,19 +26,26 @@ import javax.swing.SwingUtilities;
 final class MessagePane extends JPanel {
 
     enum SelectionAction {
-        HIGHLIGHT("Highlight"),
-        REDACT("Redact"),
-        HIDE_HEADER("Hide Header");
+        /** On the selected text. */
+        HIGHLIGHT("Highlight", false),
+        REDACT("Redact", false),
+        /** On the header line under the pointer. */
+        HIDE_HEADER("Hide header", true),
+        REDACT_HEADER("Redact header value", true),
+        HIGHLIGHT_HEADER("Highlight header", true);
 
         final String label;
+        final boolean onHeader;
 
-        SelectionAction(String label) {
+        SelectionAction(String label, boolean onHeader) {
             this.label = label;
+            this.onHeader = onHeader;
         }
     }
 
     interface SelectionListener {
-        void onSelectionAction(SelectionAction action, String selectedText, RuleTarget target);
+        /** @param text the selected text, or the header name for the actions on a header */
+        void onSelectionAction(SelectionAction action, String text, RuleTarget target);
     }
 
     private final RuleTarget target;
@@ -154,26 +162,43 @@ final class MessagePane extends JPanel {
     }
 
     /**
-     * On a popup trigger over selected text, offers the actions that create a rule for it. The URL bar has no
-     * headers, so it only offers Highlight and Redact.
+     * On a popup trigger, offers the actions that create a rule for the selected text and, over a header line, the
+     * actions on that header. The URL bar has no headers.
      */
     static void showSelectionMenu(MouseEvent e, MessageView view, RuleTarget target, SelectionListener listener) {
         if (!e.isPopupTrigger()) {
             return;
         }
         String selected = view.getSelectedText();
-        if (selected == null || selected.isEmpty()) {
-            return;
-        }
+        String header = target == RuleTarget.URL ? null : headerAt(view.getText(), view.viewToModel2D(e.getPoint()));
         JPopupMenu menu = new JPopupMenu();
         for (SelectionAction action : SelectionAction.values()) {
-            if (action == SelectionAction.HIDE_HEADER && target == RuleTarget.URL) {
+            String text = action.onHeader ? header : selected;
+            if (text == null || text.isEmpty()) {
                 continue;
             }
+            if (action == SelectionAction.HIDE_HEADER && menu.getComponentCount() > 0) {
+                menu.addSeparator();
+            }
             JMenuItem item = new JMenuItem(action.label);
-            item.addActionListener(event -> listener.onSelectionAction(action, selected, target));
+            item.addActionListener(event -> listener.onSelectionAction(action, text, target));
             menu.add(item);
         }
-        menu.show(view, e.getX(), e.getY());
+        if (menu.getComponentCount() > 0) {
+            menu.show(view, e.getX(), e.getY());
+        }
+    }
+
+    /** The name of the header on the line at {@code offset}, or {@code null} if that line is not a header. */
+    static String headerAt(String text, int offset) {
+        if (offset < 0) {
+            return null;
+        }
+        for (HeaderFilter.Line line : HeaderFilter.lines(text)) {
+            if (offset >= line.from() && offset <= line.to()) {
+                return line.name();
+            }
+        }
+        return null;
     }
 }

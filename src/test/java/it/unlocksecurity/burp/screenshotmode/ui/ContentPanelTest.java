@@ -35,6 +35,61 @@ class ContentPanelTest {
         return content[0];
     }
 
+    @Test
+    void recordsTheRulesThatChangedEachHeaderLine() throws Throwable {
+        Settings settings = DefaultTemplate.settings();
+        settings.headers.set(
+            "Accept",
+            it.unlocksecurity.burp.screenshotmode.model.Visibility.HIDE,
+            it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile.bundled()
+        );
+        ContentPanel[] content = new ContentPanel[1];
+        onEdt(() -> {
+            content[0] = new ContentPanel();
+            String request =
+                "GET / HTTP/1.1\nAuthorization: Bearer abc\nCookie: a=1\nAccept: */*\nHost: x\n\nCookie: body";
+            MessageData data = new MessageData("key", "https://x/", request, "HTTP/1.1 200 OK\n", 0, null, null);
+            content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
+        });
+        var hits = content[0].headerHits().get(RuleTarget.REQUEST);
+        RedactionRule authorization = named(settings, "Authorization credentials");
+        RedactionRule cookie = named(settings, "Cookie values");
+        assertEquals(java.util.Set.of(authorization), hits.get("authorization"), "a pattern rule, by what it changed");
+        assertEquals(java.util.Set.of(cookie), hits.get("COOKIE"), "ignoring case");
+        assertFalse(hits.containsKey("Host"));
+        assertFalse(hits.containsKey("Accept"), "hidden");
+    }
+
+    @Test
+    void addsUpWhatARuleDidInEachPart() throws Throwable {
+        Settings settings = new Settings();
+        RedactionRule rule = RedactionRule.forHeaders(List.of("X-Trace"), RedactionMode.REPLACE);
+        settings.redactions.add(rule);
+        ContentPanel[] content = new ContentPanel[1];
+        onEdt(() -> {
+            content[0] = new ContentPanel();
+            MessageData data = new MessageData(
+                "k",
+                "https://x/",
+                "GET / HTTP/1.1\nX-Trace: 1\n",
+                "HTTP/1.1 200 OK\nX-Trace: 2\n",
+                0,
+                null,
+                null
+            );
+            content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
+        });
+        assertEquals(new RuleStatus(2, null, null), content[0].ruleStatuses().get(rule), "one in each message");
+    }
+
+    private static RedactionRule named(Settings settings, String name) {
+        return settings.redactions
+            .stream()
+            .filter(rule -> rule.name.equals(name))
+            .findFirst()
+            .orElseThrow();
+    }
+
     private static String renderedUrl(String url, Settings settings) throws Throwable {
         return rendered(url, settings).urlView().text();
     }

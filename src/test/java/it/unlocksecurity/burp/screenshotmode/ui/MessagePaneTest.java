@@ -1,6 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
@@ -96,6 +97,16 @@ class MessagePaneTest {
             }
             assertTrue(setup.outerY() > 0, "at the bottom of the message, the preview scrolls");
         });
+    }
+
+    @Test
+    void findsTheHeaderOnTheLineUnderThePointer() {
+        String text = "GET / HTTP/1.1\nHost: x\nX-Backend: blue\n\nX-Body: no";
+        assertEquals("Host", MessagePane.headerAt(text, text.indexOf("x\n")));
+        assertEquals("X-Backend", MessagePane.headerAt(text, text.indexOf("blue") + 4), "at the end of the line");
+        assertNull(MessagePane.headerAt(text, 2), "the start line");
+        assertNull(MessagePane.headerAt(text, text.indexOf("X-Body")), "the body");
+        assertNull(MessagePane.headerAt(text, -1));
     }
 
     /**

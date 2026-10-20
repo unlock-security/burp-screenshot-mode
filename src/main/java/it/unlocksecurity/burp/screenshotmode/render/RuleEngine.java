@@ -53,12 +53,28 @@ public final class RuleEngine {
         return apply(text, highlights, redactions, (rule, status) -> {});
     }
 
+    /** Receives a range of the source text a rule changed: what a redaction hides, or what a highlight marks. */
+    public interface HitListener {
+        void hit(Rule rule, int from, int to);
+    }
+
     /** Like {@link #apply(String, List, List)}, also reporting what each rule did. */
     public static Decorated apply(
         String text,
         List<HighlightRule> highlights,
         List<RedactionRule> redactions,
         BiConsumer<Object, RuleStatus> statuses
+    ) {
+        return apply(text, highlights, redactions, statuses, (rule, from, to) -> {});
+    }
+
+    /** Like {@link #apply(String, List, List, BiConsumer)}, also reporting where each rule changed the text. */
+    public static Decorated apply(
+        String text,
+        List<HighlightRule> highlights,
+        List<RedactionRule> redactions,
+        BiConsumer<Object, RuleStatus> statuses,
+        HitListener hits
     ) {
         List<List<Range>> redactionRanges = new ArrayList<>();
         List<Range> redacted = new ArrayList<>();
@@ -75,6 +91,10 @@ public final class RuleEngine {
             }
             redactionRanges.add(ranges);
             redacted.addAll(ranges);
+            ranges
+                .stream()
+                .filter(range -> range.to() > range.from())
+                .forEach(range -> hits.hit(rule, range.from(), range.to()));
         }
 
         List<Decorated.Span> sourceSpans = new ArrayList<>();
@@ -88,6 +108,7 @@ public final class RuleEngine {
                 Range range = new Range(match.from(), match.to());
                 if (redacted.stream().noneMatch(range::overlaps)) {
                     sourceSpans.add(new Decorated.Span(match.from(), match.to(), kind, color));
+                    hits.hit(rule, match.from(), match.to());
                 }
             }
         }
