@@ -21,6 +21,23 @@ import org.junit.jupiter.api.Test;
 class WidgetsTest {
 
     @Test
+    void clearsASearchFieldWithEscapeAndLetsEscapeThroughWhenEmpty() {
+        javax.swing.JTextField field = new javax.swing.JTextField();
+        Widgets.searchField(field);
+        assertEquals(Widgets.Glyph.SEARCH, field.getClientProperty("JTextField.leadingIcon"));
+        assertEquals(Boolean.TRUE, field.getClientProperty("JTextField.showClearButton"));
+
+        javax.swing.Action clear = field
+            .getActionMap()
+            .get(field.getInputMap().get(javax.swing.KeyStroke.getKeyStroke("ESCAPE")));
+        field.setText("cookie");
+        assertTrue(clear.accept(field));
+        clear.actionPerformed(null);
+        assertEquals("", field.getText());
+        assertTrue(!clear.accept(field), "an empty field leaves Escape to the window");
+    }
+
+    @Test
     void offersAFewNamedColorsAndKeepsACustomOne() {
         List<String> chosen = new ArrayList<>();
         javax.swing.JComboBox<Widgets.ColorChoice> combo = Widgets.colorCombo(

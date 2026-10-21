@@ -25,6 +25,7 @@ import java.awt.geom.Path2D;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
@@ -39,6 +40,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -363,6 +365,31 @@ final class Widgets {
         return combo;
     }
 
+    /**
+     * Makes {@code field} a search field the Burp way: a magnifier at its start and, while it has text, a clear button
+     * at its end (FlatLaf only). Escape clears it too, from the keyboard; when it is empty, Escape goes on to the
+     * window.
+     */
+    static void searchField(JTextField field) {
+        field.putClientProperty("JTextField.leadingIcon", Glyph.SEARCH);
+        field.putClientProperty("JTextField.showClearButton", true);
+        field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ESCAPE"), "clearSearch");
+        field.getActionMap().put(
+            "clearSearch",
+            new AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    field.setText("");
+                }
+
+                @Override
+                public boolean accept(Object sender) {
+                    return !field.getText().isEmpty();
+                }
+            }
+        );
+    }
+
     static void onTextChange(JTextComponent component, Consumer<String> onChange) {
         component.getDocument().addDocumentListener(
             new DocumentListener() {
@@ -504,14 +531,16 @@ final class Widgets {
         TRASH,
         /** Shows that a closed section opens, like the sections of Burp's Inspector; {@link #CHEVRON_UP} once open. */
         CHEVRON_DOWN,
-        CHEVRON_UP;
+        CHEVRON_UP,
+        /** The magnifier of a search field, muted like FlatLaf's own. */
+        SEARCH;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean hot = c instanceof AbstractButton button && button.getModel().isRollover() && button.isEnabled();
-            g.setColor(this == TRASH && hot ? errorColor() : c.getForeground());
+            g.setColor(this == TRASH && hot ? errorColor() : this == SEARCH ? mutedColor() : c.getForeground());
             g.translate(x, y);
             switch (this) {
                 case PLUS -> {
@@ -536,6 +565,11 @@ final class Widgets {
                     g.draw(can);
                     g.draw(new Line2D.Float(6, 6, 6, 10.5f));
                     g.draw(new Line2D.Float(8, 6, 8, 10.5f));
+                }
+                case SEARCH -> {
+                    g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g.draw(new java.awt.geom.Ellipse2D.Float(2, 2, 7.5f, 7.5f));
+                    g.draw(new Line2D.Float(8.6f, 8.6f, 12, 12));
                 }
                 case CHEVRON_DOWN, CHEVRON_UP -> {
                     g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));

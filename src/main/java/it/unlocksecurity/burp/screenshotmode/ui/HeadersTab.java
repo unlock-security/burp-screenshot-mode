@@ -181,6 +181,7 @@ final class HeadersTab extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
 
         Widgets.placeholder(filter, "Filter headers");
+        Widgets.searchField(filter);
         filter.getAccessibleContext().setAccessibleName("Filter headers");
         Widgets.onTextChange(filter, text -> refresh());
 
