@@ -27,6 +27,8 @@ import java.awt.KeyboardFocusManager;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -80,7 +82,9 @@ final class ScreenshotDialog extends JDialog {
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final Timer renderTimer = new Timer(150, event -> render());
+    private final JButton fit = Widgets.button("Fit to content");
     private final JButton resetHeight = Widgets.button("Reset height");
+    private boolean fitCheckPending;
     private final JLabel modified = Widgets.chip("Modified");
     private final JButton revert = Widgets.button("Revert");
     private final JButton update = Widgets.button("Update template");
@@ -136,6 +140,15 @@ final class ScreenshotDialog extends JDialog {
             resetHeight.setEnabled(height != null);
         });
         preview.setCropHeight(state.cropHeight);
+        // What a pane needs changes with its size (window, crop, divider, width) and with each render.
+        ComponentAdapter resized = new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                updateFit();
+            }
+        };
+        content.requestPane().addComponentListener(resized);
+        content.responsePane().addComponentListener(resized);
 
         store.addListener(templatesListener);
         reloadTemplates();
@@ -229,7 +242,6 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        JButton fit = Widgets.button("Fit to content");
         fit.setToolTipText("Crop the height so the whole request and response are visible");
         fit.addActionListener(event -> fitToContent());
         resetHeight.setToolTipText("Fill the window height again");
@@ -420,6 +432,7 @@ final class ScreenshotDialog extends JDialog {
         rendered = true;
 
         preview.setMaxContentWidth(maxWidth);
+        updateFit();
         form.showRuleStatuses(content.ruleStatuses());
         form.showHeaderHits(content.headerHits());
         int failed = failedRedactions().size();
@@ -606,6 +619,24 @@ final class ScreenshotDialog extends JDialog {
             form.expand(added);
         }
         render();
+    }
+
+    /** Turns "Fit to content" off while it would change nothing, once the layout has caught up. */
+    private void updateFit() {
+        if (fitCheckPending) {
+            return;
+        }
+        fitCheckPending = true;
+        SwingUtilities.invokeLater(() -> {
+            fitCheckPending = false;
+            getRootPane().validate();
+            int requestOverflow = content.requestPane().overflow();
+            int responseOverflow = content.responsePane().overflow();
+            boolean fits = content.isSideBySide()
+                ? Math.max(requestOverflow, responseOverflow) == 0
+                : requestOverflow == 0 && responseOverflow == 0;
+            fit.setEnabled(!fits);
+        });
     }
 
     private void fitToContent() {
