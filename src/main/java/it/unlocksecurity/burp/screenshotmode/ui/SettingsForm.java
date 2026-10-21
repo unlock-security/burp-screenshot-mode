@@ -282,51 +282,69 @@ final class SettingsForm extends JPanel {
     }
 
     /** Settings that change how the screenshot looks, as a label / control grid. */
+    /**
+     * Two groups in one grid, so their labels share a column: how the image looks, then what it shows, in the order
+     * it appears in the screenshot.
+     */
     private JComponent appearanceTab() {
         JPanel grid = new JPanel(new GridBagLayout());
         grid.setOpaque(false);
         int row = 0;
 
+        addHeading(grid, row++, "Image");
+        addRow(grid, row++, "Width", widthControl(), "Width of the captured image", true);
+
         SegmentedControl<Disposition> layout = Widgets.segmented(Disposition.values(), settings.disposition, value -> {
             settings.disposition = value;
             onChange.run();
         });
-        addRow(grid, row++, "Layout", layout, "Request and response side by side, or one above the other");
-
-        SegmentedControl<ViewMode> view = Widgets.segmented(ViewMode.values(), settings.view, value -> {
-            settings.view = value;
-            onChange.run();
-        });
-        addRow(grid, row++, "Body", view, "Pretty prints JSON, XML and HTML bodies");
-
-        addRow(grid, row++, "Width", widthControl(), "Width of the captured image");
+        addRow(grid, row++, "Layout", layout, "Request and response side by side, or one above the other", false);
 
         SegmentedControl<ThemeMode> theme = Widgets.segmented(ThemeMode.values(), settings.theme, value -> {
             settings.theme = value;
             onChange.run();
         });
-        addRow(grid, row++, "Theme", theme, "Colors of the screenshot");
+        addRow(grid, row++, "Theme", theme, "Colors of the screenshot", false);
 
+        addHeading(grid, row++, "Content");
         SegmentedControl<UrlMode> url = Widgets.segmented(UrlMode.values(), settings.url, value -> {
             settings.url = value;
             onChange.run();
         });
-        addRow(grid, row++, "URL bar", url, null);
+        addRow(grid, row++, "URL bar", url, null, true);
 
-        addRow(grid, row, "Footer", footerControl(), "Metadata shown below the messages");
+        SegmentedControl<ViewMode> view = Widgets.segmented(ViewMode.values(), settings.view, value -> {
+            settings.view = value;
+            onChange.run();
+        });
+        addRow(grid, row++, "Body", view, "Pretty prints JSON, XML and HTML bodies", false);
+
+        addRow(grid, row, "Footer", footerControl(), "Metadata shown below the messages", false);
 
         Widgets.Stack stack = new Widgets.Stack(0, false);
         stack.addItem(grid);
         return stack;
     }
 
-    private static void addRow(JPanel grid, int row, String label, JComponent control, String tooltip) {
+    /** A group title across both columns, like the section titles of the Rules tab. */
+    private static void addHeading(JPanel grid, int row, String text) {
+        GridBagConstraints at = new GridBagConstraints();
+        at.gridx = 0;
+        at.gridy = row;
+        at.gridwidth = 2;
+        at.anchor = GridBagConstraints.LINE_START;
+        at.insets = new Insets(row == 0 ? 0 : 20, 0, 0, 0);
+        grid.add(Widgets.title(text), at);
+    }
+
+    private static void addRow(JPanel grid, int row, String label, JComponent control, String tooltip, boolean first) {
+        int top = first ? 8 : 12;
         GridBagConstraints labelAt = new GridBagConstraints();
         labelAt.gridx = 0;
         labelAt.gridy = row;
         labelAt.anchor = GridBagConstraints.LINE_START;
-        labelAt.insets = new Insets(row == 0 ? 0 : 12, 0, 0, 16);
-        JLabel title = Widgets.title(label);
+        labelAt.insets = new Insets(top, 0, 0, 16);
+        JLabel title = new JLabel(label);
         title.setToolTipText(tooltip);
         title.setLabelFor(control);
         grid.add(title, labelAt);
@@ -336,7 +354,7 @@ final class SettingsForm extends JPanel {
         controlAt.gridy = row;
         controlAt.weightx = 1;
         controlAt.anchor = GridBagConstraints.LINE_START;
-        controlAt.insets = new Insets(row == 0 ? 0 : 12, 0, 0, 0);
+        controlAt.insets = new Insets(top, 0, 0, 0);
         control.setToolTipText(tooltip);
         grid.add(control, controlAt);
     }
