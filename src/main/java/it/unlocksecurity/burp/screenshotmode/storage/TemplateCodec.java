@@ -163,9 +163,7 @@ public final class TemplateCodec {
         for (RedactionRule rule : settings.redactions) {
             JsonObject json = encodeRule(rule, rule.useCaptureGroups ? rule.selectedGroups : null);
             json.addProperty("mode", rule.mode.id());
-            if (rule.mode == RedactionMode.OPAQUE) {
-                json.addProperty("color", rule.color);
-            } else if (rule.mode == RedactionMode.REPLACE) {
+            if (rule.mode == RedactionMode.REPLACE) {
                 json.addProperty("replacementText", rule.replacementText);
             }
             redactions.add(json);
@@ -396,9 +394,8 @@ public final class TemplateCodec {
             rule.selectedGroups = numberList(object.get("selectedGroups"), "selectedGroups");
         }
         rule.mode = enumValue(RedactionMode.class, object, "mode");
-        if (rule.mode == RedactionMode.OPAQUE) {
-            rule.color = string(object, "color");
-        } else if (rule.mode == RedactionMode.REPLACE) {
+        // The "color" of opaque redactions saved before they followed the screenshot theme is ignored.
+        if (rule.mode == RedactionMode.REPLACE) {
             rule.replacementText = string(object, "replacementText");
         }
         return rule;

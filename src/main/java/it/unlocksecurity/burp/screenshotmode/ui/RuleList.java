@@ -614,7 +614,7 @@ final class RuleList<R extends Rule> extends JPanel {
             rule.mode = value;
             fields.changed();
         });
-        JButton color = Widgets.colorButton(rule.color, value -> {
+        JComboBox<Widgets.ColorChoice> color = Widgets.colorCombo(Widgets.ColorChoice.HIGHLIGHT, rule.color, value -> {
             rule.color = value;
             fields.changed();
         });
@@ -626,10 +626,6 @@ final class RuleList<R extends Rule> extends JPanel {
         nameField(rule, fields);
         matchFields(rule, fields, catalog, rule);
 
-        JButton color = Widgets.colorButton(rule.color, value -> {
-            rule.color = value;
-            fields.changed();
-        });
         JTextField replacement = new JTextField(rule.replacementText, 11);
         replacement.setFont(fields.mono());
         replacement.setCaretPosition(0);
@@ -639,10 +635,7 @@ final class RuleList<R extends Rule> extends JPanel {
             rule.replacementText = text;
             fields.changed();
         });
-        Runnable updateModeFields = () -> {
-            color.setVisible(rule.mode == RedactionMode.OPAQUE);
-            replacement.setVisible(rule.mode == RedactionMode.REPLACE);
-        };
+        Runnable updateModeFields = () -> replacement.setVisible(rule.mode == RedactionMode.REPLACE);
         updateModeFields.run();
         JPanel row = flush();
         JComboBox<RedactionMode> mode = combo(RedactionMode.values(), rule.mode, value -> {
@@ -653,7 +646,6 @@ final class RuleList<R extends Rule> extends JPanel {
         });
         row.add(mode);
         row.add(javax.swing.Box.createHorizontalStrut(6));
-        row.add(color);
         row.add(replacement);
         fields.add("Redact with", row);
     }

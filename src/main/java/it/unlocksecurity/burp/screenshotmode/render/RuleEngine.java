@@ -125,12 +125,7 @@ public final class RuleEngine {
                         new Decorated.Span(range.from(), range.to(), Decorated.Kind.BLUR, null)
                     );
                     case OPAQUE -> sourceSpans.add(
-                        new Decorated.Span(
-                            range.from(),
-                            range.to(),
-                            Decorated.Kind.OPAQUE,
-                            parseColor(rule.color, Color.BLACK)
-                        )
+                        new Decorated.Span(range.from(), range.to(), Decorated.Kind.OPAQUE, null)
                     );
                     case REPLACE -> replacements.add(
                         new Replacement(

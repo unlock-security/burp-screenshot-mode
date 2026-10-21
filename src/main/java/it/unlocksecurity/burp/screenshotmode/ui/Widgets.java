@@ -22,15 +22,19 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
 import javax.swing.JButton;
-import javax.swing.JColorChooser;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
@@ -297,20 +301,66 @@ final class Widgets {
         return separator;
     }
 
-    static JButton colorButton(String hex, Consumer<String> onChange) {
-        JButton button = greyedWhenDisabled(new JButton());
-        button.setMargin(new Insets(4, 6, 4, 6));
-        button.setToolTipText("Choose color");
-        button.setIcon(new SwatchIcon(RuleEngine.parseColor(hex, Color.YELLOW)));
-        button.addActionListener(event -> {
-            Color current = ((SwatchIcon) button.getIcon()).color;
-            Color chosen = JColorChooser.showDialog(button, "Choose Color", current);
-            if (chosen != null) {
-                button.setIcon(new SwatchIcon(chosen));
-                onChange.accept(RuleEngine.toHex(chosen));
+    /** A named color of a rule, stored as its hex value. */
+    record ColorChoice(String name, String hex) {
+        static final List<ColorChoice> HIGHLIGHT = List.of(
+            new ColorChoice("Yellow", "#ffff00"),
+            new ColorChoice("Orange", "#ff9800"),
+            new ColorChoice("Red", "#f44336"),
+            new ColorChoice("Green", "#4caf50"),
+            new ColorChoice("Blue", "#2196f3"),
+            new ColorChoice("Purple", "#9c27b0")
+        );
+
+        Color color() {
+            return RuleEngine.parseColor(hex, Color.GRAY);
+        }
+    }
+
+    /**
+     * A choice among a few named colors, each shown by its name and a swatch, like Burp's highlight menu. A color
+     * that is not one of them, from an older template, stays as a "Custom" choice.
+     */
+    static JComboBox<ColorChoice> colorCombo(List<ColorChoice> choices, String hex, Consumer<String> onChange) {
+        List<ColorChoice> items = new ArrayList<>(choices);
+        ColorChoice selected = choices
+            .stream()
+            .filter(choice -> choice.hex().equalsIgnoreCase(hex))
+            .findFirst()
+            .orElseGet(() -> {
+                ColorChoice custom = new ColorChoice("Custom", hex);
+                items.add(custom);
+                return custom;
+            });
+        JComboBox<ColorChoice> combo = new JComboBox<>(items.toArray(ColorChoice[]::new));
+        combo.setSelectedItem(selected);
+        combo.setRenderer(
+            new DefaultListCellRenderer() {
+                @Override
+                public Component getListCellRendererComponent(
+                    JList<?> list,
+                    Object value,
+                    int index,
+                    boolean isSelected,
+                    boolean cellHasFocus
+                ) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value instanceof ColorChoice choice) {
+                        setText(choice.name());
+                        setIcon(new SwatchIcon(choice.color(), 12));
+                        setIconTextGap(6);
+                    }
+                    return this;
+                }
+            }
+        );
+        combo.getAccessibleContext().setAccessibleName("Color");
+        combo.addActionListener(event -> {
+            if (combo.getSelectedItem() instanceof ColorChoice choice) {
+                onChange.accept(choice.hex());
             }
         });
-        return button;
+        return combo;
     }
 
     static void onTextChange(JTextComponent component, Consumer<String> onChange) {

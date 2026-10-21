@@ -30,7 +30,9 @@ public record Palette(
     Color status4xx,
     Color status5xx,
     /** Backdrop of the preview area, outside the captured content. */
-    Color canvas
+    Color canvas,
+    /** Opaque redactions: clearly a redaction on this background. */
+    Color redaction
 ) {
     public static final Palette DARK = new Palette(
         new Color(0x23252b),
@@ -58,7 +60,8 @@ public record Palette(
         new Color(0x82aaff),
         new Color(0xf2c55c),
         new Color(0xf07178),
-        new Color(0x18191d)
+        new Color(0x18191d),
+        new Color(0x808080)
     );
 
     public static final Palette LIGHT = new Palette(
@@ -87,7 +90,8 @@ public record Palette(
         new Color(0x0550ae),
         new Color(0x9a6700),
         new Color(0xcf222e),
-        new Color(0xe4e6ea)
+        new Color(0xe4e6ea),
+        new Color(0x000000)
     );
 
     public Color forToken(HttpSyntax.TokenType type, String tokenText) {

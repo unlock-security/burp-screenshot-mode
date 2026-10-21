@@ -147,7 +147,6 @@ class TemplateCodecTest {
 
         RedactionRule opaque = settings.redactions.get(1);
         assertEquals(RedactionMode.OPAQUE, opaque.mode);
-        assertEquals("#123456", opaque.color);
         assertEquals(MatchMode.REGEX, opaque.matchMode, "matchMode defaults to regex");
         assertTrue(opaque.matchCase, "rules saved before the match options keep matching case");
         assertFalse(opaque.wholeWord);
@@ -275,11 +274,6 @@ class TemplateCodecTest {
             TemplateCodec.decode(
                 v2(V2_SETTINGS.replace("\"target\": \"request\", \"color\"", "\"target\": \"body\", \"color\""))
             )
-        );
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> TemplateCodec.decode(v2(V2_SETTINGS.replace(", \"color\": \"#123456\"", ""))),
-            "opaque without color"
         );
         assertThrows(
             IllegalArgumentException.class,

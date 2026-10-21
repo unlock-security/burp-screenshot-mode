@@ -122,12 +122,11 @@ class RuleEngineTest {
     }
 
     @Test
-    void opaqueRedactionKeepsTextAndCarriesColor() {
+    void opaqueRedactionKeepsText() {
         RedactionRule rule = redaction("s3cr3t", RedactionMode.OPAQUE);
-        rule.color = "#00ff00";
         Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(rule));
         assertEquals(TEXT, result.text());
-        assertEquals(Color.GREEN, result.spans().getFirst().color());
+        assertEquals(Decorated.Kind.OPAQUE, result.spans().getFirst().kind());
     }
 
     @Test
