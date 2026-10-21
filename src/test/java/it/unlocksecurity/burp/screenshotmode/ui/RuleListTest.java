@@ -72,10 +72,13 @@ class RuleListTest {
     void opensARuleFromAnyPartOfItsLine() {
         RuleList<RedactionRule>.Row row = form.redactionList().row(named("Cookie values"));
         // The title and the pill have tooltips, which keep mouse events from reaching the line.
+        assertEquals(Widgets.Glyph.CHEVRON_DOWN, row.chevron().getIcon());
         click(row.titleLabel());
         assertTrue(row.isExpanded());
+        assertEquals(Widgets.Glyph.CHEVRON_UP, row.chevron().getIcon());
         click(row.pill());
         assertFalse(row.isExpanded());
+        assertEquals(Widgets.Glyph.CHEVRON_DOWN, row.chevron().getIcon());
     }
 
     @Test

@@ -451,7 +451,10 @@ final class Widgets {
     enum Glyph implements Icon {
         PLUS,
         /** Neutral, red while the pointer is over its button: destructive, but calm in a long list of rules. */
-        TRASH;
+        TRASH,
+        /** Shows that a closed section opens, like the sections of Burp's Inspector; {@link #CHEVRON_UP} once open. */
+        CHEVRON_DOWN,
+        CHEVRON_UP;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
@@ -483,6 +486,16 @@ final class Widgets {
                     g.draw(can);
                     g.draw(new Line2D.Float(6, 6, 6, 10.5f));
                     g.draw(new Line2D.Float(8, 6, 8, 10.5f));
+                }
+                case CHEVRON_DOWN, CHEVRON_UP -> {
+                    g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    float tip = this == CHEVRON_DOWN ? 9.5f : 4.5f;
+                    float ends = this == CHEVRON_DOWN ? 4.5f : 9.5f;
+                    Path2D chevron = new Path2D.Float();
+                    chevron.moveTo(3, ends);
+                    chevron.lineTo(7, tip);
+                    chevron.lineTo(11, ends);
+                    g.draw(chevron);
                 }
             }
             g.dispose();

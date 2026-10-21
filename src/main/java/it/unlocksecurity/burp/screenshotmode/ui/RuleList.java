@@ -269,6 +269,7 @@ final class RuleList<R extends Rule> extends JPanel {
         private final JLabel summary = Widgets.hint("");
         private final JLabel swatch = new JLabel();
         private final Pill pill = new Pill();
+        private final JLabel chevron = new JLabel(Widgets.Glyph.CHEVRON_DOWN);
         private final JTextArea problem = Widgets.wrappingHint("", 400);
         private JComponent editorPanel;
         private JComponent firstField;
@@ -297,6 +298,8 @@ final class RuleList<R extends Rule> extends JPanel {
             badges.setOpaque(false);
             badges.add(swatch);
             badges.add(pill);
+            chevron.setForeground(Widgets.mutedColor());
+            badges.add(chevron);
             JPanel badgesHolder = new JPanel(new BorderLayout());
             badgesHolder.setOpaque(false);
             badgesHolder.add(badges, BorderLayout.NORTH);
@@ -335,6 +338,10 @@ final class RuleList<R extends Rule> extends JPanel {
 
         Pill pill() {
             return pill;
+        }
+
+        JLabel chevron() {
+            return chevron;
         }
 
         /** Updates the title, summary and swatch after an edit. */
@@ -399,6 +406,7 @@ final class RuleList<R extends Rule> extends JPanel {
                 editorPanel = null;
                 firstField = null;
             }
+            chevron.setIcon(open ? Widgets.Glyph.CHEVRON_UP : Widgets.Glyph.CHEVRON_DOWN);
             header.repaint();
             revalidate();
             repaint();
