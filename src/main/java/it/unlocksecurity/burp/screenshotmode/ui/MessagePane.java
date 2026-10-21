@@ -6,6 +6,7 @@ import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
@@ -103,8 +104,47 @@ final class MessagePane extends JPanel {
         );
         scroll.setBackground(palette.background());
         scroll.getViewport().setBackground(palette.background());
+        styleScrollBar(scroll.getVerticalScrollBar(), palette);
         view.render(decorated, tokens, palette, mono);
         gutter.setPalette(palette);
+    }
+
+    /**
+     * Colors the scrollbar with the screenshot's palette: Burp's theme would paint a light scrollbar over a dark
+     * screenshot, and the other way round.
+     */
+    private static void styleScrollBar(JScrollBar bar, Palette palette) {
+        Color track = palette.background();
+        Color thumb = mix(palette.border(), palette.muted(), 0.3);
+        bar.setBackground(track);
+        bar.setForeground(thumb);
+        bar.putClientProperty(
+            "FlatLaf.style",
+            "track: " +
+                hex(track) +
+                "; thumb: " +
+                hex(thumb) +
+                "; hoverTrackColor: " +
+                hex(track) +
+                "; hoverThumbColor: " +
+                hex(mix(palette.border(), palette.muted(), 0.6)) +
+                "; pressedTrackColor: " +
+                hex(track) +
+                "; pressedThumbColor: " +
+                hex(palette.muted())
+        );
+    }
+
+    private static Color mix(Color from, Color to, double amount) {
+        return new Color(
+            (int) Math.round(from.getRed() + (to.getRed() - from.getRed()) * amount),
+            (int) Math.round(from.getGreen() + (to.getGreen() - from.getGreen()) * amount),
+            (int) Math.round(from.getBlue() + (to.getBlue() - from.getBlue()) * amount)
+        );
+    }
+
+    private static String hex(Color color) {
+        return String.format("#%06x", color.getRGB() & 0xffffff);
     }
 
     /** Hides scrollbars and selection while the screenshot is taken; the layout is left untouched. */
