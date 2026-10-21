@@ -160,8 +160,8 @@ final class MessageView extends JTextPane {
             if (span.kind() == Decorated.Kind.OPAQUE || span.kind() == Decorated.Kind.REPLACED) {
                 SimpleAttributeSet style = new SimpleAttributeSet();
                 boolean opaque = span.kind() == Decorated.Kind.OPAQUE;
-                StyleConstants.setBackground(style, opaque ? palette.redaction() : Color.BLACK);
-                StyleConstants.setForeground(style, opaque ? palette.redaction() : Color.WHITE);
+                StyleConstants.setBackground(style, palette.redaction());
+                StyleConstants.setForeground(style, opaque ? palette.redaction() : palette.redactionText());
                 document.setCharacterAttributes(span.from(), span.to() - span.from(), style, false);
             }
         }
