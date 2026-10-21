@@ -35,6 +35,8 @@
               ],
               "regex": "(?<=\\n)(?i:(?:Proxy-)?Authorization): (?:(?<AuthScheme>\\S+) )?(?<AuthParameters>.+)",
               "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
               "groups": [
                 2
               ]
@@ -66,6 +68,8 @@
               ],
               "regex": "(?<=\\n)(?i:Set-Cookie): [^=;\\n]+=(?<Value>[^;\\n]*)",
               "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
               "groups": [
                 1
               ]
@@ -115,6 +119,8 @@
               ],
               "regex": "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
               "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
               "groups": [
                 1
               ]
@@ -133,6 +139,8 @@
               ],
               "regex": "\"(?i:password|passwd|pwd|secret|client_secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
               "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
               "groups": [
                 1
               ]
@@ -151,6 +159,8 @@
               ],
               "regex": "(?<=[&\\n])(?i:password|passwd|pwd|client_secret)=(?<Value>[^&\\n]*)",
               "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
               "groups": [
                 1
               ]
@@ -169,6 +179,8 @@
               ],
               "regex": "\"(?i:access_token|refresh_token|id_token|token|session_?id|api_?key|secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
               "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
               "groups": [
                 1
               ]
@@ -188,7 +200,9 @@
                 "url"
               ],
               "regex": "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*",
-              "matchMode": "regex"
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false
             },
             "mode": "replace",
             "replacementText": "[REDACTED]"

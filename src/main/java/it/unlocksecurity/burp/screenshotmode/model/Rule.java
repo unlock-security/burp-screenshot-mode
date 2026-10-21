@@ -22,6 +22,10 @@ public abstract sealed class Rule permits HighlightRule, RedactionRule {
     public String regex = "";
     /** {@link RuleType#PATTERN} only. */
     public MatchMode matchMode = MatchMode.REGEX;
+    /** {@link RuleType#PATTERN} only: off ignores case, in both match modes. */
+    public boolean matchCase = true;
+    /** {@link RuleType#PATTERN} only: a match must not start or end inside a word. */
+    public boolean wholeWord = false;
 
     /** Whether the rule is on and matches in {@code target}: header rules match the headers of both messages. */
     public boolean appliesTo(RuleTarget target) {
@@ -40,5 +44,7 @@ public abstract sealed class Rule permits HighlightRule, RedactionRule {
         copy.targets = targets.isEmpty() ? EnumSet.noneOf(RuleTarget.class) : EnumSet.copyOf(targets);
         copy.regex = regex;
         copy.matchMode = matchMode;
+        copy.matchCase = matchCase;
+        copy.wholeWord = wholeWord;
     }
 }

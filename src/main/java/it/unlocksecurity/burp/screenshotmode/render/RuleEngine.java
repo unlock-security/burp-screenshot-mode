@@ -81,7 +81,7 @@ public final class RuleEngine {
         for (RedactionRule rule : redactions) {
             List<Range> ranges = new ArrayList<>();
             Found found = find(text, rule, false);
-            statuses.accept(rule, status(found, rule.regex, rule.matchMode));
+            statuses.accept(rule, status(found, rule));
             for (Match match : found.matches()) {
                 ranges.addAll(
                     rule.type == RuleType.HEADER
@@ -103,7 +103,7 @@ public final class RuleEngine {
                 rule.mode == HighlightMode.RECTANGLE ? Decorated.Kind.RECTANGLE : Decorated.Kind.HIGHLIGHT;
             Color color = parseColor(rule.color, Color.YELLOW);
             Found found = find(text, rule, true);
-            statuses.accept(rule, status(found, rule.regex, rule.matchMode));
+            statuses.accept(rule, status(found, rule));
             for (Match match : found.matches()) {
                 Range range = new Range(match.from(), match.to());
                 if (redacted.stream().noneMatch(range::overlaps)) {
@@ -219,11 +219,11 @@ public final class RuleEngine {
         return ranges;
     }
 
-    private static RuleStatus status(Found found, String pattern, MatchMode matchMode) {
+    private static RuleStatus status(Found found, Rule rule) {
         return new RuleStatus(
             found.matches().size(),
             found.problem(),
-            found.problem() == RuleStatus.Problem.INVALID ? validate(pattern, matchMode).orElse(null) : null
+            found.problem() == RuleStatus.Problem.INVALID ? validate(rule).orElse(null) : null
         );
     }
 
@@ -231,7 +231,7 @@ public final class RuleEngine {
     private static Found find(String text, Rule rule, boolean wholeLine) {
         return rule.type == RuleType.HEADER
             ? new Found(headerMatches(text, rule.headers, wholeLine), null)
-            : findMatches(text, rule.regex, rule.matchMode);
+            : findMatches(text, rule);
     }
 
     /**
@@ -271,11 +271,11 @@ public final class RuleEngine {
         return matches;
     }
 
-    static Found findMatches(String text, String pattern, MatchMode matchMode) {
+    static Found findMatches(String text, Rule rule) {
         List<Match> matches = new ArrayList<>();
-        Optional<Pattern> compiled = compile(pattern, matchMode);
+        Optional<Pattern> compiled = compile(rule);
         if (compiled.isEmpty()) {
-            boolean invalid = validate(pattern, matchMode).isPresent();
+            boolean invalid = validate(rule).isPresent();
             return new Found(matches, invalid ? RuleStatus.Problem.INVALID : null);
         }
 
@@ -303,27 +303,47 @@ public final class RuleEngine {
         return new Found(matches, null);
     }
 
-    private static Optional<Pattern> compile(String pattern, MatchMode matchMode) {
-        if (pattern == null || pattern.isEmpty()) {
+    /** Where a whole word can start or end: anywhere but between two word characters, Unicode letters included. */
+    private static final String WORD_EDGE = "(?:(?<![\\p{L}\\p{N}_])|(?![\\p{L}\\p{N}_]))";
+
+    /** What a pattern rule matches, with its options applied; empty for no pattern or an invalid one. */
+    private static Optional<Pattern> compile(Rule rule) {
+        if (rule.regex == null || rule.regex.isEmpty()) {
             return Optional.empty();
         }
         try {
-            return Optional.of(Pattern.compile(matchMode == MatchMode.STRING ? Pattern.quote(pattern) : pattern));
+            return Optional.of(compileWithOptions(rule));
         } catch (PatternSyntaxException e) {
             return Optional.empty();
         }
     }
 
-    /** Returns the syntax error of a pattern, if any. */
-    public static Optional<String> validate(String pattern, MatchMode matchMode) {
-        if (matchMode == MatchMode.STRING || pattern == null || pattern.isEmpty()) {
+    private static Pattern compileWithOptions(Rule rule) {
+        String source = rule.matchMode == MatchMode.STRING ? Pattern.quote(rule.regex) : rule.regex;
+        if (rule.wholeWord) {
+            // In a group of its own, so an alternation in the pattern stays between the edges.
+            source = WORD_EDGE + "(?:" + source + ")" + WORD_EDGE;
+        }
+        return Pattern.compile(source, rule.matchCase ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    }
+
+    /** Returns the syntax error of a rule's pattern, if any. */
+    public static Optional<String> validate(Rule rule) {
+        if (rule.matchMode == MatchMode.STRING || rule.regex == null || rule.regex.isEmpty()) {
             return Optional.empty();
         }
         try {
-            Pattern.compile(pattern);
-            return Optional.empty();
+            // On its own first, so the error points into the pattern as typed.
+            Pattern.compile(rule.regex);
         } catch (PatternSyntaxException e) {
             return Optional.of(e.getDescription() + (e.getIndex() >= 0 ? " near index " + e.getIndex() : ""));
+        }
+        try {
+            compileWithOptions(rule);
+            return Optional.empty();
+        } catch (PatternSyntaxException e) {
+            // Such as a comment in (?x) mode, which swallows the end of the whole word group.
+            return Optional.of("Can't match whole words with this pattern");
         }
     }
 
@@ -335,16 +355,21 @@ public final class RuleEngine {
         if (matchMode == MatchMode.STRING) {
             return List.of();
         }
-        return compile(pattern, matchMode)
-            .map(compiled -> {
-                String[] labels = new String[compiled.matcher("").groupCount()];
-                for (int i = 0; i < labels.length; i++) {
-                    labels[i] = String.valueOf(i + 1);
-                }
-                compiled.namedGroups().forEach((name, group) -> labels[group - 1] = name);
-                return List.of(labels);
-            })
-            .orElse(List.of());
+        if (pattern == null || pattern.isEmpty()) {
+            return List.of();
+        }
+        Pattern compiled;
+        try {
+            compiled = Pattern.compile(pattern);
+        } catch (PatternSyntaxException e) {
+            return List.of();
+        }
+        String[] labels = new String[compiled.matcher("").groupCount()];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = String.valueOf(i + 1);
+        }
+        compiled.namedGroups().forEach((name, group) -> labels[group - 1] = name);
+        return List.of(labels);
     }
 
     public static Color parseColor(String hex, Color fallback) {

@@ -105,7 +105,7 @@ class DefaultTemplateTest {
     @Test
     void defaultRedactionsAreValidPatterns() {
         for (RedactionRule rule : DefaultTemplate.settings().redactions) {
-            assertEquals(Optional.empty(), RuleEngine.validate(rule.regex, rule.matchMode), rule.regex);
+            assertEquals(Optional.empty(), RuleEngine.validate(rule), rule.regex);
         }
     }
 

@@ -149,6 +149,8 @@ class TemplateCodecTest {
         assertEquals(RedactionMode.OPAQUE, opaque.mode);
         assertEquals("#123456", opaque.color);
         assertEquals(MatchMode.REGEX, opaque.matchMode, "matchMode defaults to regex");
+        assertTrue(opaque.matchCase, "rules saved before the match options keep matching case");
+        assertFalse(opaque.wholeWord);
     }
 
     @Test
@@ -358,6 +360,8 @@ class TemplateCodecTest {
         pattern.targets.add(RuleTarget.URL);
         pattern.useCaptureGroups = true;
         pattern.selectedGroups = List.of(2);
+        pattern.matchCase = false;
+        pattern.wholeWord = true;
         settings.redactions.add(pattern);
 
         String encoded = TemplateCodec.encode(new StoredData(List.of(Template.create("t", settings)), "x"));
@@ -372,6 +376,8 @@ class TemplateCodecTest {
         assertEquals(EnumSet.of(RuleTarget.RESPONSE, RuleTarget.URL), readPattern.targets);
         assertEquals(List.of(2), readPattern.selectedGroups);
         assertTrue(readPattern.useCaptureGroups);
+        assertFalse(readPattern.matchCase);
+        assertTrue(readPattern.wholeWord);
     }
 
     private static String v2Redactions(String redactions) {

@@ -200,6 +200,8 @@ public final class TemplateCodec {
             match.add("targets", targets);
             match.addProperty("regex", rule.regex);
             match.addProperty("matchMode", rule.matchMode.id());
+            match.addProperty("matchCase", rule.matchCase);
+            match.addProperty("wholeWord", rule.wholeWord);
             if (groups != null) {
                 JsonArray array = new JsonArray();
                 groups.forEach(array::add);
@@ -428,6 +430,8 @@ public final class TemplateCodec {
         }
         rule.regex = string(match, "regex");
         rule.matchMode = optionalMatchMode(match);
+        rule.matchCase = optionalBoolean(match, "matchCase", true);
+        rule.wholeWord = optionalBoolean(match, "wholeWord", false);
         return match.has("groups") ? numberList(match.get("groups"), "match.groups") : null;
     }
 

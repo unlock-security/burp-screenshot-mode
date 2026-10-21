@@ -27,6 +27,7 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.font.TextAttribute;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -698,16 +699,33 @@ final class RuleList<R extends Rule> extends JPanel {
             return;
         }
 
-        JTextField pattern = patternField(rule.regex, rule.matchMode, fields.mono());
+        JTextField pattern = patternField(rule, fields.mono());
         pattern.getAccessibleContext().setAccessibleName("Pattern");
         fields.focusFirst(pattern);
         List<Consumer<String>> patternChanged = new ArrayList<>(1);
-        JToggleButton regex = regexToggle(rule.matchMode, value -> {
-            rule.matchMode = value;
-            setPlaceholder(pattern, value);
+        JToggleButton matchCase = optionToggle("Aa", "Match case", rule.matchCase, value -> {
+            rule.matchCase = value;
+            validate(pattern, rule);
+            fields.changed();
+        });
+        JToggleButton wholeWord = optionToggle("ab", "Match whole word", rule.wholeWord, value -> {
+            rule.wholeWord = value;
+            validate(pattern, rule);
+            fields.changed();
+        });
+        wholeWord.setFont(wholeWord.getFont().deriveFont(Map.of(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON)));
+        JToggleButton regex = optionToggle(".*", "Use regular expression", rule.matchMode == MatchMode.REGEX, value -> {
+            rule.matchMode = value ? MatchMode.REGEX : MatchMode.STRING;
+            setPlaceholder(pattern, rule.matchMode);
             patternChanged.getFirst().accept(rule.regex);
         });
-        fields.add("Pattern", Widgets.withTrailing(pattern, regex));
+        regex.setFont(new Font(Font.MONOSPACED, Font.BOLD, regex.getFont().getSize()));
+        JPanel options = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 1, 0));
+        options.setOpaque(false);
+        options.add(matchCase);
+        options.add(wholeWord);
+        options.add(regex);
+        fields.add("Pattern", Widgets.withTrailing(pattern, options));
         if (groups != null) {
             JPanel groupPanel = new JPanel(new WrapLayout(6, 0));
             groupPanel.setOpaque(false);
@@ -744,13 +762,13 @@ final class RuleList<R extends Rule> extends JPanel {
                     labels.set(newLabels);
                     rebuildGroups.run();
                 }
-                validate(pattern, rule.regex, rule.matchMode);
+                validate(pattern, rule);
                 fields.changed();
             });
         } else {
             patternChanged.add(text -> {
                 rule.regex = text;
-                validate(pattern, rule.regex, rule.matchMode);
+                validate(pattern, rule);
                 fields.changed();
             });
         }
@@ -856,35 +874,25 @@ final class RuleList<R extends Rule> extends JPanel {
         return groups;
     }
 
-    private static JTextField patternField(String text, MatchMode matchMode, Font mono) {
-        JTextField field = new JTextField(text, 12);
+    private static JTextField patternField(Rule rule, Font mono) {
+        JTextField field = new JTextField(rule.regex, 12);
         field.setFont(mono);
-        setPlaceholder(field, matchMode);
-        validate(field, text, matchMode);
+        setPlaceholder(field, rule.matchMode);
+        validate(field, rule);
         return field;
     }
 
     /**
-     * The match mode as a {@code .*} toggle inside the pattern field, as in Burp's and IDEs' search boxes: on for a
-     * regular expression, off for a literal string.
+     * A match option as a small toggle inside the pattern field, as in the search boxes of IDEs: pressed while on.
+     * Tab reaches it and Space flips it; its name is the tooltip and what screen readers announce.
      */
-    private static JToggleButton regexToggle(MatchMode matchMode, Consumer<MatchMode> onChange) {
-        JToggleButton toggle = Widgets.greyedWhenDisabled(new JToggleButton(".*", matchMode == MatchMode.REGEX));
+    private static JToggleButton optionToggle(String text, String name, boolean selected, Consumer<Boolean> onChange) {
+        JToggleButton toggle = Widgets.greyedWhenDisabled(new JToggleButton(text, selected));
         toggle.putClientProperty("JButton.buttonType", "toolBarButton");
-        toggle.setFont(new Font(Font.MONOSPACED, Font.BOLD, toggle.getFont().getSize()));
         toggle.setMargin(new Insets(0, 4, 0, 4));
-        toggle.setFocusable(false);
-        Runnable tooltip = () ->
-            toggle.setToolTipText(
-                toggle.isSelected()
-                    ? "Regular expression (click to match the literal text)"
-                    : "Literal text (click to use a regular expression)"
-            );
-        tooltip.run();
-        toggle.addActionListener(event -> {
-            tooltip.run();
-            onChange.accept(toggle.isSelected() ? MatchMode.REGEX : MatchMode.STRING);
-        });
+        toggle.setToolTipText(name);
+        toggle.getAccessibleContext().setAccessibleName(name);
+        toggle.addActionListener(event -> onChange.accept(toggle.isSelected()));
         return toggle;
     }
 
@@ -896,8 +904,9 @@ final class RuleList<R extends Rule> extends JPanel {
     }
 
     /** Flags invalid patterns (Java regex syntax) instead of silently matching nothing. */
-    private static void validate(JTextField field, String pattern, MatchMode matchMode) {
-        String error = RuleEngine.validate(pattern, matchMode).orElse(null);
+    private static void validate(JTextField field, Rule rule) {
+        MatchMode matchMode = rule.matchMode;
+        String error = RuleEngine.validate(rule).orElse(null);
         Color normal = UIManager.getColor("TextField.foreground");
         field.setForeground(error == null ? normal : Widgets.errorColor());
         field.putClientProperty("JComponent.outline", error == null ? null : "error");

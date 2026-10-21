@@ -220,8 +220,56 @@ class RuleEngineTest {
                 .spans()
                 .isEmpty()
         );
-        assertTrue(RuleEngine.validate("(", MatchMode.REGEX).isPresent());
-        assertTrue(RuleEngine.validate("(", MatchMode.STRING).isEmpty());
+        assertTrue(RuleEngine.validate(highlight("(", MatchMode.REGEX)).isPresent());
+        assertTrue(RuleEngine.validate(highlight("(", MatchMode.STRING)).isEmpty());
+    }
+
+    private static List<String> matched(String text, HighlightRule rule) {
+        Decorated result = RuleEngine.apply(text, List.of(rule), List.of());
+        return result
+            .spans()
+            .stream()
+            .map(s -> slice(result, s))
+            .toList();
+    }
+
+    @Test
+    void matchesCaseOnlyWhenAsked() {
+        HighlightRule literal = highlight("token", MatchMode.STRING);
+        assertEquals(List.of("token"), matched("Token token TOKEN", literal), "matches case by default");
+        literal.matchCase = false;
+        assertEquals(List.of("Token", "token", "TOKEN"), matched("Token token TOKEN", literal));
+
+        HighlightRule regex = highlight("città|ÉTÉ", MatchMode.REGEX);
+        regex.matchCase = false;
+        assertEquals(List.of("CITTÀ", "été"), matched("CITTÀ été", regex), "beyond ASCII too");
+    }
+
+    @Test
+    void matchesWholeWordsOnlyWhenAsked() {
+        HighlightRule literal = highlight("id", MatchMode.STRING);
+        literal.wholeWord = true;
+        assertEquals(List.of("id", "id"), matched("id ids _id uid-id città_id", literal));
+
+        HighlightRule edges = highlight("=abc", MatchMode.STRING);
+        edges.wholeWord = true;
+        assertEquals(List.of("=abc"), matched("x=abc x=abcd", edges), "an edge that is not a word character is one");
+
+        HighlightRule accented = highlight("citt", MatchMode.STRING);
+        accented.wholeWord = true;
+        assertEquals(List.of(), matched("città", accented), "accented letters are word characters");
+
+        HighlightRule alternation = highlight("ab|abc", MatchMode.REGEX);
+        alternation.wholeWord = true;
+        assertEquals(List.of("abc"), matched("abc", alternation), "both alternatives must be whole words");
+    }
+
+    @Test
+    void flagsAWholeWordPatternThatCannotBeWrapped() {
+        HighlightRule comment = highlight("(?x)abc # a comment", MatchMode.REGEX);
+        assertTrue(RuleEngine.validate(comment).isEmpty());
+        comment.wholeWord = true;
+        assertTrue(RuleEngine.validate(comment).isPresent());
     }
 
     @Test
