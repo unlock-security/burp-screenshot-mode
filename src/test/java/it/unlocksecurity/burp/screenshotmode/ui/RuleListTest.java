@@ -69,6 +69,16 @@ class RuleListTest {
     }
 
     @Test
+    void opensARuleFromAnyPartOfItsLine() {
+        RuleList<RedactionRule>.Row row = form.redactionList().row(named("Cookie values"));
+        // The title and the pill have tooltips, which keep mouse events from reaching the line.
+        click(row.titleLabel());
+        assertTrue(row.isExpanded());
+        click(row.pill());
+        assertFalse(row.isExpanded());
+    }
+
+    @Test
     void turnsARuleOffFromItsLine() {
         RedactionRule cookie = named("Cookie values");
         RuleList<RedactionRule>.Row row = form.redactionList().row(cookie);
@@ -117,6 +127,22 @@ class RuleListTest {
         headers.setText("Cookie, X-Session");
         assertEquals(List.of("Cookie", "X-Session"), cookie.headers);
         assertEquals("Header · Cookie and 1 more · Replace with [OMITTED]", row.summaryLabel().getText());
+    }
+
+    private static void click(java.awt.Component component) {
+        component.dispatchEvent(
+            new java.awt.event.MouseEvent(
+                component,
+                java.awt.event.MouseEvent.MOUSE_CLICKED,
+                System.currentTimeMillis(),
+                java.awt.event.InputEvent.BUTTON1_DOWN_MASK,
+                2,
+                2,
+                1,
+                false,
+                java.awt.event.MouseEvent.BUTTON1
+            )
+        );
     }
 
     private static void clickEnabled(RuleList<?>.Row row) {

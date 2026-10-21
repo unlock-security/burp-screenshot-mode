@@ -430,6 +430,11 @@ final class RuleList<R extends Rule> extends JPanel {
                     }
                 };
                 addMouseListener(click);
+                // A label with a tooltip receives the mouse events itself instead of passing them up, so the whole
+                // line, apart from the checkbox, opens the rule.
+                for (JComponent label : List.of(title, summary, swatch, pill)) {
+                    label.addMouseListener(click);
+                }
                 for (String key : List.of("ENTER", "SPACE")) {
                     getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(key), "toggle");
                 }
