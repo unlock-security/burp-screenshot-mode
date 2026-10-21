@@ -36,6 +36,35 @@ class ContentPanelTest {
     }
 
     @Test
+    void keepsTheSplitRatioWhenResized() throws Throwable {
+        Settings settings = DefaultTemplate.settings();
+        settings.disposition = it.unlocksecurity.burp.screenshotmode.model.Disposition.VERTICAL;
+        ContentPanel content = rendered("https://x/", settings);
+        List<Double> saved = new java.util.ArrayList<>();
+        onEdt(() -> {
+            content.setSize(600, 800);
+            RenderPreviewTest.layoutTree(content);
+            content.setSplitRatioListener(saved::add);
+            content.setSplitRatio(0.4137);
+            RenderPreviewTest.layoutTree(content);
+            // Until painted, a split pane gives each side its preferred size instead of sharing out a resize.
+            content.paint(
+                new java.awt.image.BufferedImage(600, 800, java.awt.image.BufferedImage.TYPE_INT_RGB).getGraphics()
+            );
+            // What "Fit to content" does: the split pane rounds while sharing out the lost height.
+            content.setSize(600, 500);
+            RenderPreviewTest.layoutTree(content);
+        });
+        assertEquals(List.of(), saved, "a resize is not a move by the user");
+
+        onEdt(() -> {
+            javax.swing.JSplitPane split = (javax.swing.JSplitPane) content.requestPane().getParent();
+            split.setDividerLocation(200);
+        });
+        assertEquals(1, saved.size(), "a move by the user is");
+    }
+
+    @Test
     void recordsTheRulesThatChangedEachHeaderLine() throws Throwable {
         Settings settings = DefaultTemplate.settings();
         settings.headers.set(

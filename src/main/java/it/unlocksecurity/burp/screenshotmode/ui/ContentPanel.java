@@ -115,7 +115,9 @@ final class ContentPanel extends JPanel {
 
         split.setResizeWeight(splitRatio);
         split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, event -> {
-            if (!applyingRatio && split.getDividerLocation() > 0) {
+            // The split pane moves the divider itself while sharing out a change of size, rounding as it goes:
+            // only a move by the user changes the ratio, or "Fit to content" would leave a pane 1px short.
+            if (!applyingRatio && !split.layingOut && split.getDividerLocation() > 0) {
                 int total = splitTotal();
                 if (total > 0) {
                     splitRatio = Math.max(0.1, Math.min(0.9, split.getDividerLocation() / (double) total));
@@ -374,6 +376,7 @@ final class ContentPanel extends JPanel {
     private static final class PlainSplitPane extends JSplitPane {
 
         private Color dividerColor = Color.GRAY;
+        private boolean layingOut;
 
         PlainSplitPane(MessagePane left, MessagePane right) {
             super(JSplitPane.HORIZONTAL_SPLIT, left, right);
@@ -385,6 +388,16 @@ final class ContentPanel extends JPanel {
         void setDividerColor(Color color) {
             dividerColor = color;
             repaint();
+        }
+
+        @Override
+        public void doLayout() {
+            layingOut = true;
+            try {
+                super.doLayout();
+            } finally {
+                layingOut = false;
+            }
         }
 
         @Override
