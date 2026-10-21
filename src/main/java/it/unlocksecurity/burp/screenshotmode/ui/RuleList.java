@@ -792,13 +792,15 @@ final class RuleList<R extends Rule> extends JPanel {
     }
 
     /** The catalog's groups, each a submenu of its headers, checked when the rule names them. */
-    private static JPopupMenu headerMenu(Rule rule, HeaderCatalog catalog, JTextField field) {
+    /** Stays open while headers are ticked with the mouse, as a rule usually names several; Escape closes it. */
+    static JPopupMenu headerMenu(Rule rule, HeaderCatalog catalog, JTextField field) {
         JPopupMenu menu = new JPopupMenu();
         for (HeaderCatalog.Group group : catalog.groups()) {
             JMenu submenu = new JMenu(group.label());
             for (HeaderCatalog.Header header : group.headers()) {
                 boolean named = rule.headers.stream().anyMatch(header.name()::equalsIgnoreCase);
                 JCheckBoxMenuItem item = new JCheckBoxMenuItem(header.name(), named);
+                item.putClientProperty("CheckBoxMenuItem.doNotCloseOnMouseClick", true);
                 item.addActionListener(event -> {
                     List<String> headers = new ArrayList<>(rule.headers);
                     headers.removeIf(header.name()::equalsIgnoreCase);

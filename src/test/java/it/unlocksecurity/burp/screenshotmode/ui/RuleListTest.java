@@ -148,6 +148,27 @@ class RuleListTest {
         );
     }
 
+    @Test
+    void keepsTheHeaderMenuOpenWhileHeadersAreTicked() {
+        RedactionRule rule = RedactionRule.forHeaders(List.of(), RedactionMode.REPLACE);
+        javax.swing.JTextField field = new javax.swing.JTextField();
+        javax.swing.JPopupMenu menu = RuleList.headerMenu(
+            rule,
+            it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile.bundled(),
+            field
+        );
+        javax.swing.JMenu group = (javax.swing.JMenu) menu.getComponent(0);
+        javax.swing.JCheckBoxMenuItem first = (javax.swing.JCheckBoxMenuItem) group.getMenuComponent(0);
+        javax.swing.JCheckBoxMenuItem second = (javax.swing.JCheckBoxMenuItem) group.getMenuComponent(1);
+        assertEquals(Boolean.TRUE, first.getClientProperty("CheckBoxMenuItem.doNotCloseOnMouseClick"));
+
+        // The field updates the rule as it changes, so a second tick in the same menu adds to the first.
+        Widgets.onTextChange(field, text -> rule.headers = List.of(text.split(", ")));
+        first.doClick();
+        second.doClick();
+        assertEquals(first.getText() + ", " + second.getText(), field.getText());
+    }
+
     private static void clickEnabled(RuleList<?>.Row row) {
         for (java.awt.Component component : row.header().getComponents()) {
             if (component instanceof javax.swing.JCheckBox box) {
