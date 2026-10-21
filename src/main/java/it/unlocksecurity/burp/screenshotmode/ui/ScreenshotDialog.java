@@ -551,12 +551,7 @@ final class ScreenshotDialog extends JDialog {
     }
 
     private void saveAsNewTemplate() {
-        String name = JOptionPane.showInputDialog(
-            this,
-            "Template name:",
-            "Save As New Template",
-            JOptionPane.PLAIN_MESSAGE
-        );
+        String name = Widgets.askText(this, "Template name:", "Save As New Template");
         if (name == null || name.isBlank()) {
             return;
         }

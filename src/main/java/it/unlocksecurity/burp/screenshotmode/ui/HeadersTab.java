@@ -806,7 +806,7 @@ final class HeadersTab extends JPanel {
 
     /** Asks for a header name and hides it, then shows its row. */
     private void addHeader() {
-        String input = JOptionPane.showInputDialog(this, "Header name:", "Hide a Header", JOptionPane.PLAIN_MESSAGE);
+        String input = Widgets.askText(this, "Header name:", "Hide a Header");
         if (input == null) {
             return;
         }

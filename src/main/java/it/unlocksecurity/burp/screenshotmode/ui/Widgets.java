@@ -18,6 +18,8 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.util.function.Consumer;
@@ -27,7 +29,9 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JColorChooser;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -192,6 +196,41 @@ final class Widgets {
     static JButton primary(JButton button) {
         button.putClientProperty("FlatLaf.styleClass", "primary");
         return button;
+    }
+
+    /**
+     * Asks for a line of text, like {@link JOptionPane#showInputDialog(Component, Object, String, int)} but with OK as
+     * the primary, default button.
+     *
+     * @return the text entered, or {@code null} when cancelled
+     */
+    static String askText(Component parent, String label, String title) {
+        JTextField field = new JTextField(20);
+        JButton ok = primary(button("OK"));
+        JButton cancel = button("Cancel");
+        JOptionPane pane = new JOptionPane(
+            new Object[] { label, field },
+            JOptionPane.PLAIN_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { ok, cancel }
+        );
+        // Custom option buttons don't close the pane on their own.
+        ok.addActionListener(event -> pane.setValue(ok));
+        cancel.addActionListener(event -> pane.setValue(cancel));
+        JDialog dialog = pane.createDialog(parent, title);
+        dialog.getRootPane().setDefaultButton(ok);
+        dialog.addWindowListener(
+            new WindowAdapter() {
+                @Override
+                public void windowOpened(WindowEvent event) {
+                    field.requestFocusInWindow();
+                }
+            }
+        );
+        dialog.setVisible(true);
+        dialog.dispose();
+        return pane.getValue() == ok ? field.getText() : null;
     }
 
     /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */
