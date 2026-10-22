@@ -247,12 +247,15 @@ final class ScreenshotDialog extends JDialog {
         failedRules.setForeground(Widgets.errorColor());
         failedRules.setVisible(false);
 
+        // What is always there on the left, what comes and goes on the right: nothing moves when a warning shows.
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         left.add(output);
-        left.add(failedRules);
         left.add(tip);
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        right.add(failedRules);
         JPanel bar = new JPanel(new BorderLayout(8, 0));
         bar.add(left, BorderLayout.CENTER);
+        bar.add(right, BorderLayout.EAST);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
