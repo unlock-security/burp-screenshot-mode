@@ -445,7 +445,7 @@ final class SettingsForm extends JPanel {
 
     static String describe(RuleStatus status) {
         if (status.problem() == RuleStatus.Problem.INVALID) {
-            return "⚠ Not applied: invalid regex" + (status.detail() == null ? "" : " (" + status.detail() + ")");
+            return "⚠ Invalid regex" + (status.detail() == null ? "" : ": " + status.detail());
         }
         if (status.problem() == RuleStatus.Problem.STOPPED) {
             return "⚠ Partly applied: matching stopped early, the pattern is too slow for this message";

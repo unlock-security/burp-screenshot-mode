@@ -210,7 +210,7 @@ class RuleListTest {
         java.awt.Component pattern = find(row.editorPanel(), "Pattern");
         java.awt.Component problem = null;
         for (java.awt.Component component : row.editorPanel().getComponents()) {
-            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith("⚠ Not applied")) {
+            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith("⚠ Invalid regex")) {
                 problem = area;
             }
         }

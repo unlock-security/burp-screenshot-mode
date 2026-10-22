@@ -191,7 +191,7 @@ class ContentPanelTest {
         assertEquals("1 match", SettingsForm.describe(new RuleStatus(1, null, null)));
         assertEquals("3 matches", SettingsForm.describe(new RuleStatus(3, null, null)));
         assertEquals(
-            "⚠ Not applied: invalid regex (Unclosed group near index 1)",
+            "⚠ Invalid regex: Unclosed group near index 1",
             SettingsForm.describe(new RuleStatus(0, RuleStatus.Problem.INVALID, "Unclosed group near index 1"))
         );
         assertTrue(
