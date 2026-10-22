@@ -3,7 +3,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
@@ -25,7 +25,9 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -39,6 +41,7 @@ import javax.swing.RowFilter;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -66,6 +69,9 @@ public final class TemplatesTab extends JPanel {
     private final JButton duplicate = Widgets.button("Duplicate");
     private final JButton setDefault = Widgets.button("Set as default");
     private final JButton delete = Widgets.button("Delete");
+    private final JButton exportButton = Widgets.button("Export…");
+    /** The editor's "Based on" choice, while a new template is being edited. */
+    private JComboBox<Template> basedOn;
     private Predicate<String> confirmDiscard = this::askDiscard;
 
     public TemplatesTab(TemplateStore store, Host host) {
@@ -97,19 +103,22 @@ public final class TemplatesTab extends JPanel {
         );
 
         JButton create = Widgets.primary(Widgets.button("New template"));
-        create.addActionListener(event -> openEditor(null, false));
-        edit.addActionListener(event -> selected().ifPresent(template -> openEditor(template, false)));
+        create.setToolTipText("Create a template starting from a built-in one");
+        create.addActionListener(event ->
+            openEditor(store.getTemplateById(BuiltInTemplates.DEFAULTS_ID).orElseThrow(), Mode.NEW, "")
+        );
+        edit.addActionListener(event -> selected().ifPresent(this::editOrExplain));
         duplicate.setToolTipText("Create a new template starting from the selected one");
-        duplicate.addActionListener(event -> selected().ifPresent(template -> openEditor(template, true)));
+        duplicate.addActionListener(event ->
+            selected().ifPresent(template -> openEditor(template, Mode.DUPLICATE, null))
+        );
         setDefault.addActionListener(event -> selected().ifPresent(this::makeDefault));
         delete.addActionListener(event -> selected().ifPresent(this::delete));
         JButton importButton = Widgets.button("Import…");
         importButton.setToolTipText("Add templates from a JSON export");
         importButton.addActionListener(event -> importTemplates());
-        JButton exportButton = Widgets.button("Export…");
         exportButton.addActionListener(event -> exportTemplates());
-
-        exportButton.setToolTipText("Save all templates to a JSON file");
+        exportButton.setToolTipText("Save your templates to a JSON file (built-in ones are not included)");
 
         // Actions on the selected template together, Delete set apart from them, file actions and the primary
         // action on the right.
@@ -150,7 +159,7 @@ public final class TemplatesTab extends JPanel {
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     if (e.getClickCount() == 2 && table.rowAtPoint(e.getPoint()) >= 0) {
-                        selected().ifPresent(template -> openEditor(template, false));
+                        selected().ifPresent(TemplatesTab.this::editOrExplain);
                     }
                 }
             }
@@ -174,17 +183,30 @@ public final class TemplatesTab extends JPanel {
         return panel;
     }
 
-    /**
-     * @param template  the template to edit or duplicate, {@code null} to create one from the default settings
-     * @param duplicate create a new template starting from {@code template}'s settings (not in the Caido plugin)
-     */
-    private JComponent buildEditor(Template template, boolean duplicate) {
-        boolean editing = template != null && !duplicate;
-        Settings original = template != null ? template.settings.copy() : DefaultTemplate.settings();
-        Settings working = original.copy();
-        String originalName = editing ? template.name : duplicate ? copyName(template.name) : "";
+    /** What the editor does with the template it is opened on. */
+    private enum Mode {
+        /** Creates a template starting from a built-in one, which can be changed in "Based on". */
+        NEW,
+        EDIT,
+        /** Creates a template starting from any template's settings. */
+        DUPLICATE,
+    }
 
-        JTextField name = new JTextField(originalName, 30);
+    /**
+     * @param template  the template to edit or duplicate, or the built-in one a new template starts from
+     * @param typedName for a new template, the name already typed before switching built-in template
+     */
+    private JComponent buildEditor(Template template, Mode mode, String typedName) {
+        boolean editing = mode == Mode.EDIT;
+        Settings original = template.settings.copy();
+        Settings working = original.copy();
+        String originalName = switch (mode) {
+            case NEW -> "";
+            case EDIT -> template.name;
+            case DUPLICATE -> copyName(template.name);
+        };
+
+        JTextField name = new JTextField(mode == Mode.NEW ? typedName : originalName, 30);
         Widgets.placeholder(name, "Template name");
         JLabel unsaved = Widgets.chip("Unsaved");
         unsaved.setToolTipText("This template has changes that are not saved yet");
@@ -211,17 +233,19 @@ public final class TemplatesTab extends JPanel {
         JButton cancel = Widgets.button("Cancel");
         String displayName = originalName.isBlank() ? "this template" : "\"" + originalName + "\"";
         cancel.addActionListener(event -> {
-            if (!dirty.getAsBoolean() || confirmDiscard.test(displayName)) {
+            if (
+                !dirty.getAsBoolean() || confirmDiscard.test("Your changes to " + displayName + " haven't been saved.")
+            ) {
                 showList();
             }
         });
 
         JLabel title = new JLabel(
-            editing
-                ? "Edit \"" + template.name + "\""
-                : duplicate
-                  ? "Duplicate \"" + template.name + "\""
-                  : "New template"
+            switch (mode) {
+                case NEW -> "New template";
+                case EDIT -> "Edit \"" + template.name + "\"";
+                case DUPLICATE -> "Duplicate \"" + template.name + "\"";
+            }
         );
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 3));
         JPanel heading = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -247,6 +271,40 @@ public final class TemplatesTab extends JPanel {
         nameRow.setBorder(BorderFactory.createEmptyBorder(14, 0, 10, 0));
         nameRow.add(nameLabel);
         nameRow.add(name);
+        basedOn = null;
+        if (mode == Mode.NEW) {
+            JComboBox<Template> base = new JComboBox<>(
+                store
+                    .templates()
+                    .stream()
+                    .filter(candidate -> candidate.builtIn)
+                    .toArray(Template[]::new)
+            );
+            base.setSelectedItem(template);
+            base.setToolTipText("The built-in template whose settings the new template starts from");
+            base.addActionListener(event -> {
+                if (!(base.getSelectedItem() instanceof Template chosen) || chosen == template) {
+                    return;
+                }
+                if (
+                    TemplateCodec.sameSettings(original, working) ||
+                    confirmDiscard.test(
+                        "Starting from \"" + chosen.name + "\" discards the changes you made to the settings."
+                    )
+                ) {
+                    openEditor(chosen, Mode.NEW, name.getText());
+                    basedOn.requestFocusInWindow();
+                } else {
+                    base.setSelectedItem(template);
+                }
+            });
+            JLabel baseLabel = Widgets.title("Based on");
+            baseLabel.setLabelFor(base);
+            baseLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
+            nameRow.add(baseLabel);
+            nameRow.add(base);
+            basedOn = base;
+        }
 
         JPanel body = new JPanel(new BorderLayout());
         body.add(nameRow, BorderLayout.NORTH);
@@ -259,22 +317,38 @@ public final class TemplatesTab extends JPanel {
         return panel;
     }
 
-    private boolean askDiscard(String templateName) {
-        Object[] options = { "Discard", "Keep editing" };
-        int answer = JOptionPane.showOptionDialog(
-            this,
-            "Your changes to " + templateName + " haven't been saved.",
-            "Discard changes?",
-            JOptionPane.DEFAULT_OPTION,
-            JOptionPane.WARNING_MESSAGE,
-            null,
-            options,
-            options[1]
-        );
-        return answer == 0;
+    /** Asks before discarding edits, explained by {@code message}. Keep editing is the default. */
+    private boolean askDiscard(String message) {
+        return confirm("Discard changes?", message, "Discard", "Keep editing");
     }
 
-    /** Replaces the "discard unsaved changes?" dialog, for tests. */
+    /**
+     * Asks a two-option question whose safe choice is the primary, default one.
+     *
+     * @return whether the user chose {@code action}
+     */
+    private boolean confirm(String title, String message, String action, String safe) {
+        JButton act = Widgets.button(action);
+        JButton keep = Widgets.primary(Widgets.button(safe));
+        JOptionPane pane = new JOptionPane(
+            message,
+            JOptionPane.WARNING_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { act, keep },
+            keep
+        );
+        // Custom option buttons don't close the pane on their own.
+        act.addActionListener(event -> pane.setValue(act));
+        keep.addActionListener(event -> pane.setValue(keep));
+        JDialog dialog = pane.createDialog(this, title);
+        dialog.getRootPane().setDefaultButton(keep);
+        dialog.setVisible(true);
+        dialog.dispose();
+        return pane.getValue() == act;
+    }
+
+    /** Replaces the "discard unsaved changes?" dialog (given its message), for tests. */
     void setDiscardConfirmation(Predicate<String> confirmation) {
         this.confirmDiscard = confirmation;
     }
@@ -310,9 +384,18 @@ public final class TemplatesTab extends JPanel {
         };
     }
 
-    private void openEditor(Template template, boolean duplicate) {
+    /** Built-in templates can't be edited: says so instead of opening them. */
+    private void editOrExplain(Template template) {
+        if (template.builtIn) {
+            showInfo("\"" + template.name + "\" is built in and can't be edited. Duplicate it to make your own.");
+        } else {
+            openEditor(template, Mode.EDIT, null);
+        }
+    }
+
+    private void openEditor(Template template, Mode mode, String typedName) {
         editorHolder.removeAll();
-        editorHolder.add(buildEditor(template, duplicate), BorderLayout.CENTER);
+        editorHolder.add(buildEditor(template, mode, typedName), BorderLayout.CENTER);
         editorHolder.revalidate();
         cards.show(this, EDITOR);
     }
@@ -327,6 +410,7 @@ public final class TemplatesTab extends JPanel {
             .map(template -> template.id)
             .orElse(null);
         model.setTemplates(store.templates(), store.defaultTemplateId());
+        exportButton.setEnabled(customTemplates() > 0);
         if (selectedId != null) {
             for (int row = 0; row < model.getRowCount(); row++) {
                 if (model.template(row).id.equals(selectedId)) {
@@ -348,11 +432,22 @@ public final class TemplatesTab extends JPanel {
     private void updateButtons() {
         Optional<Template> selected = selected();
         boolean isDefault = selected.map(template -> template.id.equals(store.defaultTemplateId())).orElse(false);
-        edit.setEnabled(selected.isPresent());
+        boolean builtIn = selected.map(template -> template.builtIn).orElse(false);
+        String builtInReason = builtIn ? "Built-in templates can't be changed: duplicate it to make your own" : null;
+        edit.setEnabled(selected.isPresent() && !builtIn);
+        edit.setToolTipText(builtInReason);
         duplicate.setEnabled(selected.isPresent());
         setDefault.setEnabled(selected.isPresent() && !isDefault);
-        delete.setEnabled(selected.isPresent() && !isDefault);
-        delete.setToolTipText(isDefault ? "The default template cannot be deleted" : null);
+        delete.setEnabled(selected.isPresent() && !builtIn);
+        delete.setToolTipText(builtInReason);
+    }
+
+    private long customTemplates() {
+        return store
+            .templates()
+            .stream()
+            .filter(template -> !template.builtIn)
+            .count();
     }
 
     private void makeDefault(Template template) {
@@ -362,18 +457,12 @@ public final class TemplatesTab extends JPanel {
     }
 
     private void delete(Template template) {
+        String message = "Are you sure you want to delete \"" + template.name + "\"?";
         if (template.id.equals(store.defaultTemplateId())) {
-            showStatus("Cannot delete the default template", true);
-            return;
+            Template defaults = store.getTemplateById(BuiltInTemplates.DEFAULTS_ID).orElseThrow();
+            message += "\nIt is the default template: \"" + defaults.name + "\" will become the default.";
         }
-        int answer = JOptionPane.showConfirmDialog(
-            this,
-            "Are you sure you want to delete \"" + template.name + "\"?",
-            "Delete Template",
-            JOptionPane.YES_NO_OPTION,
-            JOptionPane.WARNING_MESSAGE
-        );
-        if (answer == JOptionPane.YES_OPTION && store.deleteTemplate(template.id)) {
+        if (confirm("Delete Template", message, "Delete", "Cancel") && store.deleteTemplate(template.id)) {
             showStatus("Template deleted", false);
         }
     }
@@ -403,17 +492,18 @@ public final class TemplatesTab extends JPanel {
     private void exportTemplates() {
         File file = writeJson("Export Templates", "screenshot-mode-templates.json", store.exportJson());
         if (file != null) {
-            showStatus("Exported " + store.templates().size() + " templates to " + file.getName(), false);
+            long count = customTemplates();
+            showStatus("Exported " + count + " template" + (count == 1 ? "" : "s") + " to " + file.getName(), false);
         }
     }
 
     /**
-     * Shown when the saved templates could not be read at startup: the default template replaced them, and the
+     * Shown when the saved templates could not be read at startup: only the built-in templates are left, and the
      * original data can be saved to a file to recover it.
      */
     private JComponent unreadableNotice(String json) {
         JTextArea text = Widgets.wrappingHint(
-            "Your saved templates could not be read, so Screenshot Mode started from the default template. " +
+            "Your saved templates could not be read, so Screenshot Mode started with the built-in templates only. " +
                 "A copy of the original data was kept.",
             900
         );
@@ -468,15 +558,31 @@ public final class TemplatesTab extends JPanel {
         statusTimer.restart();
     }
 
+    /** A status that is neither a success nor an error. */
+    private void showInfo(String message) {
+        status.setForeground(UIManager.getColor("Label.foreground"));
+        status.setText(message);
+        statusTimer.restart();
+    }
+
     private static final class TemplateTableModel extends AbstractTableModel {
 
         static final int DEFAULT = 0;
         static final int NAME = 1;
-        static final int LAYOUT = 2;
-        static final int WIDTH = 3;
-        static final int HIGHLIGHTS = 4;
-        static final int REDACTIONS = 5;
-        private static final String[] COLUMNS = { "Default", "Name", "Layout", "Width", "Highlights", "Redactions" };
+        static final int TYPE = 2;
+        static final int LAYOUT = 3;
+        static final int WIDTH = 4;
+        static final int HIGHLIGHTS = 5;
+        static final int REDACTIONS = 6;
+        private static final String[] COLUMNS = {
+            "Default",
+            "Name",
+            "Type",
+            "Layout",
+            "Width",
+            "Highlights",
+            "Redactions",
+        };
 
         private List<Template> templates = List.of();
         private String defaultId = "";
@@ -512,6 +618,7 @@ public final class TemplatesTab extends JPanel {
             return switch (column) {
                 case DEFAULT -> template.id.equals(defaultId) ? "★" : "";
                 case NAME -> template.name;
+                case TYPE -> template.builtIn ? "Built-in" : "Custom";
                 case LAYOUT -> template.settings.disposition.label();
                 case WIDTH -> template.settings.widthMode == WidthMode.PIXEL
                     ? template.settings.widthPixels + "px"

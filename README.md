@@ -36,7 +36,7 @@ No external tools, no manual cropping and blurring.
   matches a regex or literal text in the request, the response, the URL or any of them, and a redaction can be
   limited to selected capture groups (e.g. `session=([0-9a-f]+)` redacts only the value).
 - **One list of rules**: each rule has an optional name, an on/off checkbox and a one-line summary, and opens into
-  its editor when clicked. The default template comes with named redactions for credentials, cookies, API keys,
+  its editor when clicked. The built-in *Defaults* template comes with named redactions for credentials, cookies, API keys,
   passwords, tokens and JWTs, including in the URL, so a secret in the request line doesn't show up above it.
 - **Rule checks**: in the screenshot window, each rule shows how many times it matched. A redaction with an invalid
   or too slow pattern is flagged on its line, on the *Rules* tab and above the preview, and **Copy** and **Save** ask
@@ -53,7 +53,9 @@ No external tools, no manual cropping and blurring.
   out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
   redact those too if it must not show.
 - **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
-  suite tab, and import/export them as JSON.
+  suite tab, and import/export them as JSON. Two built-in templates ship with the extension and are updated with it:
+  *Defaults* (noisy headers hidden, secrets redacted) and *Empty* (messages as they are). They can't be edited or
+  deleted: start a new template from one of them, or duplicate it.
 - **Export** as a 2× PNG file or straight to the clipboard.
 
 ## Screenshots

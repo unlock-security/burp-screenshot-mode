@@ -6,14 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import java.awt.Font;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class SettingsFormNoticeTest {
 
-    private final Settings settings = DefaultTemplate.settings();
+    private final Settings settings = BuiltInTemplates.defaults();
     private final SettingsForm form = new SettingsForm(
         settings,
         () -> {},

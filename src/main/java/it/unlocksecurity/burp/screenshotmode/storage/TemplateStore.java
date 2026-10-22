@@ -9,8 +9,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
 /**
- * Port of the Caido templates store. Templates handed out are the stored instances and must be treated as
- * read-only: callers copy {@link Template#settings} before editing.
+ * The built-in templates followed by the user's own, which are the only ones stored. Templates handed out are the
+ * store's instances and must be treated as read-only: callers copy {@link Template#settings} before editing.
  */
 public final class TemplateStore {
 
@@ -22,8 +22,9 @@ public final class TemplateStore {
     private final Consumer<String> log;
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
+    private final List<Template> builtIns = BuiltInTemplates.all();
     private List<Template> templates = new ArrayList<>();
-    private String defaultTemplateId = "";
+    private String defaultTemplateId = BuiltInTemplates.DEFAULTS_ID;
     private String unreadable;
 
     public TemplateStore(PreferenceStore preferences, Consumer<String> log) {
@@ -35,7 +36,7 @@ public final class TemplateStore {
         String stored = preferences.get(STORAGE_KEY);
         TemplateCodec.Decoded decoded;
         if (stored == null || stored.isBlank()) {
-            decoded = new TemplateCodec.Decoded(TemplateCodec.createDefault(), true);
+            decoded = new TemplateCodec.Decoded(empty(), true);
         } else {
             try {
                 decoded = TemplateCodec.decode(stored);
@@ -45,11 +46,11 @@ public final class TemplateStore {
                 log.accept(
                     "Could not read the saved templates (" +
                         e.getMessage() +
-                        "). Started from the default template; the original data is kept in the preference " +
+                        "). Started from the built-in templates; the original data is kept in the preference " +
                         UNREADABLE_KEY +
                         "."
                 );
-                decoded = new TemplateCodec.Decoded(TemplateCodec.createDefault(), true);
+                decoded = new TemplateCodec.Decoded(empty(), true);
             }
         }
         templates = new ArrayList<>(decoded.data().templates());
@@ -65,8 +66,11 @@ public final class TemplateStore {
         return Optional.ofNullable(unreadable);
     }
 
+    /** The built-in templates first, then the user's own in the order they were created. */
     public List<Template> templates() {
-        return List.copyOf(templates);
+        List<Template> all = new ArrayList<>(builtIns);
+        all.addAll(templates);
+        return List.copyOf(all);
     }
 
     public String defaultTemplateId() {
@@ -74,13 +78,16 @@ public final class TemplateStore {
     }
 
     public Template createTemplate(String name, Settings settings) {
-        Template template = Template.create(name, (settings == null ? DefaultTemplate.settings() : settings).copy());
+        Template template = Template.create(name, (settings == null ? BuiltInTemplates.defaults() : settings).copy());
         templates.add(template);
         persistAndNotify();
         return template;
     }
 
-    /** Updates the name and/or settings (either may be {@code null} to keep the current value). */
+    /**
+     * Updates the name and/or settings (either may be {@code null} to keep the current value). Built-in templates are
+     * never updated.
+     */
     public Optional<Template> updateTemplate(String id, String name, Settings settings) {
         for (int i = 0; i < templates.size(); i++) {
             Template current = templates.get(i);
@@ -98,12 +105,13 @@ public final class TemplateStore {
         return Optional.empty();
     }
 
+    /** Deletes one of the user's templates; Defaults becomes the default template if it was. */
     public boolean deleteTemplate(String id) {
-        if (id.equals(defaultTemplateId)) {
-            return false;
-        }
         boolean removed = templates.removeIf(template -> template.id.equals(id));
         if (removed) {
+            if (id.equals(defaultTemplateId)) {
+                defaultTemplateId = BuiltInTemplates.DEFAULTS_ID;
+            }
             persistAndNotify();
         }
         return removed;
@@ -119,13 +127,11 @@ public final class TemplateStore {
     }
 
     public Template getDefaultTemplate() {
-        return getTemplateById(defaultTemplateId)
-            .or(() -> templates.stream().findFirst())
-            .orElseGet(() -> new Template("", "Default", DefaultTemplate.settings()));
+        return getTemplateById(defaultTemplateId).orElse(builtIns.getFirst());
     }
 
     public Optional<Template> getTemplateById(String id) {
-        return templates
+        return templates()
             .stream()
             .filter(template -> template.id.equals(id))
             .findFirst();
@@ -147,6 +153,7 @@ public final class TemplateStore {
         return imported.size();
     }
 
+    /** The user's templates, as an export: the built-in ones ship with every installation. */
     public String exportJson() {
         return TemplateCodec.encode(new StoredData(templates, defaultTemplateId));
     }
@@ -157,6 +164,10 @@ public final class TemplateStore {
 
     public void removeListener(Runnable listener) {
         listeners.remove(listener);
+    }
+
+    private static StoredData empty() {
+        return new StoredData(new ArrayList<>(), BuiltInTemplates.DEFAULTS_ID);
     }
 
     private void persistAndNotify() {

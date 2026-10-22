@@ -198,7 +198,6 @@ final class ScreenshotDialog extends JDialog {
         templateCombo.setPrototypeDisplayValue(new Template("", "Client report – redacted tokens", null));
         revert.setToolTipText("Discard the changes and go back to the template's settings");
         revert.addActionListener(event -> resetToTemplate());
-        update.setToolTipText("Save the current settings into the selected template");
         update.addActionListener(event -> updateTemplate());
         JButton saveAs = Widgets.button("Save as new…");
         saveAs.setToolTipText("Create a new template from the current settings");
@@ -314,7 +313,13 @@ final class ScreenshotDialog extends JDialog {
         );
         modified.setVisible(differs || deleted);
         revert.setEnabled(differs);
-        update.setEnabled(differs);
+        boolean builtIn = template.map(selected -> selected.builtIn).orElse(false);
+        update.setEnabled(differs && !builtIn);
+        update.setToolTipText(
+            builtIn
+                ? "Built-in templates can't be changed: use Save as new… to keep these settings"
+                : "Save the current settings into the selected template"
+        );
     }
 
     /** Whether switching template would lose settings: changed for this message, or left by a deleted template. */

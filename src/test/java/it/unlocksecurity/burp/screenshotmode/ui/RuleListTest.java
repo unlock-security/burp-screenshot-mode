@@ -12,7 +12,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import java.awt.Font;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -23,7 +23,7 @@ class RuleListTest {
 
     private static final Font MONO = new Font(Font.MONOSPACED, Font.PLAIN, 12);
 
-    private final Settings settings = DefaultTemplate.settings();
+    private final Settings settings = BuiltInTemplates.defaults();
     private int changes;
     private final SettingsForm form = new SettingsForm(settings, () -> changes++, MONO, false);
 

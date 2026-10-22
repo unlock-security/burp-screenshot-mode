@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import java.awt.Component;
 import java.awt.Container;
@@ -26,7 +26,7 @@ class HeadersTabTest {
         List.of("date", "content-type", "content-length", "etag", "x-backend")
     );
 
-    private final Settings settings = DefaultTemplate.settings();
+    private final Settings settings = BuiltInTemplates.defaults();
     private int changes;
 
     private HeadersTab tab(HeadersTab.InMessage message) {

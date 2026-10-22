@@ -2,8 +2,8 @@
   "version": 3,
   "templates": [
     {
-      "id": "default",
-      "name": "Default",
+      "id": "built-in-defaults",
+      "name": "Defaults",
       "settings": {
         "headers": {
           "groups": {
@@ -214,7 +214,28 @@
         "view": "raw",
         "url": "full"
       }
+    },
+    {
+      "id": "built-in-empty",
+      "name": "Empty",
+      "settings": {
+        "headers": {
+          "groups": {},
+          "headers": {}
+        },
+        "disposition": "horizontal",
+        "width": {
+          "mode": "full"
+        },
+        "highlights": [],
+        "redactions": [],
+        "showTimestamp": false,
+        "showResponseInfo": true,
+        "theme": "auto",
+        "view": "raw",
+        "url": "full"
+      }
     }
   ],
-  "defaultTemplateId": "default"
+  "defaultTemplateId": "built-in-defaults"
 }

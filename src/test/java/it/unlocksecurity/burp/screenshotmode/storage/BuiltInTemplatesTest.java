@@ -9,41 +9,70 @@ import it.unlocksecurity.burp.screenshotmode.model.HeaderVisibility;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
-class DefaultTemplateTest {
+class BuiltInTemplatesTest {
 
     @Test
     void isStoredInTheCurrentFormat() {
         // Bump the file together with TemplateCodec.VERSION: a migrated default would lose settings.
-        assertFalse(TemplateCodec.decode(DefaultTemplate.json()).migrated());
+        assertFalse(TemplateCodec.decode(BuiltInTemplates.json()).migrated());
     }
 
     @Test
     void isWhatTheCodecWrites() {
         // So no setting is missing from the file and silently left to its fallback.
         assertEquals(
-            DefaultTemplate.json().strip(),
-            TemplateCodec.encode(TemplateCodec.decode(DefaultTemplate.json()).data())
+            BuiltInTemplates.json().strip(),
+            TemplateCodec.encode(TemplateCodec.decode(BuiltInTemplates.json()).data())
         );
     }
 
     @Test
+    void shipsDefaultsFirstThenEmpty() {
+        List<Template> templates = BuiltInTemplates.all();
+        assertEquals(
+            List.of(BuiltInTemplates.DEFAULTS_ID, BuiltInTemplates.EMPTY_ID),
+            templates
+                .stream()
+                .map(template -> template.id)
+                .toList()
+        );
+        assertEquals(List.of("Defaults", "Empty"), templates.stream().map(Template::toString).toList());
+        assertTrue(templates.stream().allMatch(template -> template.builtIn));
+    }
+
+    @Test
+    void emptyHidesAndRedactsNothingAndLooksLikeDefaults() {
+        Settings empty = BuiltInTemplates.all().getLast().settings;
+        assertTrue(empty.highlights.isEmpty());
+        assertTrue(empty.redactions.isEmpty());
+        assertTrue(empty.headers.groups.isEmpty());
+        assertTrue(empty.headers.headers.isEmpty());
+        // Only rules and headers differ: the screenshot is laid out the same way.
+        Settings defaults = BuiltInTemplates.defaults();
+        defaults.redactions.clear();
+        defaults.headers = empty.headers;
+        assertTrue(TemplateCodec.sameSettings(defaults, empty));
+    }
+
+    @Test
     void givesEachCallerItsOwnCopy() {
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         settings.redactions.clear();
         settings.headers.groups.clear();
-        assertEquals(10, DefaultTemplate.settings().redactions.size());
-        assertEquals(8, DefaultTemplate.settings().headers.groups.size());
+        assertEquals(10, BuiltInTemplates.defaults().redactions.size());
+        assertEquals(8, BuiltInTemplates.defaults().headers.groups.size());
     }
 
     @Test
     void hidesNoiseAndKeepsWhatCanBeEvidence() {
-        HeaderVisibility headers = DefaultTemplate.settings().headers;
+        HeaderVisibility headers = BuiltInTemplates.defaults().headers;
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
         for (String hidden : List.of("Sec-Fetch-Mode", "ETag", "Date", "Accept", "CF-RAY", "Sec-CH-UA")) {
             assertEquals(Visibility.HIDE, headers.of(hidden, catalog), hidden);
@@ -69,7 +98,7 @@ class DefaultTemplateTest {
     @Test
     void namesOnlyGroupsOfTheCatalog() {
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         settings.headers.groups.keySet().forEach(id -> assertTrue(catalog.group(id).isPresent(), id));
         settings.headers.headers.keySet().forEach(name -> assertTrue(catalog.header(name).isPresent(), name));
     }
@@ -77,7 +106,7 @@ class DefaultTemplateTest {
     private static final String JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln";
 
     private static String redact(String text, RuleTarget target) {
-        List<RedactionRule> rules = DefaultTemplate.settings()
+        List<RedactionRule> rules = BuiltInTemplates.defaults()
             .redactions.stream()
             .filter(rule -> rule.appliesTo(target))
             .toList();
@@ -86,7 +115,7 @@ class DefaultTemplateTest {
 
     @Test
     void namesEveryDefaultRuleOnce() {
-        List<String> names = DefaultTemplate.settings()
+        List<String> names = BuiltInTemplates.defaults()
             .redactions.stream()
             .map(rule -> rule.name)
             .toList();
@@ -97,14 +126,14 @@ class DefaultTemplateTest {
     @Test
     void namesOnlyHeadersOfTheCatalogInHeaderRules() {
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
-        for (RedactionRule rule : DefaultTemplate.settings().redactions) {
+        for (RedactionRule rule : BuiltInTemplates.defaults().redactions) {
             rule.headers.forEach(name -> assertTrue(catalog.header(name).isPresent(), name));
         }
     }
 
     @Test
     void defaultRedactionsAreValidPatterns() {
-        for (RedactionRule rule : DefaultTemplate.settings().redactions) {
+        for (RedactionRule rule : BuiltInTemplates.defaults().redactions) {
             assertEquals(Optional.empty(), RuleEngine.validate(rule), rule.regex);
         }
     }

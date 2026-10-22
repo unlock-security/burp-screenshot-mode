@@ -120,7 +120,7 @@ final class LegacyDefaults {
             }
             RedactionRule current = byName.get(old.name());
             if (current == null) {
-                current = DefaultTemplate.settings()
+                current = BuiltInTemplates.defaults()
                     .redactions.stream()
                     .filter(candidate -> candidate.name.equals(old.name()))
                     .findFirst()

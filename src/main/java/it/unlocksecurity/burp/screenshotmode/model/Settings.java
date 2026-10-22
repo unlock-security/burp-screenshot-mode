@@ -3,7 +3,7 @@ package it.unlocksecurity.burp.screenshotmode.model;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Screenshot settings. New templates start from {@code storage.DefaultTemplate}. */
+/** Screenshot settings. New templates start from a copy of a built-in template ({@code storage.BuiltInTemplates}). */
 public final class Settings {
 
     public static final int DEFAULT_PIXEL_WIDTH = 800;

@@ -2,7 +2,6 @@ package it.unlocksecurity.burp.screenshotmode.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -184,7 +183,7 @@ class TemplateCodecTest {
         copy.redactions.getFirst().replacementText = "###";
         assertFalse(TemplateCodec.sameSettings(settings, copy), "a rule edit counts");
 
-        Settings full = DefaultTemplate.settings();
+        Settings full = BuiltInTemplates.defaults();
         // A copy, so only the pixel width differs.
         Settings fullWithStalePixels = full.copy();
         fullWithStalePixels.widthPixels = 1234;
@@ -339,7 +338,7 @@ class TemplateCodecTest {
 
     @Test
     void roundTripsRulesOfVersion3() {
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         HighlightRule header = HighlightRule.forHeaders(List.of("Strict-Transport-Security"));
         header.enabled = false;
         header.mode = HighlightMode.RECTANGLE;
@@ -416,7 +415,7 @@ class TemplateCodecTest {
             json = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         }
         List<RedactionRule> migrated = decodeSettings(json).redactions;
-        List<RedactionRule> current = DefaultTemplate.settings().redactions;
+        List<RedactionRule> current = BuiltInTemplates.defaults().redactions;
         assertEquals(
             current
                 .stream()
@@ -469,13 +468,5 @@ class TemplateCodecTest {
         assertEquals(Visibility.HIDE, headers.of("Strict-Transport-Security", CATALOG));
         assertEquals(Visibility.SHOW, headers.of("Content-Security-Policy", CATALOG));
         assertEquals(Visibility.SHOW, headers.of("Server", CATALOG));
-    }
-
-    @Test
-    void generatesUniqueTemplateIds() {
-        assertNotEquals(
-            TemplateCodec.createDefault().defaultTemplateId(),
-            TemplateCodec.createDefault().defaultTemplateId()
-        );
     }
 }

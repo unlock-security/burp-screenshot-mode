@@ -13,7 +13,7 @@ import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import java.awt.Font;
 import java.lang.reflect.InvocationTargetException;
 import java.util.EnumSet;
@@ -37,7 +37,7 @@ class ContentPanelTest {
 
     @Test
     void keepsTheSplitRatioWhenResized() throws Throwable {
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         settings.disposition = it.unlocksecurity.burp.screenshotmode.model.Disposition.VERTICAL;
         ContentPanel content = rendered("https://x/", settings);
         List<Double> saved = new java.util.ArrayList<>();
@@ -66,7 +66,7 @@ class ContentPanelTest {
 
     @Test
     void recordsTheRulesThatChangedEachHeaderLine() throws Throwable {
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         settings.headers.set(
             "Accept",
             it.unlocksecurity.burp.screenshotmode.model.Visibility.HIDE,
@@ -127,7 +127,7 @@ class ContentPanelTest {
     void redactsSecretsInTheUrlBarByDefault() throws Throwable {
         assertEquals(
             "https://example.com:443/reset?access_token=[REDACTED]&id=1",
-            renderedUrl("https://example.com:443/reset?access_token=abc&id=1", DefaultTemplate.settings())
+            renderedUrl("https://example.com:443/reset?access_token=abc&id=1", BuiltInTemplates.defaults())
         );
     }
 
@@ -145,7 +145,7 @@ class ContentPanelTest {
 
     @Test
     void showsOnlyThePathAfterTheRulesRan() throws Throwable {
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         settings.url = UrlMode.PATH;
         ContentPanel content = rendered("https://example.com:443/reset?access_token=abc&id=1", settings);
         assertEquals("/reset?access_token=[REDACTED]&id=1", content.urlView().text());
@@ -167,7 +167,7 @@ class ContentPanelTest {
 
     @Test
     void hidesTheUrlBar() throws Throwable {
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         settings.url = UrlMode.HIDDEN;
         assertFalse(rendered("https://example.com/", settings).urlBar().isVisible());
     }

@@ -12,7 +12,7 @@ import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Font;
@@ -213,9 +213,9 @@ final class HeadersTab extends JPanel {
 
         JButton restore = Widgets.button("Restore defaults");
         restore.putClientProperty("JButton.buttonType", "borderless");
-        restore.setToolTipText("Hide and show the same headers as a new template");
+        restore.setToolTipText("Hide and show the same headers as the built-in Defaults template");
         restore.addActionListener(event -> {
-            settings.headers = DefaultTemplate.settings().headers;
+            settings.headers = BuiltInTemplates.defaults().headers;
             changed();
         });
         JPanel footer = new JPanel(new BorderLayout(8, 0));

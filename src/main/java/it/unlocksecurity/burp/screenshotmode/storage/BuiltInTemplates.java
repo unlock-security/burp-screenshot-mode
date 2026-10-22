@@ -1,17 +1,21 @@
 package it.unlocksecurity.burp.screenshotmode.storage;
 
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.Template;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
- * The settings new templates start from, read from {@code default-template.json} next to this class in the jar. The
+ * The templates bundled with the extension, read from {@code built-in-templates.json} next to this class in the jar:
+ * Defaults (our hidden headers and redactions) and Empty (nothing hidden, no rules). They are never stored, so every
+ * start reads them as this release ships them, and they can't be edited or deleted: users duplicate them instead. The
  * file is an ordinary template export in the current storage format, so {@link TemplateCodec} reads it like any import:
  * update it whenever {@link TemplateCodec#VERSION} changes.
  *
- * <p>What the defaults hide and redact, and why:
+ * <p>What Defaults hides and redacts, and why:
  * <ul>
  *   <li>Hidden headers are split by the messages each is defined for; vendor headers added by servers and CDNs are only
  *       hidden in responses. Headers that can take part in request smuggling or other desync attacks stay visible, as
@@ -25,16 +29,29 @@ import java.nio.charset.StandardCharsets;
  *       alternation like {@code (?:[^"\\]|\\.)*}, which overflows the stack on long values.</li>
  * </ul>
  */
-public final class DefaultTemplate {
+public final class BuiltInTemplates {
 
-    private static final String RESOURCE = "default-template.json";
+    public static final String DEFAULTS_ID = "built-in-defaults";
+    public static final String EMPTY_ID = "built-in-empty";
+
+    private static final String RESOURCE = "built-in-templates.json";
     private static final String JSON = load();
 
-    private DefaultTemplate() {}
+    private BuiltInTemplates() {}
 
-    /** A new copy of the default settings, free to edit. */
-    public static Settings settings() {
-        return TemplateCodec.decode(JSON).data().templates().getFirst().settings;
+    /** New copies of the built-in templates, Defaults first. */
+    public static List<Template> all() {
+        return TemplateCodec.decode(JSON)
+            .data()
+            .templates()
+            .stream()
+            .map(template -> new Template(template.id, template.name, template.settings, true))
+            .toList();
+    }
+
+    /** A new copy of the Defaults settings, free to edit. */
+    public static Settings defaults() {
+        return all().getFirst().settings;
     }
 
     /** The bundled file as is. */
@@ -43,7 +60,7 @@ public final class DefaultTemplate {
     }
 
     private static String load() {
-        try (InputStream in = DefaultTemplate.class.getResourceAsStream(RESOURCE)) {
+        try (InputStream in = BuiltInTemplates.class.getResourceAsStream(RESOURCE)) {
             if (in == null) {
                 throw new IllegalStateException(RESOURCE + " is missing from the extension jar");
             }

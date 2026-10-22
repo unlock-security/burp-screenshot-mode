@@ -96,8 +96,12 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF).
 
 **State model:**
-- `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its stored
+- `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own
   instances, which must be treated as read-only — copy `settings` before editing.
+- `TemplateStore.templates()` lists the built-in templates (`Template.builtIn`: Defaults, then Empty) before the
+  user's own. Built-in templates are never stored, updated or deleted; any template, built-in included, can be the
+  default (★), and deleting the default one makes Defaults the default. New templates start from a built-in one
+  ("Based on" in the editor) or duplicate any template.
 - Enums implement `model.Labeled`: `id()` is the stable id written to saved templates and exports, `label()` is UI
   text. Never change an existing `id()`.
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
@@ -107,17 +111,19 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   screenshot sidebar and the template editor in `TemplatesTab`. `TemplateCodec.sameSettings` (comparison of the
   stored form) drives the "Modified"/"Unsaved" state of both.
 
-**Persistence:** `TemplateStore` saves all templates as one JSON string under the Burp preference key
-`screenshot-mode.templates`. If that value can't be read at startup, it is copied to `screenshot-mode.templates.unreadable`
-before the default template replaces it, and the suite tab offers to export the copy. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
-migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. New templates start from
-`storage/default-template.json` in `src/main/resources`, an ordinary template export read by `storage.DefaultTemplate`:
-edit the default hidden headers and rules there, and update the file whenever `VERSION` changes (`DefaultTemplateTest`
-fails otherwise). Optional settings fields
+**Persistence:** `TemplateStore` saves the user's templates (not the built-in ones) as one JSON string under the Burp
+preference key `screenshot-mode.templates`; exports leave the built-in ones out too. If that value can't be read at
+startup, it is copied to `screenshot-mode.templates.unreadable` before the store starts with the built-in templates
+only, and the suite tab offers to export the copy. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
+migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. The built-in templates are
+`storage/built-in-templates.json` in `src/main/resources`, an ordinary template export read by
+`storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules
+there (in Defaults), never change the built-in ids, and update the file whenever `VERSION` changes
+(`BuiltInTemplatesTest` fails otherwise). Optional settings fields
 (`theme`, `view`, `url`) default sensibly when missing. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced
-by the named rules of the current default (`storage.LegacyDefaults`); rules the user edited are kept as they are.
+by the named rules of the current Defaults (`storage.LegacyDefaults`); rules the user edited are kept as they are.
 
 The Headers tab only shows or hides headers: every redaction and highlight is a rule of the Rules tab. A header row
 says which rules redact or highlight it: the header rules naming it, and the rules that changed its line in the message

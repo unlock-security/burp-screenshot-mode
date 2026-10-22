@@ -16,7 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
-import it.unlocksecurity.burp.screenshotmode.storage.DefaultTemplate;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.PreferenceStore;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.Component;
@@ -76,7 +76,7 @@ class RenderPreviewTest {
     }
 
     static Settings sampleSettings() {
-        Settings settings = DefaultTemplate.settings();
+        Settings settings = BuiltInTemplates.defaults();
         settings.showTimestamp = true;
 
         HighlightRule role = HighlightRule.create("\"role\": \"admin\"", RuleTarget.REQUEST, MatchMode.STRING);
@@ -195,11 +195,11 @@ class RenderPreviewTest {
 
     @Test
     void blurAltersThePixelsItCovers() throws Exception {
-        Settings blurred = DefaultTemplate.settings();
+        Settings blurred = BuiltInTemplates.defaults();
         blurred.redactions.add(
             RedactionRule.create("Mallory", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.STRING)
         );
-        Settings plain = DefaultTemplate.settings();
+        Settings plain = BuiltInTemplates.defaults();
         BufferedImage a = render(blurred, Palette.DARK, 800, 700);
         BufferedImage b = render(plain, Palette.DARK, 800, 700);
         int differing = 0;
@@ -242,7 +242,7 @@ class RenderPreviewTest {
         );
         TemplateStore store = new TemplateStore(preferences, System.out::println);
         store.initialize();
-        store.updateTemplate(store.defaultTemplateId(), null, sampleSettings());
+        store.setDefaultTemplate(store.createTemplate("Report", sampleSettings()).id);
 
         SwingUtilities.invokeAndWait(() -> {
             ScreenshotLauncher launcher = new ScreenshotLauncher(host, store);
@@ -262,7 +262,7 @@ class RenderPreviewTest {
             layoutTree(tab);
             saveComponent(tab, "templates-tab.png");
 
-            Settings empty = DefaultTemplate.settings();
+            Settings empty = BuiltInTemplates.defaults();
             empty.highlights.clear();
             empty.redactions.clear();
             saveForm(sampleSettings(), false, "form-sidebar.png");
