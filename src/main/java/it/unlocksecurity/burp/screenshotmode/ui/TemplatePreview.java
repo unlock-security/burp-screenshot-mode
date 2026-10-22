@@ -159,7 +159,7 @@ final class TemplatePreview extends JPanel {
         split.setResizeWeight(0.5);
         split.setBorder(null);
 
-        wholeArea.hideCropHandle();
+        wholeArea.hideHandles();
         wholeScroll.setBorder(null);
         wholeScroll.getVerticalScrollBar().setUnitIncrement(16);
         center.add(split, PARTS);
@@ -242,7 +242,7 @@ final class TemplatePreview extends JPanel {
         partHolder.remove(part);
         partHolder.add(part, sample.part == RuleTarget.URL ? BorderLayout.NORTH : BorderLayout.CENTER);
         partHolder.setBackground(palette.canvas());
-        wholeArea.setMaxContentWidth(settings.maxContentWidth());
+        wholeArea.setWidth(settings.widthMode, settings.maxContentWidth());
         wholeArea.setHeight(settings.heightMode, settings.heightPixels);
         wholeArea.setBackground(palette.canvas());
         wholeScroll.getViewport().setBackground(palette.canvas());

@@ -21,6 +21,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -189,6 +190,46 @@ final class ContentPanel extends JPanel {
             splitRatioListener.accept(ratio);
         }
         return split.getDividerLocation() != before;
+    }
+
+    /** The width that shows every line of the URL bar, the request and the response whole, without wrapping. */
+    int unwrappedWidth() {
+        Insets insets = getInsets();
+        int messages = 0;
+        if (split.isVisible()) {
+            int request = requestPane.isVisible() ? requestPane.unwrappedWidth() : 0;
+            int response = responsePane.isVisible() ? responsePane.unwrappedWidth() : 0;
+            messages =
+                isSideBySide() && requestPane.isVisible() && responsePane.isVisible()
+                    ? request + split.getDividerSize() + response
+                    : Math.max(request, response);
+        }
+        int urlBar = 0;
+        if (urlHeader.isVisible()) {
+            Insets header = urlHeader.getInsets();
+            Insets box = urlBox.getInsets();
+            urlBar =
+                header.left +
+                urlLabel.getParent().getPreferredSize().width +
+                ((BorderLayout) urlHeader.getLayout()).getHgap() +
+                box.left +
+                url.unwrappedWidth() +
+                box.right +
+                header.right;
+        }
+        return insets.left + Math.max(messages, urlBar) + insets.right;
+    }
+
+    /**
+     * The request's share of the width that shows both messages side by side without wrapping, or {@code -1} when
+     * they are not side by side.
+     */
+    double unwrappedSplitRatio() {
+        if (!isSideBySide() || !requestPane.isVisible() || !responsePane.isVisible()) {
+            return -1;
+        }
+        int request = requestPane.unwrappedWidth();
+        return request / (double) Math.max(1, request + responsePane.unwrappedWidth());
     }
 
     /**

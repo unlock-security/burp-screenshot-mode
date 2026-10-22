@@ -11,6 +11,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
+import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import java.awt.Component;
@@ -105,9 +106,9 @@ class SettingsFormUndoTest {
         // What the screenshot window does while the handle is dragged, then when it is let go.
         settings.heightMode = HeightMode.PIXEL;
         settings.heightPixels = 300;
-        form.showHeight();
+        form.showSize();
         settings.heightPixels = 432;
-        form.showHeight();
+        form.showSize();
         history.record();
         assertEquals(HeightMode.PIXEL, heightCombo().getSelectedItem());
         JSpinner pixels = (JSpinner) find(form, JSpinner.class, spinner -> spinner.getValue().equals(432));
@@ -118,6 +119,40 @@ class SettingsFormUndoTest {
         assertEquals(HeightMode.CONTENT, settings.heightMode, "the whole drag undone at once");
         assertEquals(HeightMode.CONTENT, heightCombo().getSelectedItem());
         assertEquals(SettingsForm.APPEARANCE, form.tabs().getSelectedIndex());
+    }
+
+    @Test
+    void theWidthRowListsItsChoicesInOrderAndShowsADraggedWidth() {
+        JComboBox<WidthMode> combo = widthCombo();
+        List<WidthMode> order = new java.util.ArrayList<>();
+        for (int i = 0; i < combo.getItemCount(); i++) {
+            order.add(combo.getItemAt(i));
+        }
+        assertEquals(
+            List.of(WidthMode.FULL, WidthMode.CONTENT, WidthMode.A4, WidthMode.LETTER, WidthMode.PIXEL),
+            order
+        );
+
+        settings.widthMode = WidthMode.PIXEL;
+        settings.widthPixels = 1234;
+        form.showSize();
+        history.record();
+        assertEquals(WidthMode.PIXEL, combo.getSelectedItem());
+        assertTrue(find(form, JSpinner.class, spinner -> spinner.getValue().equals(1234)).isVisible());
+
+        combo.setSelectedItem(WidthMode.FULL);
+        combo.setSelectedItem(WidthMode.PIXEL);
+        assertEquals(1234, settings.widthPixels, "choosing Custom again keeps the last custom width");
+
+        undo(false);
+        undo(false);
+        undo(false);
+        assertEquals(WidthMode.FULL, settings.widthMode, "the drag was one step");
+    }
+
+    @SuppressWarnings("unchecked")
+    private JComboBox<WidthMode> widthCombo() {
+        return (JComboBox<WidthMode>) find(form, JComboBox.class, combo -> combo.getItemAt(0) == WidthMode.FULL);
     }
 
     @SuppressWarnings("unchecked")

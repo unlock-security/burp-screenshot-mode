@@ -9,6 +9,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
+import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -162,6 +163,15 @@ final class MessagePane extends JPanel {
         scroll.setVerticalScrollBarPolicy(
             fitting ? ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER : ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
         );
+    }
+
+    /** The width that shows every line whole: line numbers, text and the scrollbar when there is one. */
+    int unwrappedWidth() {
+        Insets insets = getInsets();
+        int scrollbar = scroll.getVerticalScrollBar().isVisible()
+            ? scroll.getVerticalScrollBar().getPreferredSize().width
+            : 0;
+        return insets.left + gutter.getPreferredSize().width + view.unwrappedWidth() + scrollbar + insets.right;
     }
 
     /** Extra height the view needs to show everything without scrolling (negative when there is spare room). */

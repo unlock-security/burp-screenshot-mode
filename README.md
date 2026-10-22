@@ -47,9 +47,10 @@ No external tools, no manual cropping and blurring.
   sent.
 - **Right-click** in the preview to highlight or redact the selected text, or to hide, redact or highlight the header
   under the pointer, in one click.
-- **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px). A fixed width is
-  exact whatever the window size (the preview scrolls sideways when it doesn't fit), and the toolbar shows the size of
-  the PNG that Copy and Save produce.
+- **Width**: as wide as the preview (*Full Width*), **Fit to content** so no line wraps (up to 2,000 px), A4 (595px),
+  Letter (612px), or a custom width you type or set by dragging the handle on the right of the screenshot. A fixed width
+  is exact whatever the window size (the preview scrolls sideways when it doesn't fit), and the toolbar shows the size
+  of the PNG that Copy and Save produce.
 - **Height**: as tall as the preview (*Full Height*), **Fit to content** to show every line of the request and
   response, which keeps fitting as you change the settings, or a custom height you set by dragging the handle below
   the screenshot. Saved in templates like the width.

@@ -4,6 +4,7 @@ import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
@@ -125,15 +126,15 @@ final class ScreenshotDialog extends JDialog {
         content.setSplitRatio(state.splitRatio);
         content.setSplitRatioListener(ratio -> state.splitRatio = ratio);
         content.setErrorListener(host.logError());
-        preview.setDragListener((height, done) -> {
+        preview.setWidthDragListener((width, done) -> {
+            state.settings.widthMode = WidthMode.PIXEL;
+            state.settings.widthPixels = width;
+            dragged(done);
+        });
+        preview.setHeightDragListener((height, done) -> {
             state.settings.heightMode = HeightMode.PIXEL;
             state.settings.heightPixels = height;
-            form.showHeight();
-            if (done) {
-                // The whole drag is one step.
-                history.record();
-                updateTemplateState();
-            }
+            dragged(done);
         });
         content.addComponentListener(
             new ComponentAdapter() {
@@ -237,7 +238,7 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        output.setToolTipText("Drag the handle below the screenshot to change its height");
+        output.setToolTipText("Drag the handles on the right of and below the screenshot to change its size");
 
         JLabel tip = Widgets.hint("Right-click selected text to add a rule");
         tip.setToolTipText(
@@ -414,7 +415,7 @@ final class ScreenshotDialog extends JDialog {
         lastMaxWidth = maxWidth;
         rendered = true;
 
-        preview.setMaxContentWidth(maxWidth);
+        preview.setWidth(settings.widthMode, maxWidth);
         preview.setHeight(settings.heightMode, settings.heightPixels);
         form.showRuleStatuses(content.ruleStatuses());
         form.showHeaderHits(content.headerHits());
@@ -546,6 +547,15 @@ final class ScreenshotDialog extends JDialog {
         reloadTemplates();
         updateTemplateState();
         showStatus("Template \"" + template.name + "\" created", false);
+    }
+
+    /** Shows a size set with a drag handle in the form; the whole drag is one step. */
+    private void dragged(boolean done) {
+        form.showSize();
+        if (done) {
+            history.record();
+            updateTemplateState();
+        }
     }
 
     /** Undoes or redoes the last change to the settings, showing where it was. */

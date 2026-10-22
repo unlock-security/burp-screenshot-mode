@@ -88,10 +88,12 @@ final class SettingsForm extends JPanel {
     private final JLabel rulesBasis = Widgets.hint("");
     private final JButton restoreRules = Widgets.button("Restore defaults…");
     private final JLabel appearanceBasis = Widgets.hint("");
-    /** The Height row's controls, built again with the Appearance tab. */
+    /** The Width and Height rows' controls, built again with the Appearance tab. */
+    private JComboBox<WidthMode> widthMode;
+    private JSpinner widthPixels;
     private JComboBox<HeightMode> heightMode;
     private JSpinner heightPixels;
-    private boolean showingHeight;
+    private boolean showingSize;
     private final JButton restoreAppearance = Widgets.button("Restore defaults");
     private Chooser chooser = (title, message, action, safe) -> Widgets.choose(this, title, message, action, safe);
 
@@ -629,7 +631,14 @@ final class SettingsForm extends JPanel {
         int row = 0;
 
         addHeading(grid, row++, "Image");
-        addRow(grid, row++, "Width", widthControl(), "Width of the captured image", true);
+        addRow(
+            grid,
+            row++,
+            "Width",
+            widthControl(),
+            "Width of the captured image. Dragging the handle on the right of the screenshot sets a custom width.",
+            true
+        );
         addRow(
             grid,
             row++,
@@ -708,24 +717,24 @@ final class SettingsForm extends JPanel {
         JSpinner pixels = new JSpinner(
             new SpinnerNumberModel(settings.widthPixels, Settings.MIN_PIXEL_WIDTH, Settings.MAX_PIXEL_WIDTH, 10)
         );
-        pixels.setVisible(settings.widthMode == WidthMode.PIXEL);
-        pixels.addChangeListener(event -> {
-            settings.widthPixels = (Integer) pixels.getValue();
-            onChange.run();
-        });
-
         JComboBox<WidthMode> mode = new JComboBox<>(WidthMode.values());
-        mode.setSelectedItem(settings.widthMode);
         JPanel row = flush(mode, pixels);
-        mode.addActionListener(event -> {
-            settings.widthMode = (WidthMode) mode.getSelectedItem();
-            if (settings.widthMode == WidthMode.PIXEL) {
-                settings.widthPixels = Settings.DEFAULT_PIXEL_WIDTH;
-                pixels.setValue(Settings.DEFAULT_PIXEL_WIDTH);
+        widthMode = mode;
+        widthPixels = pixels;
+        showSize();
+        pixels.addChangeListener(event -> {
+            if (!showingSize) {
+                settings.widthPixels = (Integer) pixels.getValue();
+                onChange.run();
             }
-            pixels.setVisible(settings.widthMode == WidthMode.PIXEL);
-            row.revalidate();
-            onChange.run();
+        });
+        mode.addActionListener(event -> {
+            if (!showingSize) {
+                settings.widthMode = (WidthMode) mode.getSelectedItem();
+                pixels.setVisible(settings.widthMode == WidthMode.PIXEL);
+                row.revalidate();
+                onChange.run();
+            }
         });
         return row;
     }
@@ -738,15 +747,15 @@ final class SettingsForm extends JPanel {
         JPanel row = flush(mode, pixels);
         heightMode = mode;
         heightPixels = pixels;
-        showHeight();
+        showSize();
         pixels.addChangeListener(event -> {
-            if (!showingHeight) {
+            if (!showingSize) {
                 settings.heightPixels = (Integer) pixels.getValue();
                 onChange.run();
             }
         });
         mode.addActionListener(event -> {
-            if (!showingHeight) {
+            if (!showingSize) {
                 settings.heightMode = (HeightMode) mode.getSelectedItem();
                 pixels.setVisible(settings.heightMode == HeightMode.PIXEL);
                 row.revalidate();
@@ -756,19 +765,27 @@ final class SettingsForm extends JPanel {
         return row;
     }
 
-    /** Shows a height set outside the form, by dragging the handle below the screenshot, without a change of its own. */
-    void showHeight() {
-        if (heightMode == null) {
-            return;
-        }
-        showingHeight = true;
+    /**
+     * Shows a width or height set outside the form, by dragging a handle beside the screenshot, without a change of
+     * its own.
+     */
+    void showSize() {
+        showingSize = true;
         try {
-            heightMode.setSelectedItem(settings.heightMode);
-            heightPixels.setValue(settings.heightPixels);
-            heightPixels.setVisible(settings.heightMode == HeightMode.PIXEL);
-            heightPixels.getParent().revalidate();
+            if (widthMode != null) {
+                widthMode.setSelectedItem(settings.widthMode);
+                widthPixels.setValue(settings.widthPixels);
+                widthPixels.setVisible(settings.widthMode == WidthMode.PIXEL);
+                widthPixels.getParent().revalidate();
+            }
+            if (heightMode != null) {
+                heightMode.setSelectedItem(settings.heightMode);
+                heightPixels.setValue(settings.heightPixels);
+                heightPixels.setVisible(settings.heightMode == HeightMode.PIXEL);
+                heightPixels.getParent().revalidate();
+            }
         } finally {
-            showingHeight = false;
+            showingSize = false;
         }
         updateRestore();
     }

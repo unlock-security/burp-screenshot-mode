@@ -41,10 +41,10 @@ public final class Settings {
     public ViewMode view = ViewMode.RAW;
     public UrlMode url = UrlMode.FULL;
 
-    /** Maximum width of the captured content in pixels, or {@code null} for full width. */
+    /** The fixed width of the captured content in pixels, or {@code null} when it follows the preview or the content. */
     public Integer maxContentWidth() {
         return switch (widthMode) {
-            case FULL -> null;
+            case FULL, CONTENT -> null;
             case PIXEL -> widthPixels;
             case A4, LETTER -> widthMode.presetWidth();
         };

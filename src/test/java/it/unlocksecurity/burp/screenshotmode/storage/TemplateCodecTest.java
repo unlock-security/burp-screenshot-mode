@@ -192,6 +192,15 @@ class TemplateCodecTest {
     }
 
     @Test
+    void readsAWidthThatFitsTheContent() {
+        Settings settings = decodeSettings(
+            v3(V3_SETTINGS.replace("\"width\": {\"mode\": \"full\"},", "\"width\": {\"mode\": \"content\"},"))
+        );
+        assertEquals(WidthMode.CONTENT, settings.widthMode);
+        assertEquals(null, settings.maxContentWidth(), "no fixed width");
+    }
+
+    @Test
     void readsTheHeightAndFillsThePreviewWithout() {
         assertEquals(HeightMode.FULL, decodeSettings(v3(V3_SETTINGS)).heightMode, "saved before the height existed");
 
