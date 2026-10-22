@@ -243,6 +243,7 @@ final class TemplatePreview extends JPanel {
         partHolder.add(part, sample.part == RuleTarget.URL ? BorderLayout.NORTH : BorderLayout.CENTER);
         partHolder.setBackground(palette.canvas());
         wholeArea.setMaxContentWidth(settings.maxContentWidth());
+        wholeArea.setHeight(settings.heightMode, settings.heightPixels);
         wholeArea.setBackground(palette.canvas());
         wholeScroll.getViewport().setBackground(palette.canvas());
         restore.setEnabled(sample.isEdited());

@@ -50,7 +50,9 @@ No external tools, no manual cropping and blurring.
 - **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px). A fixed width is
   exact whatever the window size (the preview scrolls sideways when it doesn't fit), and the toolbar shows the size of
   the PNG that Copy and Save produce.
-- **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
+- **Height**: as tall as the preview (*Full Height*), **Fit to content** to show every line of the request and
+  response, which keeps fitting as you change the settings, or a custom height you set by dragging the handle below
+  the screenshot. Saved in templates like the width.
 - **Metadata footer**: request timestamp and response size/round-trip time.
 - **URL bar**: the full URL, only the path and query (the label reads *Path*), or no URL bar at all. Path only leaves
   out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
@@ -69,7 +71,7 @@ No external tools, no manual cropping and blurring.
   Burp closes and are never saved in templates; **Restore sample** brings the original back.
 - **Restore defaults** in each tab, from the built-in template yours is based on, after asking: the *Rules* tab adds
   back the rules you deleted (or replaces all your rules), the *Headers* tab drops your header changes, and the
-  *Appearance* tab resets width, layout, theme, URL bar, body and footer. Each tab says what it would change.
+  *Appearance* tab resets width, height, layout, theme, URL bar, body and footer. Each tab says what it would change.
 - **Undo and redo** every change to the settings with **⌘Z** / **⇧⌘Z** (**Ctrl+Z** / **Ctrl+Shift+Z** or **Ctrl+Y**),
   in the screenshot window and in the template editor: deleted rules, restored defaults, rules added from the preview
   or the *Headers* tab, and **Revert** too. Typing counts as one step. Undo shows what it changed: it opens the tab

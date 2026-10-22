@@ -158,6 +158,12 @@ final class MessagePane extends JPanel {
         }
     }
 
+    void setFitting(boolean fitting) {
+        scroll.setVerticalScrollBarPolicy(
+            fitting ? ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER : ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+        );
+    }
+
     /** Extra height the view needs to show everything without scrolling (negative when there is spare room). */
     int overflow() {
         return view.getPreferredSize().height - scroll.getViewport().getExtentSize().height;

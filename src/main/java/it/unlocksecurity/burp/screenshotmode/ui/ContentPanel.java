@@ -177,6 +177,30 @@ final class ContentPanel extends JPanel {
     }
 
     /**
+     * Sets the split that fits both messages, one above the other, as if the user had moved the divider there.
+     *
+     * @return whether the divider moved
+     */
+    boolean fitSplitRatio(double ratio) {
+        int before = split.getDividerLocation();
+        boolean changed = Math.abs(ratio - splitRatio) > 1e-9;
+        setSplitRatio(ratio);
+        if (changed) {
+            splitRatioListener.accept(ratio);
+        }
+        return split.getDividerLocation() != before;
+    }
+
+    /**
+     * While the height fits the content, the panes never scroll: without a scrollbar coming and going, the lines they
+     * need don't depend on their height, so fitting settles.
+     */
+    void setFitting(boolean fitting) {
+        requestPane.setFitting(fitting);
+        responsePane.setFitting(fitting);
+    }
+
+    /**
      * @param timestamp    shown in the footer when not {@code null}
      * @param responseInfo shown in the footer when not {@code null}
      */

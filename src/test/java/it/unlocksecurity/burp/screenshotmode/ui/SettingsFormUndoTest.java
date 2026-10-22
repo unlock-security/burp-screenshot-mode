@@ -6,14 +6,20 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Font;
 import java.util.List;
+import java.util.function.Predicate;
+import javax.swing.JComboBox;
+import javax.swing.JSpinner;
 import org.junit.jupiter.api.Test;
 
 /** The settings form wired to a history, as the screenshot window and the template editor do. */
@@ -89,6 +95,49 @@ class SettingsFormUndoTest {
         undo(false);
         assertEquals(SettingsForm.APPEARANCE, form.tabs().getSelectedIndex());
         assertEquals(ViewMode.RAW, settings.view);
+    }
+
+    @Test
+    void aDraggedHeightShowsInTheHeightRowAndIsOneStep() {
+        heightCombo().setSelectedItem(HeightMode.CONTENT);
+        assertEquals(HeightMode.CONTENT, settings.heightMode);
+
+        // What the screenshot window does while the handle is dragged, then when it is let go.
+        settings.heightMode = HeightMode.PIXEL;
+        settings.heightPixels = 300;
+        form.showHeight();
+        settings.heightPixels = 432;
+        form.showHeight();
+        history.record();
+        assertEquals(HeightMode.PIXEL, heightCombo().getSelectedItem());
+        JSpinner pixels = (JSpinner) find(form, JSpinner.class, spinner -> spinner.getValue().equals(432));
+        assertTrue(pixels.isVisible());
+        assertEquals(432, settings.heightPixels, "showing the height is no change of its own");
+
+        undo(false);
+        assertEquals(HeightMode.CONTENT, settings.heightMode, "the whole drag undone at once");
+        assertEquals(HeightMode.CONTENT, heightCombo().getSelectedItem());
+        assertEquals(SettingsForm.APPEARANCE, form.tabs().getSelectedIndex());
+    }
+
+    @SuppressWarnings("unchecked")
+    private JComboBox<HeightMode> heightCombo() {
+        return (JComboBox<HeightMode>) find(form, JComboBox.class, combo -> combo.getItemAt(0) == HeightMode.FULL);
+    }
+
+    private static <T extends Component> T find(Container root, Class<T> type, Predicate<T> filter) {
+        for (Component child : root.getComponents()) {
+            if (type.isInstance(child) && filter.test(type.cast(child))) {
+                return type.cast(child);
+            }
+            if (child instanceof Container container) {
+                T found = find(container, type, filter);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     @Test

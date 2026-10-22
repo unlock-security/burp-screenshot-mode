@@ -9,6 +9,7 @@ import com.google.gson.JsonParser;
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderVisibility;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
@@ -188,6 +189,56 @@ class TemplateCodecTest {
         Settings fullWithStalePixels = full.copy();
         fullWithStalePixels.widthPixels = 1234;
         assertTrue(TemplateCodec.sameSettings(full, fullWithStalePixels), "pixels are not stored in full width");
+    }
+
+    @Test
+    void readsTheHeightAndFillsThePreviewWithout() {
+        assertEquals(HeightMode.FULL, decodeSettings(v3(V3_SETTINGS)).heightMode, "saved before the height existed");
+
+        Settings fitted = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"width\": {\"mode\": \"full\"},",
+                    "\"width\": {\"mode\": \"full\"}, \"height\": {\"mode\": \"content\"},"
+                )
+            )
+        );
+        assertEquals(HeightMode.CONTENT, fitted.heightMode);
+
+        Settings pixels = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"width\": {\"mode\": \"full\"},",
+                    "\"width\": {\"mode\": \"full\"}, \"height\": {\"mode\": \"pixel\", \"value\": 640},"
+                )
+            )
+        );
+        assertEquals(HeightMode.PIXEL, pixels.heightMode);
+        assertEquals(640, pixels.heightPixels);
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", pixels)), "t1"));
+        assertEquals(640, decodeSettings(encoded).heightPixels, "round trip");
+
+        Settings huge = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"width\": {\"mode\": \"full\"},",
+                    "\"width\": {\"mode\": \"full\"}, \"height\": {\"mode\": \"pixel\", \"value\": 999999},"
+                )
+            )
+        );
+        assertEquals(Settings.MAX_PIXEL_HEIGHT, huge.heightPixels);
+
+        for (String unreadable : List.of("{\"mode\": \"pixel\"}", "{\"mode\": \"later\"}", "\"tall\"")) {
+            Settings settings = decodeSettings(
+                v3(
+                    V3_SETTINGS.replace(
+                        "\"width\": {\"mode\": \"full\"},",
+                        "\"width\": {\"mode\": \"full\"}, \"height\": " + unreadable + ","
+                    )
+                )
+            );
+            assertEquals(HeightMode.FULL, settings.heightMode, unreadable);
+        }
     }
 
     @Test

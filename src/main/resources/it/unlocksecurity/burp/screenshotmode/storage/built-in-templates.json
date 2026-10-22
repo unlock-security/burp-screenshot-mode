@@ -22,6 +22,9 @@
         "width": {
           "mode": "full"
         },
+        "height": {
+          "mode": "full"
+        },
         "highlights": [],
         "redactions": [
           {
@@ -225,6 +228,9 @@
         },
         "disposition": "horizontal",
         "width": {
+          "mode": "full"
+        },
+        "height": {
           "mode": "full"
         },
         "highlights": [],

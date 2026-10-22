@@ -13,6 +13,9 @@ public final class Settings {
     public static final int DEFAULT_PIXEL_WIDTH = 800;
     public static final int MIN_PIXEL_WIDTH = 200;
     public static final int MAX_PIXEL_WIDTH = 2000;
+    public static final int DEFAULT_PIXEL_HEIGHT = 600;
+    public static final int MIN_PIXEL_HEIGHT = 50;
+    public static final int MAX_PIXEL_HEIGHT = 20_000;
 
     /**
      * The id of the built-in template these settings are based on: the headers that {@link #headers} doesn't set
@@ -25,6 +28,9 @@ public final class Settings {
     public WidthMode widthMode = WidthMode.FULL;
     /** Only meaningful when {@link #widthMode} is {@link WidthMode#PIXEL}. */
     public int widthPixels = DEFAULT_PIXEL_WIDTH;
+    public HeightMode heightMode = HeightMode.FULL;
+    /** Only meaningful when {@link #heightMode} is {@link HeightMode#PIXEL}. */
+    public int heightPixels = DEFAULT_PIXEL_HEIGHT;
     public List<HighlightRule> highlights = new ArrayList<>();
     public List<RedactionRule> redactions = new ArrayList<>();
     public boolean showTimestamp = false;
@@ -75,6 +81,7 @@ public final class Settings {
         return (int) List.of(
             disposition != other.disposition,
             !Objects.equals(maxContentWidth(), other.maxContentWidth()) || widthMode != other.widthMode,
+            heightMode != other.heightMode || (heightMode == HeightMode.PIXEL && heightPixels != other.heightPixels),
             theme != other.theme,
             url != other.url,
             view != other.view,
@@ -91,6 +98,8 @@ public final class Settings {
         disposition = other.disposition;
         widthMode = other.widthMode;
         widthPixels = other.widthPixels;
+        heightMode = other.heightMode;
+        heightPixels = other.heightPixels;
         theme = other.theme;
         url = other.url;
         view = other.view;

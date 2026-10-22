@@ -11,6 +11,7 @@ import it.unlocksecurity.burp.screenshotmode.model.Direction;
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderVisibility;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.Labeled;
@@ -154,6 +155,13 @@ public final class TemplateCodec {
         }
         object.add("width", width);
 
+        JsonObject height = new JsonObject();
+        height.addProperty("mode", settings.heightMode.id());
+        if (settings.heightMode == HeightMode.PIXEL) {
+            height.addProperty("value", settings.heightPixels);
+        }
+        object.add("height", height);
+
         JsonArray highlights = new JsonArray();
         for (HighlightRule rule : settings.highlights) {
             JsonObject json = encodeRule(rule, null);
@@ -269,6 +277,7 @@ public final class TemplateCodec {
         if (settings.widthMode == WidthMode.PIXEL) {
             settings.widthPixels = (int) Math.round(number(width, "value"));
         }
+        parseHeight(object.get("height"), settings);
 
         for (JsonElement element : asArray(object.get("highlights"), "highlights")) {
             settings.highlights.add(parseHighlight(asObject(element, "highlight")));
@@ -304,6 +313,31 @@ public final class TemplateCodec {
         settings.url =
             url != null && isString(url) ? lenientEnum(UrlMode.class, url.getAsString(), UrlMode.FULL) : UrlMode.FULL;
         return settings;
+    }
+
+    /** The height is optional: templates saved before it existed, or with one this release can't read, fill the preview. */
+    private static void parseHeight(JsonElement element, Settings settings) {
+        if (element == null || !element.isJsonObject()) {
+            return;
+        }
+        JsonObject height = element.getAsJsonObject();
+        JsonElement mode = height.get("mode");
+        if (mode == null || !isString(mode)) {
+            return;
+        }
+        settings.heightMode = lenientEnum(HeightMode.class, mode.getAsString(), HeightMode.FULL);
+        if (settings.heightMode == HeightMode.PIXEL) {
+            JsonElement value = height.get("value");
+            if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
+                settings.heightPixels = (int) Math.clamp(
+                    Math.round(value.getAsDouble()),
+                    Settings.MIN_PIXEL_HEIGHT,
+                    Settings.MAX_PIXEL_HEIGHT
+                );
+            } else {
+                settings.heightMode = HeightMode.FULL;
+            }
+        }
     }
 
     private static HeaderVisibility parseHeaders(JsonObject object) {

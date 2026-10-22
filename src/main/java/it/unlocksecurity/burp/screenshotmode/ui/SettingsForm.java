@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
@@ -87,6 +88,10 @@ final class SettingsForm extends JPanel {
     private final JLabel rulesBasis = Widgets.hint("");
     private final JButton restoreRules = Widgets.button("Restore defaults…");
     private final JLabel appearanceBasis = Widgets.hint("");
+    /** The Height row's controls, built again with the Appearance tab. */
+    private JComboBox<HeightMode> heightMode;
+    private JSpinner heightPixels;
+    private boolean showingHeight;
     private final JButton restoreAppearance = Widgets.button("Restore defaults");
     private Chooser chooser = (title, message, action, safe) -> Widgets.choose(this, title, message, action, safe);
 
@@ -625,6 +630,14 @@ final class SettingsForm extends JPanel {
 
         addHeading(grid, row++, "Image");
         addRow(grid, row++, "Width", widthControl(), "Width of the captured image", true);
+        addRow(
+            grid,
+            row++,
+            "Height",
+            heightControl(),
+            "Height of the captured image. Dragging the handle below the screenshot sets a custom height.",
+            false
+        );
 
         SegmentedControl<Disposition> layout = Widgets.segmented(Disposition.values(), settings.disposition, value -> {
             settings.disposition = value;
@@ -715,6 +728,49 @@ final class SettingsForm extends JPanel {
             onChange.run();
         });
         return row;
+    }
+
+    private JComponent heightControl() {
+        JSpinner pixels = new JSpinner(
+            new SpinnerNumberModel(settings.heightPixels, Settings.MIN_PIXEL_HEIGHT, Settings.MAX_PIXEL_HEIGHT, 10)
+        );
+        JComboBox<HeightMode> mode = new JComboBox<>(HeightMode.values());
+        JPanel row = flush(mode, pixels);
+        heightMode = mode;
+        heightPixels = pixels;
+        showHeight();
+        pixels.addChangeListener(event -> {
+            if (!showingHeight) {
+                settings.heightPixels = (Integer) pixels.getValue();
+                onChange.run();
+            }
+        });
+        mode.addActionListener(event -> {
+            if (!showingHeight) {
+                settings.heightMode = (HeightMode) mode.getSelectedItem();
+                pixels.setVisible(settings.heightMode == HeightMode.PIXEL);
+                row.revalidate();
+                onChange.run();
+            }
+        });
+        return row;
+    }
+
+    /** Shows a height set outside the form, by dragging the handle below the screenshot, without a change of its own. */
+    void showHeight() {
+        if (heightMode == null) {
+            return;
+        }
+        showingHeight = true;
+        try {
+            heightMode.setSelectedItem(settings.heightMode);
+            heightPixels.setValue(settings.heightPixels);
+            heightPixels.setVisible(settings.heightMode == HeightMode.PIXEL);
+            heightPixels.getParent().revalidate();
+        } finally {
+            showingHeight = false;
+        }
+        updateRestore();
     }
 
     private JComponent footerControl() {

@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
@@ -72,9 +73,6 @@ final class ScreenshotDialog extends JDialog {
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final Timer renderTimer = new Timer(150, event -> render());
-    private final JButton fit = Widgets.button("Fit to content");
-    private final JButton resetHeight = Widgets.button("Reset height");
-    private boolean fitCheckPending;
     private final JLabel modified = Widgets.chip("Modified");
     private final JButton revert = Widgets.button("Revert");
     private final JButton update = Widgets.button("Update template");
@@ -127,20 +125,16 @@ final class ScreenshotDialog extends JDialog {
         content.setSplitRatio(state.splitRatio);
         content.setSplitRatioListener(ratio -> state.splitRatio = ratio);
         content.setErrorListener(host.logError());
-        preview.setCropListener(height -> {
-            state.cropHeight = height;
-            resetHeight.setEnabled(height != null);
-        });
-        preview.setCropHeight(state.cropHeight);
-        // What a pane needs changes with its size (window, crop, divider, width) and with each render.
-        ComponentAdapter resized = new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                updateFit();
+        preview.setDragListener((height, done) -> {
+            state.settings.heightMode = HeightMode.PIXEL;
+            state.settings.heightPixels = height;
+            form.showHeight();
+            if (done) {
+                // The whole drag is one step.
+                history.record();
+                updateTemplateState();
             }
-        };
-        content.requestPane().addComponentListener(resized);
-        content.responsePane().addComponentListener(resized);
+        });
         content.addComponentListener(
             new ComponentAdapter() {
                 @Override
@@ -243,11 +237,7 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        fit.setToolTipText("Crop the height so the whole request and response are visible");
-        fit.addActionListener(event -> fitToContent());
-        resetHeight.setToolTipText("Fill the window height again");
-        resetHeight.addActionListener(event -> preview.setCropHeight(null));
-        output.setToolTipText("Drag the handle below the screenshot to crop its height");
+        output.setToolTipText("Drag the handle below the screenshot to change its height");
 
         JLabel tip = Widgets.hint("Right-click selected text to add a rule");
         tip.setToolTipText(
@@ -260,13 +250,8 @@ final class ScreenshotDialog extends JDialog {
         left.add(output);
         left.add(failedRules);
         left.add(tip);
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        right.add(fit);
-        right.add(resetHeight);
-
         JPanel bar = new JPanel(new BorderLayout(8, 0));
         bar.add(left, BorderLayout.CENTER);
-        bar.add(right, BorderLayout.EAST);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
@@ -430,7 +415,7 @@ final class ScreenshotDialog extends JDialog {
         rendered = true;
 
         preview.setMaxContentWidth(maxWidth);
-        updateFit();
+        preview.setHeight(settings.heightMode, settings.heightPixels);
         form.showRuleStatuses(content.ruleStatuses());
         form.showHeaderHits(content.headerHits());
         int failed = failedRedactions().size();
@@ -505,6 +490,7 @@ final class ScreenshotDialog extends JDialog {
             render();
         }
         getRootPane().validate();
+        preview.settle();
     }
 
     private void reloadTemplates() {
@@ -571,40 +557,6 @@ final class ScreenshotDialog extends JDialog {
         }
         form.reload(before);
         render();
-    }
-
-    /** Turns "Fit to content" off while it would change nothing, once the layout has caught up. */
-    private void updateFit() {
-        if (fitCheckPending) {
-            return;
-        }
-        fitCheckPending = true;
-        SwingUtilities.invokeLater(() -> {
-            fitCheckPending = false;
-            getRootPane().validate();
-            int requestOverflow = content.requestPane().overflow();
-            int responseOverflow = content.responsePane().overflow();
-            boolean fits = content.isSideBySide()
-                ? Math.max(requestOverflow, responseOverflow) == 0
-                : requestOverflow == 0 && responseOverflow == 0;
-            fit.setEnabled(!fits);
-        });
-    }
-
-    private void fitToContent() {
-        flushRender();
-        int height = content.getHeight();
-        int requestOverflow = content.requestPane().overflow();
-        int responseOverflow = content.responsePane().overflow();
-        if (content.isSideBySide()) {
-            preview.setCropHeight(height + Math.max(requestOverflow, responseOverflow));
-        } else {
-            int requestHeight = content.requestPane().getHeight() + requestOverflow;
-            int responseHeight = content.responsePane().getHeight() + responseOverflow;
-            state.splitRatio = requestHeight / (double) Math.max(1, requestHeight + responseHeight);
-            content.setSplitRatio(state.splitRatio);
-            preview.setCropHeight(height + requestOverflow + responseOverflow);
-        }
     }
 
     private void takeScreenshot(boolean toClipboard) {

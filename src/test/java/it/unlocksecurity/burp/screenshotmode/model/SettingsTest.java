@@ -48,8 +48,10 @@ class SettingsTest {
         settings.widthPixels = 900;
         settings.theme = ThemeMode.DARK;
         settings.showTimestamp = true;
+        settings.heightMode = HeightMode.PIXEL;
+        settings.heightPixels = 640;
         settings.redactions.add(named("Kept", "k"));
-        assertEquals(4, settings.appearanceChanges(parent));
+        assertEquals(5, settings.appearanceChanges(parent));
 
         settings.copyAppearance(parent);
         assertEquals(0, settings.appearanceChanges(parent));

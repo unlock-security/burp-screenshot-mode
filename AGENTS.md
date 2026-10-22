@@ -117,7 +117,7 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 - Enums implement `model.Labeled`: `id()` is the stable id written to saved templates and exports, `label()` is UI
   text. Never change an existing `id()`.
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
-  template id, split ratio, crop). Edits in the screenshot window affect only that session until the user explicitly
+  template id, split ratio). Edits in the screenshot window affect only that session until the user explicitly
   updates/saves a template.
 - `SettingsForm` mutates a `Settings` in place, in three tabs (Rules, Headers, Appearance), and is the sidebar of both
   the screenshot window and the template editor in `TemplatesTab`, which share its preview right-click actions
@@ -132,8 +132,9 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   told of every change through the form's `onChange` (a no-op change is no step; typing in a text field is one step,
   taken when it pauses). Undo restores the snapshot **in place** (`Settings.copyFrom`, which keeps the rule lists that
   `RuleList` holds) and calls `SettingsForm.reload(before)`, which refreshes every tab without rebuilding the form and
-  shows the tab and the rule that changed. Changes made outside the form (preview right-click, Revert) call
-  `record()`; switching template calls `reset()`. History lives as long as the window or editor, not in `SessionState`.
+  shows the tab and the rule that changed. Changes made outside the form (preview right-click, Revert, dragging the
+  height handle, recorded once when the drag ends) call `record()`; switching template calls `reset()`. History lives
+  as long as the window or editor, not in `SessionState`.
 
 **Persistence:** `TemplateStore` saves the user's templates (not the built-in ones) as one JSON string under the Burp
 preference key `screenshot-mode.templates`; exports leave the built-in ones out too. If that value can't be read at
