@@ -27,10 +27,8 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.font.TextAttribute;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,10 +53,10 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.text.JTextComponent;
 
 /**
  * One list of the Rules tab, highlights or redactions: a row per rule with an on/off checkbox, its name or pattern, a
@@ -66,6 +64,9 @@ import javax.swing.UIManager;
  * at a time across both lists. Edits mutate the rule in place and then call {@code onChange}.
  */
 final class RuleList<R extends Rule> extends JPanel {
+
+    /** Lowers a field's label to the text of the field's first line. */
+    private static final int LABEL_TOP = 4;
 
     /** Which rule is open, shared by the highlight and redaction lists. */
     static final class Expansion {
@@ -583,14 +584,25 @@ final class RuleList<R extends Rule> extends JPanel {
             row.firstField = field;
         }
 
-        void add(String label, JComponent control) {
+        /** @return the row's label */
+        JLabel add(String label, JComponent control) {
+            return add(label, control, control);
+        }
+
+        /** @param labelFor what the label names, inside {@code control} */
+        JLabel add(String label, JComponent control, JComponent labelFor) {
             GridBagConstraints labelAt = new GridBagConstraints();
             labelAt.gridx = 0;
             labelAt.gridy = y;
             labelAt.anchor = GridBagConstraints.LINE_START;
             labelAt.insets = new Insets(y == 0 ? 0 : 6, 0, 0, 10);
             JLabel title = new JLabel(label);
-            title.setLabelFor(control);
+            title.setLabelFor(labelFor);
+            if (labelFor instanceof JTextArea || control.getLayout() instanceof WrapLayout) {
+                // In line with the first line of a control that can take several, such as a long pattern.
+                labelAt.anchor = GridBagConstraints.FIRST_LINE_START;
+                title.setBorder(BorderFactory.createEmptyBorder(LABEL_TOP, 0, 0, 0));
+            }
             panel.add(title, labelAt);
 
             GridBagConstraints controlAt = new GridBagConstraints();
@@ -600,6 +612,7 @@ final class RuleList<R extends Rule> extends JPanel {
             controlAt.fill = GridBagConstraints.HORIZONTAL;
             controlAt.insets = new Insets(labelAt.insets.top, 0, 0, 0);
             panel.add(control, controlAt);
+            return title;
         }
 
         void addFull(JComponent component) {
@@ -689,7 +702,9 @@ final class RuleList<R extends Rule> extends JPanel {
     /** Headers for a header rule; pattern, targets and (for redactions) capture groups for a pattern rule. */
     private static void matchFields(Rule rule, RuleList<?>.Fields fields, HeaderCatalog catalog, RedactionRule groups) {
         if (rule.type == RuleType.HEADER) {
-            JTextField headers = new JTextField(String.join(", ", rule.headers), 12);
+            JTextArea headers = Widgets.wrappingField(String.join(", ", rule.headers), 12);
+            // A list of names: break between them rather than inside one.
+            headers.setWrapStyleWord(true);
             Widgets.placeholder(headers, "Header names, separated by commas");
             headers.getAccessibleContext().setAccessibleName("Headers");
             fields.focusFirst(headers);
@@ -705,50 +720,48 @@ final class RuleList<R extends Rule> extends JPanel {
             JButton choose = Widgets.button("Choose…");
             choose.setToolTipText("Pick headers from the list Screenshot Mode knows");
             choose.addActionListener(event -> headerMenu(rule, catalog, headers).show(choose, 0, choose.getHeight()));
+            // The button keeps its height, at the top, while the field grows.
+            JPanel button = new JPanel(new BorderLayout());
+            button.setOpaque(false);
+            button.add(choose, BorderLayout.NORTH);
             JPanel row = new JPanel(new BorderLayout(6, 0));
             row.setOpaque(false);
             row.add(headers, BorderLayout.CENTER);
-            row.add(choose, BorderLayout.EAST);
-            fields.add("Headers", row);
+            row.add(button, BorderLayout.EAST);
+            fields.add("Headers", row, headers);
             return;
         }
 
-        JTextField pattern = patternField(rule, fields.mono());
+        JTextArea pattern = patternField(rule, fields.mono());
         pattern.getAccessibleContext().setAccessibleName("Pattern");
         fields.focusFirst(pattern);
         List<Consumer<String>> patternChanged = new ArrayList<>(1);
-        JToggleButton matchCase = optionToggle("Aa", "Match case", rule.matchCase, value -> {
+        JCheckBox matchCase = checkBox("Match case", rule.matchCase, value -> {
             rule.matchCase = value;
             validate(pattern, rule);
             fields.changed();
         });
-        JToggleButton wholeWord = optionToggle("ab", "Match whole word", rule.wholeWord, value -> {
+        JCheckBox wholeWord = checkBox("Whole word", rule.wholeWord, value -> {
             rule.wholeWord = value;
             validate(pattern, rule);
             fields.changed();
         });
-        wholeWord.setFont(wholeWord.getFont().deriveFont(Map.of(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON)));
-        JToggleButton regex = optionToggle(".*", "Use regular expression", rule.matchMode == MatchMode.REGEX, value -> {
+        JCheckBox regex = checkBox("Regex", rule.matchMode == MatchMode.REGEX, value -> {
             rule.matchMode = value ? MatchMode.REGEX : MatchMode.STRING;
             setPlaceholder(pattern, rule.matchMode);
             patternChanged.getFirst().accept(rule.regex);
         });
-        regex.setFont(new Font(Font.MONOSPACED, Font.BOLD, regex.getFont().getSize()));
-        JPanel options = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEADING, 1, 0));
-        options.setOpaque(false);
-        options.add(matchCase);
-        options.add(wholeWord);
-        options.add(regex);
-        fields.add("Pattern", Widgets.withTrailing(pattern, options));
+        // A row each, labelled: how the pattern matches, then (redactions) which part of a match is redacted.
+        fields.add("Pattern", pattern);
+        fields.add("Options", wrapRow(matchCase, wholeWord, regex));
         if (groups != null) {
-            JPanel groupPanel = new JPanel(new WrapLayout(6, 0));
-            groupPanel.setOpaque(false);
+            JPanel groupPanel = wrapRow();
             AtomicReference<List<String>> labels = new AtomicReference<>(
                 RuleEngine.groupLabels(rule.regex, rule.matchMode)
             );
-            Runnable rebuildGroups = () -> rebuildGroups(groupPanel, groups, labels.get(), fields::changed);
+            JLabel groupLabel = fields.add("Groups", groupPanel);
+            Runnable rebuildGroups = () -> rebuildGroups(groupPanel, groupLabel, groups, labels.get(), fields::changed);
             rebuildGroups.run();
-            fields.addUnder(groupPanel);
             // Selects capture groups as they appear in the pattern.
             patternChanged.add(text -> {
                 List<String> newLabels = RuleEngine.groupLabels(text, rule.matchMode);
@@ -815,7 +828,7 @@ final class RuleList<R extends Rule> extends JPanel {
 
     /** The catalog's groups, each a submenu of its headers, checked when the rule names them. */
     /** Stays open while headers are ticked with the mouse, as a rule usually names several; Escape closes it. */
-    static JPopupMenu headerMenu(Rule rule, HeaderCatalog catalog, JTextField field) {
+    static JPopupMenu headerMenu(Rule rule, HeaderCatalog catalog, JTextComponent field) {
         JPopupMenu menu = new JPopupMenu();
         for (HeaderCatalog.Group group : catalog.groups()) {
             JMenu submenu = new JMenu(group.label());
@@ -838,11 +851,22 @@ final class RuleList<R extends Rule> extends JPanel {
         return menu;
     }
 
-    /** @param labels label of each capture group, see {@link RuleEngine#groupLabels} */
-    private static void rebuildGroups(JPanel panel, RedactionRule rule, List<String> labels, Runnable onChange) {
+    /**
+     * The choice to redact only some of the pattern's capture groups: shown, with its label, only when it has some.
+     *
+     * @param labels label of each capture group, see {@link RuleEngine#groupLabels}
+     */
+    private static void rebuildGroups(
+        JPanel panel,
+        JLabel label,
+        RedactionRule rule,
+        List<String> labels,
+        Runnable onChange
+    ) {
         int count = labels.size();
         panel.removeAll();
         panel.setVisible(count > 0);
+        label.setVisible(count > 0);
         JCheckBox enabled = new JCheckBox("Redact only", rule.useCaptureGroups);
         enabled.setToolTipText("Redact only the selected capture groups instead of the whole match");
         enabled.setOpaque(false);
@@ -890,29 +914,35 @@ final class RuleList<R extends Rule> extends JPanel {
         return groups;
     }
 
-    private static JTextField patternField(Rule rule, Font mono) {
-        JTextField field = new JTextField(rule.regex, 12);
+    private static JTextArea patternField(Rule rule, Font mono) {
+        JTextArea field = Widgets.wrappingField(rule.regex, 12);
         field.setFont(mono);
         setPlaceholder(field, rule.matchMode);
         validate(field, rule);
         return field;
     }
 
-    /**
-     * A match option as a small toggle inside the pattern field, as in the search boxes of IDEs: pressed while on.
-     * Tab reaches it and Space flips it; its name is the tooltip and what screen readers announce.
-     */
-    private static JToggleButton optionToggle(String text, String name, boolean selected, Consumer<Boolean> onChange) {
-        JToggleButton toggle = Widgets.greyedWhenDisabled(new JToggleButton(text, selected));
-        toggle.putClientProperty("JButton.buttonType", "toolBarButton");
-        toggle.setMargin(new Insets(0, 4, 0, 4));
-        toggle.setToolTipText(name);
-        toggle.getAccessibleContext().setAccessibleName(name);
-        toggle.addActionListener(event -> onChange.accept(toggle.isSelected()));
-        return toggle;
+    private static JCheckBox checkBox(String text, boolean selected, Consumer<Boolean> onChange) {
+        JCheckBox box = new JCheckBox(text, selected);
+        box.setOpaque(false);
+        box.addActionListener(event -> onChange.accept(box.isSelected()));
+        return box;
     }
 
-    private static void setPlaceholder(JTextField field, MatchMode matchMode) {
+    /** A row that starts at the left edge of the control column and wraps when the editor is too narrow for it. */
+    private static JPanel wrapRow(Component... components) {
+        int gap = 10;
+        JPanel row = new JPanel(new WrapLayout(gap, 0));
+        // The layout leaves a gap before the first component too: take it back, so the row lines up with the fields.
+        row.setBorder(BorderFactory.createEmptyBorder(0, -gap, 0, 0));
+        row.setOpaque(false);
+        for (Component component : components) {
+            row.add(component);
+        }
+        return row;
+    }
+
+    private static void setPlaceholder(JTextComponent field, MatchMode matchMode) {
         field.putClientProperty(
             "JTextField.placeholderText",
             matchMode == MatchMode.STRING ? "Literal string" : "Regex pattern"
@@ -920,7 +950,7 @@ final class RuleList<R extends Rule> extends JPanel {
     }
 
     /** Flags invalid patterns (Java regex syntax) instead of silently matching nothing. */
-    private static void validate(JTextField field, Rule rule) {
+    private static void validate(JTextComponent field, Rule rule) {
         MatchMode matchMode = rule.matchMode;
         String error = RuleEngine.validate(rule).orElse(null);
         Color normal = UIManager.getColor("TextField.foreground");

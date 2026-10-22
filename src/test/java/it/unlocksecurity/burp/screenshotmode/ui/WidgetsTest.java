@@ -119,4 +119,21 @@ class WidgetsTest {
             }
         }
     }
+
+    @Test
+    void aWrappingFieldHoldsOneLineAndTakesItsWidthFromTheLayout() {
+        javax.swing.JTextArea field = Widgets.wrappingField("short", 12);
+        int width = field.getPreferredSize().width;
+        field.setText("a much, much longer value than the twelve columns the field asks for in its layout");
+        assertEquals(width, field.getPreferredSize().width, "wraps rather than widening the form");
+
+        field.setText("one\ntwo\r\nthree");
+        assertEquals("onetwothree", field.getText());
+        // Tab moves the focus on, instead of typing a tab.
+        assertTrue(
+            field
+                .getFocusTraversalKeys(java.awt.KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS)
+                .contains(java.awt.AWTKeyStroke.getAWTKeyStroke(java.awt.event.KeyEvent.VK_TAB, 0))
+        );
+    }
 }

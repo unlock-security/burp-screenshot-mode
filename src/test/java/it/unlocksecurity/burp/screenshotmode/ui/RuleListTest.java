@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
@@ -122,14 +123,48 @@ class RuleListTest {
     }
 
     @Test
+    void showsTheGroupsRowOnlyForAPatternWithGroups() {
+        RedactionRule rule = RedactionRule.create("token", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        javax.swing.JLabel groups = label(row.editorPanel(), "Groups");
+        assertFalse(groups.isVisible());
+        ((javax.swing.text.JTextComponent) find(row.editorPanel(), "Pattern")).setText("token=(?<Value>\\w+)");
+        assertTrue(groups.isVisible());
+        assertTrue(button(row.editorPanel(), "Value").isSelected());
+    }
+
+    @Test
     void editsUpdateTheRuleLine() {
         RedactionRule cookie = named("Cookie values");
         RuleList<RedactionRule>.Row row = form.redactionList().row(cookie);
         row.header().toggle();
-        javax.swing.JTextField headers = (javax.swing.JTextField) find(row.editorPanel(), "Headers");
+        javax.swing.text.JTextComponent headers = (javax.swing.text.JTextComponent) find(row.editorPanel(), "Headers");
         headers.setText("Cookie, X-Session");
         assertEquals(List.of("Cookie", "X-Session"), cookie.headers);
         assertEquals("Header · Cookie and 1 more · Replace with [OMITTED]", row.summaryLabel().getText());
+    }
+
+    @Test
+    void showsTheWholePatternAndItsOptionsInWords() {
+        RedactionRule rule = named("Authorization credentials");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        javax.swing.JTextArea pattern = (javax.swing.JTextArea) find(row.editorPanel(), "Pattern");
+        assertEquals(rule.regex, pattern.getText());
+        assertTrue(pattern.getLineWrap(), "wraps instead of scrolling sideways");
+
+        // A labelled row each, in words: how the pattern matches, then which part of a match is redacted.
+        javax.swing.AbstractButton regex = button(row.editorPanel(), "Regex");
+        assertTrue(regex.isSelected());
+        assertSame(regex.getParent(), find(row.editorPanel(), "Options").getParent());
+        javax.swing.AbstractButton redactOnly = button(row.editorPanel(), "Redact only");
+        assertSame(redactOnly.getParent(), find(row.editorPanel(), "Groups").getParent());
+        button(row.editorPanel(), "Match case").doClick();
+        assertFalse(rule.matchCase);
+
+        pattern.setText("a\nb\nc");
+        assertEquals("abc", rule.regex, "one line: line breaks are dropped");
     }
 
     private static void click(java.awt.Component component) {
@@ -179,6 +214,40 @@ class RuleListTest {
         throw new AssertionError("no checkbox");
     }
 
+    private static javax.swing.JLabel label(java.awt.Container container, String text) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (component instanceof javax.swing.JLabel label && text.equals(label.getText())) {
+                return label;
+            }
+            if (component instanceof java.awt.Container child) {
+                javax.swing.JLabel found = label(child, text);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The button with this text or accessible name. */
+    private static javax.swing.AbstractButton button(java.awt.Container container, String name) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (
+                component instanceof javax.swing.AbstractButton button &&
+                (name.equals(button.getText()) || name.equals(button.getAccessibleContext().getAccessibleName()))
+            ) {
+                return button;
+            }
+            if (component instanceof java.awt.Container child) {
+                javax.swing.AbstractButton found = button(child, name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
     /** The control a label is for. */
     private static java.awt.Component find(java.awt.Container container, String label) {
         for (java.awt.Component component : container.getComponents()) {
@@ -188,7 +257,11 @@ class RuleListTest {
                 title.getLabelFor() != null
             ) {
                 java.awt.Component target = title.getLabelFor();
-                if (target instanceof java.awt.Container holder && !(target instanceof javax.swing.JTextField)) {
+                if (
+                    target instanceof java.awt.Container holder &&
+                    !(target instanceof javax.swing.text.JTextComponent) &&
+                    holder.getComponentCount() > 0
+                ) {
                     return holder.getComponent(0);
                 }
                 return target;

@@ -13,6 +13,7 @@ import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.KeyboardFocusManager;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -49,8 +50,13 @@ import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
+import javax.swing.border.Border;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
 import javax.swing.text.JTextComponent;
 
 /** Small Swing building blocks shared by the screenshot window and the template editor. */
@@ -335,19 +341,88 @@ final class Widgets {
     }
 
     /**
-     * Puts {@code component} inside the right end of {@code field}, like the regex toggle of a search box. FlatLaf
-     * (Burp) supports this natively; other look and feels get the component next to the field.
+     * A text field for long values, such as patterns: it wraps at any character and grows a line at a time, so the
+     * whole value stays in view. It holds one line of text: line breaks, typed or pasted, are dropped, and Tab moves
+     * on. It looks like a text field, focus ring and error outline included.
      */
-    static JComponent withTrailing(JTextField field, JComponent component) {
-        if (isFlatLaf()) {
-            field.putClientProperty("JTextField.trailingComponent", component);
-            return field;
+    static JTextArea wrappingField(String text, int columns) {
+        JTextArea field = new JTextArea(text) {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                // Burp's theme switch calls this again: take the text field's look each time.
+                Border border = UIManager.getBorder("TextField.border");
+                if (border != null) {
+                    setBorder(border);
+                }
+                Insets margin = UIManager.getInsets("TextField.margin");
+                if (margin != null) {
+                    setMargin(margin);
+                }
+                Color background = UIManager.getColor("TextField.background");
+                if (background != null) {
+                    setBackground(background);
+                }
+            }
+
+            /** The {@link #placeholder}, which FlatLaf paints in text fields only. */
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                super.paintComponent(graphics);
+                if (getText().isEmpty() && getClientProperty("JTextField.placeholderText") instanceof String text) {
+                    Graphics2D g = (Graphics2D) graphics.create();
+                    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    g.setFont(getFont());
+                    g.setColor(themeColor("TextField.placeholderForeground", mutedColor()));
+                    Insets insets = getInsets();
+                    g.drawString(text, insets.left, insets.top + g.getFontMetrics().getAscent());
+                    g.dispose();
+                }
+            }
+
+            /** As wide as {@code columns}, not as the text: the layout gives it the width, and the text wraps. */
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                Insets insets = getInsets();
+                return new Dimension(getColumns() * getColumnWidth() + insets.left + insets.right, size.height);
+            }
+        };
+        field.setColumns(columns);
+        field.setLineWrap(true);
+        field.setCaretPosition(0);
+        ((AbstractDocument) field.getDocument()).setDocumentFilter(new SingleLine());
+        // Inherit Tab and Shift+Tab, which a text area otherwise types.
+        field.setFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS, null);
+        field.setFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS, null);
+        // Its height is only known once it has a width: lay out again after the first pass.
+        field.addComponentListener(
+            new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    if (field.getPreferredSize().height != field.getHeight()) {
+                        field.revalidate();
+                    }
+                }
+            }
+        );
+        return field;
+    }
+
+    /** Drops line breaks, typed or pasted, from a document that holds one line. */
+    static final class SingleLine extends DocumentFilter {
+
+        @Override
+        public void insertString(FilterBypass bypass, int offset, String text, AttributeSet attributes)
+            throws BadLocationException {
+            super.insertString(bypass, offset, text.replaceAll("[\r\n]", ""), attributes);
         }
-        JPanel panel = new JPanel(new BorderLayout(4, 0));
-        panel.setOpaque(false);
-        panel.add(field, BorderLayout.CENTER);
-        panel.add(component, BorderLayout.EAST);
-        return panel;
+
+        @Override
+        public void replace(FilterBypass bypass, int offset, int length, String text, AttributeSet attributes)
+            throws BadLocationException {
+            super.replace(bypass, offset, length, text == null ? null : text.replaceAll("[\r\n]", ""), attributes);
+        }
     }
 
     /** A small rounded status label, such as "Modified", in the theme's warning tones. */

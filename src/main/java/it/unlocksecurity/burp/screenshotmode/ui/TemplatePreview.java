@@ -24,9 +24,6 @@ import javax.swing.JTextArea;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.text.AbstractDocument;
-import javax.swing.text.AttributeSet;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.DocumentFilter;
 import javax.swing.undo.CompoundEdit;
 import javax.swing.undo.UndoManager;
 
@@ -295,7 +292,7 @@ final class TemplatePreview extends JPanel {
             area.getAccessibleContext().setAccessibleName(target.label() + " of the sample message");
             if (target == RuleTarget.URL) {
                 // One line: a pasted URL keeps no line break.
-                ((AbstractDocument) area.getDocument()).setDocumentFilter(new SingleLine());
+                ((AbstractDocument) area.getDocument()).setDocumentFilter(new Widgets.SingleLine());
             }
             area.getDocument().addUndoableEditListener(event -> {
                 if (group != null) {
@@ -333,22 +330,6 @@ final class TemplatePreview extends JPanel {
             } else {
                 undo.redo();
             }
-        }
-    }
-
-    /** Drops line breaks, typed or pasted. */
-    private static final class SingleLine extends DocumentFilter {
-
-        @Override
-        public void insertString(FilterBypass bypass, int offset, String text, AttributeSet attributes)
-            throws BadLocationException {
-            super.insertString(bypass, offset, text.replaceAll("[\r\n]", ""), attributes);
-        }
-
-        @Override
-        public void replace(FilterBypass bypass, int offset, int length, String text, AttributeSet attributes)
-            throws BadLocationException {
-            super.replace(bypass, offset, length, text == null ? null : text.replaceAll("[\r\n]", ""), attributes);
         }
     }
 }

@@ -36,7 +36,7 @@ No external tools, no manual cropping and blurring.
   matches a regex or literal text in the request, the response, the URL or any of them, and a redaction can be
   limited to selected capture groups (e.g. `session=([0-9a-f]+)` redacts only the value).
 - **One list of rules**: each rule has an optional name, an on/off checkbox and a one-line summary, and opens into
-  its editor when clicked. The built-in *Defaults* template comes with named redactions for credentials, cookies, API keys,
+  its editor when clicked. Long patterns and header lists wrap in their field, so they are always shown whole. The built-in *Defaults* template comes with named redactions for credentials, cookies, API keys,
   passwords, tokens and JWTs, including in the URL, so a secret in the request line doesn't show up above it.
 - **Rule checks**: in the screenshot window, each rule shows how many times it matched. A redaction with an invalid
   or too slow pattern is flagged on its line, on the *Rules* tab and above the preview, and **Copy** and **Save** ask
