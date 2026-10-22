@@ -27,7 +27,6 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
-import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -272,6 +271,9 @@ public final class TemplatesTab extends JPanel {
         nameRow.add(nameLabel);
         nameRow.add(name);
         basedOn = null;
+        JLabel baseLabel = Widgets.title("Based on");
+        baseLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
+        nameRow.add(baseLabel);
         if (mode == Mode.NEW) {
             JComboBox<Template> base = new JComboBox<>(
                 store
@@ -281,7 +283,9 @@ public final class TemplatesTab extends JPanel {
                     .toArray(Template[]::new)
             );
             base.setSelectedItem(template);
-            base.setToolTipText("The built-in template whose settings the new template starts from");
+            base.setToolTipText(
+                "The built-in template the new template starts from. The headers you don't change follow it."
+            );
             base.addActionListener(event -> {
                 if (!(base.getSelectedItem() instanceof Template chosen) || chosen == template) {
                     return;
@@ -298,12 +302,17 @@ public final class TemplatesTab extends JPanel {
                     base.setSelectedItem(template);
                 }
             });
-            JLabel baseLabel = Widgets.title("Based on");
             baseLabel.setLabelFor(base);
-            baseLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
-            nameRow.add(baseLabel);
             nameRow.add(base);
             basedOn = base;
+        } else {
+            // Chosen once, when the template is created.
+            JLabel base = new JLabel(BuiltInTemplates.byId(working.basedOn).name);
+            base.setToolTipText(
+                "The built-in template this one started from. The headers you didn't change follow it."
+            );
+            baseLabel.setLabelFor(base);
+            nameRow.add(base);
         }
 
         JPanel body = new JPanel(new BorderLayout());
@@ -319,33 +328,7 @@ public final class TemplatesTab extends JPanel {
 
     /** Asks before discarding edits, explained by {@code message}. Keep editing is the default. */
     private boolean askDiscard(String message) {
-        return confirm("Discard changes?", message, "Discard", "Keep editing");
-    }
-
-    /**
-     * Asks a two-option question whose safe choice is the primary, default one.
-     *
-     * @return whether the user chose {@code action}
-     */
-    private boolean confirm(String title, String message, String action, String safe) {
-        JButton act = Widgets.button(action);
-        JButton keep = Widgets.primary(Widgets.button(safe));
-        JOptionPane pane = new JOptionPane(
-            message,
-            JOptionPane.WARNING_MESSAGE,
-            JOptionPane.DEFAULT_OPTION,
-            null,
-            new Object[] { act, keep },
-            keep
-        );
-        // Custom option buttons don't close the pane on their own.
-        act.addActionListener(event -> pane.setValue(act));
-        keep.addActionListener(event -> pane.setValue(keep));
-        JDialog dialog = pane.createDialog(this, title);
-        dialog.getRootPane().setDefaultButton(keep);
-        dialog.setVisible(true);
-        dialog.dispose();
-        return pane.getValue() == act;
+        return Widgets.confirm(this, "Discard changes?", message, "Discard", "Keep editing");
     }
 
     /** Replaces the "discard unsaved changes?" dialog (given its message), for tests. */
@@ -462,7 +445,9 @@ public final class TemplatesTab extends JPanel {
             Template defaults = store.getTemplateById(BuiltInTemplates.DEFAULTS_ID).orElseThrow();
             message += "\nIt is the default template: \"" + defaults.name + "\" will become the default.";
         }
-        if (confirm("Delete Template", message, "Delete", "Cancel") && store.deleteTemplate(template.id)) {
+        if (
+            Widgets.confirm(this, "Delete Template", message, "Delete", "Cancel") && store.deleteTemplate(template.id)
+        ) {
             showStatus("Template deleted", false);
         }
     }

@@ -239,6 +239,32 @@ final class Widgets {
         return pane.getValue() == ok ? field.getText() : null;
     }
 
+    /**
+     * Asks a two-option question whose safe choice is the primary, default one.
+     *
+     * @return whether the user chose {@code action}
+     */
+    static boolean confirm(Component parent, String title, String message, String action, String safe) {
+        JButton act = button(action);
+        JButton keep = primary(button(safe));
+        JOptionPane pane = new JOptionPane(
+            message,
+            JOptionPane.WARNING_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { act, keep },
+            keep
+        );
+        // Custom option buttons don't close the pane on their own.
+        act.addActionListener(event -> pane.setValue(act));
+        keep.addActionListener(event -> pane.setValue(keep));
+        JDialog dialog = pane.createDialog(parent, title);
+        dialog.getRootPane().setDefaultButton(keep);
+        dialog.setVisible(true);
+        dialog.dispose();
+        return pane.getValue() == act;
+    }
+
     /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */
     static JButton flatIconButton(Icon icon, String tooltip, Runnable action) {
         JButton button = iconButton(icon, tooltip, action);

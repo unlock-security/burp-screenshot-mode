@@ -240,6 +240,58 @@ class HeadersTabTest {
     }
 
     @Test
+    void restoresTheHeadersOfItsBuiltInTemplateAfterAsking() {
+        HeadersTab tab = tab(null);
+        List<String> asked = new ArrayList<>();
+        tab.setRestoreConfirmation(message -> {
+            asked.add(message);
+            return asked.size() > 1;
+        });
+        javax.swing.AbstractButton restore = restoreButton(tab);
+        assertTrue(texts(tab).contains("Based on Defaults · no changes"));
+        assertFalse(restore.isEnabled(), "nothing to restore");
+
+        tab.toggle((HeadersTab.GroupRow) row(tab, "Security policy"));
+        assertTrue(texts(tab).contains("Based on Defaults · 1 change"));
+        assertTrue(restore.isEnabled());
+
+        restore.doClick();
+        assertTrue(settings.headers.isGroupHidden("security"), "declined");
+        restore.doClick();
+        assertEquals(
+            "Show and hide the headers as \"Defaults\" does?\nYour change to the headers will be lost.",
+            asked.getLast()
+        );
+        assertEquals(BuiltInTemplates.defaults().headers.groups, settings.headers.groups);
+        assertTrue(texts(tab).contains("Based on Defaults · no changes"));
+    }
+
+    @Test
+    void countsEveryHiddenGroupAsAChangeFromEmpty() {
+        settings.basedOn = null;
+        HeadersTab tab = tab(null);
+        assertTrue(texts(tab).contains("Based on Empty · 8 changes"), texts(tab).toString());
+        tab.setRestoreConfirmation(message -> true);
+        restoreButton(tab).doClick();
+        assertTrue(settings.headers.groups.isEmpty(), "Empty hides nothing");
+    }
+
+    private static javax.swing.AbstractButton restoreButton(Container container) {
+        for (Component component : container.getComponents()) {
+            if (component instanceof javax.swing.AbstractButton button && "Restore defaults".equals(button.getText())) {
+                return button;
+            }
+            if (component instanceof Container child) {
+                javax.swing.AbstractButton found = restoreButton(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Test
     void describesTheSelectedHeader() {
         HeadersTab tab = tab(MESSAGE);
         tab.select("Content");

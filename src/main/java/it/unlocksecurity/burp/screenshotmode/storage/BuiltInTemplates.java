@@ -11,7 +11,8 @@ import java.util.List;
 /**
  * The templates bundled with the extension, read from {@code built-in-templates.json} next to this class in the jar:
  * Defaults (our hidden headers and redactions) and Empty (nothing hidden, no rules). They are never stored, so every
- * start reads them as this release ships them, and they can't be edited or deleted: users duplicate them instead. The
+ * start reads them as this release ships them, and they can't be edited or deleted: users duplicate them instead.
+ * Templates made from one keep it as their {@link Settings#basedOn parent}, whose headers they follow. The
  * file is an ordinary template export in the current storage format, so {@link TemplateCodec} reads it like any import:
  * update it whenever {@link TemplateCodec#VERSION} changes.
  *
@@ -36,22 +37,46 @@ public final class BuiltInTemplates {
 
     private static final String RESOURCE = "built-in-templates.json";
     private static final String JSON = load();
+    private static final List<Template> TEMPLATES = parse();
 
     private BuiltInTemplates() {}
 
     /** New copies of the built-in templates, Defaults first. */
     public static List<Template> all() {
-        return TemplateCodec.decode(JSON)
-            .data()
-            .templates()
-            .stream()
-            .map(template -> new Template(template.id, template.name, template.settings, true))
-            .toList();
+        return TEMPLATES.stream().map(Template::copy).toList();
     }
 
     /** A new copy of the Defaults settings, free to edit. */
     public static Settings defaults() {
-        return all().getFirst().settings;
+        return byId(DEFAULTS_ID).settings;
+    }
+
+    /** A new copy of the built-in template with this id; Empty for {@code null} or an unknown id. */
+    public static Template byId(String id) {
+        String found = isParent(id) ? id : EMPTY_ID;
+        return TEMPLATES.stream()
+            .filter(template -> template.id.equals(found))
+            .findFirst()
+            .orElseThrow()
+            .copy();
+    }
+
+    /** Whether {@code id} is a built-in template's, other than Empty's (which is {@code null} as a parent). */
+    static boolean isParent(String id) {
+        return !EMPTY_ID.equals(id) && TEMPLATES.stream().anyMatch(template -> template.id.equals(id));
+    }
+
+    /** Read as stored in the file (where nothing has a parent), then each made the parent of its own settings. */
+    private static List<Template> parse() {
+        return TemplateCodec.decode(JSON)
+            .data()
+            .templates()
+            .stream()
+            .map(template -> {
+                template.settings.basedOn = EMPTY_ID.equals(template.id) ? null : template.id;
+                return new Template(template.id, template.name, template.settings, true);
+            })
+            .toList();
     }
 
     /** The bundled file as is. */

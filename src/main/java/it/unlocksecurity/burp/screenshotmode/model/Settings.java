@@ -10,6 +10,12 @@ public final class Settings {
     public static final int MIN_PIXEL_WIDTH = 200;
     public static final int MAX_PIXEL_WIDTH = 2000;
 
+    /**
+     * The id of the built-in template these settings are based on: the headers that {@link #headers} doesn't set
+     * itself follow that template, also when a release changes it. {@code null} is Empty, which hides nothing.
+     */
+    public String basedOn;
+    /** The headers shown and hidden, the built-in template's included. */
     public HeaderVisibility headers = new HeaderVisibility();
     public Disposition disposition = Disposition.HORIZONTAL;
     public WidthMode widthMode = WidthMode.FULL;
@@ -36,6 +42,7 @@ public final class Settings {
 
     public Settings copy() {
         Settings copy = new Settings();
+        copy.basedOn = basedOn;
         copy.headers = headers.copy();
         copy.disposition = disposition;
         copy.widthMode = widthMode;

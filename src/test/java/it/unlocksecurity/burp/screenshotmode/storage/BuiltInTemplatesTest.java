@@ -58,7 +58,17 @@ class BuiltInTemplatesTest {
         Settings defaults = BuiltInTemplates.defaults();
         defaults.redactions.clear();
         defaults.headers = empty.headers;
+        defaults.basedOn = empty.basedOn;
         assertTrue(TemplateCodec.sameSettings(defaults, empty));
+    }
+
+    @Test
+    void areTheParentsOfTheirOwnSettings() {
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, BuiltInTemplates.defaults().basedOn);
+        assertEquals(null, BuiltInTemplates.all().getLast().settings.basedOn, "Empty is no parent");
+        assertEquals("Empty", BuiltInTemplates.byId(null).name);
+        assertEquals("Empty", BuiltInTemplates.byId("unknown").name);
+        assertEquals("Defaults", BuiltInTemplates.byId(BuiltInTemplates.DEFAULTS_ID).name);
     }
 
     @Test

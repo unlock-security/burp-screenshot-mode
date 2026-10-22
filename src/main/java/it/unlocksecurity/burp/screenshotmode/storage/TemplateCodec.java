@@ -131,9 +131,18 @@ public final class TemplateCodec {
     private static JsonObject encodeSettings(Settings settings) {
         JsonObject object = new JsonObject();
 
+        // A template based on a built-in one stores only what it changes from its headers.
+        HeaderVisibility visibility = settings.headers;
+        if (settings.basedOn != null) {
+            object.addProperty("basedOn", settings.basedOn);
+            visibility = visibility.changesFrom(
+                BuiltInTemplates.byId(settings.basedOn).settings.headers,
+                HeaderCatalogFile.bundled()
+            );
+        }
         JsonObject headers = new JsonObject();
-        headers.add("groups", visibilityMap(settings.headers.groups));
-        headers.add("headers", visibilityMap(settings.headers.headers));
+        headers.add("groups", visibilityMap(visibility.groups));
+        headers.add("headers", visibilityMap(visibility.headers));
         object.add("headers", headers);
 
         object.addProperty("disposition", settings.disposition.id());
@@ -236,10 +245,23 @@ public final class TemplateCodec {
      */
     private static Settings parseSettings(JsonObject object, int version) {
         Settings settings = new Settings();
-        settings.headers =
-            version >= 3
-                ? parseHeaders(asObject(object.get("headers"), "headers"))
-                : migrateHiddenHeaders(object.get("headersToHide"), version, HeaderCatalogFile.bundled());
+        if (version >= 3) {
+            // Without a parent (or with one this release doesn't ship), the headers are all the template's own.
+            JsonElement basedOn = object.get("basedOn");
+            if (basedOn != null && isString(basedOn) && BuiltInTemplates.isParent(basedOn.getAsString())) {
+                settings.basedOn = basedOn.getAsString();
+            }
+            HeaderVisibility parent =
+                settings.basedOn == null
+                    ? new HeaderVisibility()
+                    : BuiltInTemplates.byId(settings.basedOn).settings.headers;
+            settings.headers = parseHeaders(asObject(object.get("headers"), "headers")).over(
+                parent,
+                HeaderCatalogFile.bundled()
+            );
+        } else {
+            settings.headers = migrateHiddenHeaders(object.get("headersToHide"), version, HeaderCatalogFile.bundled());
+        }
         settings.disposition = enumValue(Disposition.class, object, "disposition");
 
         JsonObject width = asObject(object.get("width"), "width");
@@ -286,11 +308,9 @@ public final class TemplateCodec {
 
     private static HeaderVisibility parseHeaders(JsonObject object) {
         HeaderVisibility headers = new HeaderVisibility();
-        parseVisibilityMap(object.get("groups"), "headers.groups").forEach((group, visibility) -> {
-            if (visibility != Visibility.SHOW) {
-                headers.groups.put(group, Visibility.HIDE);
-            }
-        });
+        parseVisibilityMap(object.get("groups"), "headers.groups").forEach((group, visibility) ->
+            headers.groups.put(group, visibility == Visibility.SHOW ? Visibility.SHOW : Visibility.HIDE)
+        );
         headers.headers.putAll(parseVisibilityMap(object.get("headers"), "headers.headers"));
         return headers;
     }

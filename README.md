@@ -55,7 +55,9 @@ No external tools, no manual cropping and blurring.
 - **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
   suite tab, and import/export them as JSON. Two built-in templates ship with the extension and are updated with it:
   *Defaults* (noisy headers hidden, secrets redacted) and *Empty* (messages as they are). They can't be edited or
-  deleted: start a new template from one of them, or duplicate it.
+  deleted: start a new template from one of them, or duplicate it. Your template keeps following its built-in
+  template's hidden headers, except the ones you changed, so new releases can hide more noise for you; its rules and
+  appearance are yours and never change by themselves. **Restore defaults** in the *Headers* tab drops your changes.
 - **Export** as a 2× PNG file or straight to the clipboard.
 
 ## Screenshots

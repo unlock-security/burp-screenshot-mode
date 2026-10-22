@@ -469,4 +469,48 @@ class TemplateCodecTest {
         assertEquals(Visibility.SHOW, headers.of("Content-Security-Policy", CATALOG));
         assertEquals(Visibility.SHOW, headers.of("Server", CATALOG));
     }
+
+    @Test
+    void storesOnlyWhatATemplateChangesFromItsBuiltInParent() {
+        Settings settings = BuiltInTemplates.defaults();
+        settings.headers.set("Date", Visibility.SHOW, CATALOG);
+        Template template = Template.create("Report", settings);
+        String json = TemplateCodec.encode(new StoredData(List.of(template), template.id));
+        var stored = JsonParser.parseString(json)
+            .getAsJsonObject()
+            .getAsJsonArray("templates")
+            .get(0)
+            .getAsJsonObject()
+            .getAsJsonObject("settings");
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, stored.get("basedOn").getAsString());
+        assertEquals(0, stored.getAsJsonObject("headers").getAsJsonObject("groups").size());
+        assertEquals("show", stored.getAsJsonObject("headers").getAsJsonObject("headers").get("Date").getAsString());
+
+        Settings read = TemplateCodec.decode(json).data().templates().getFirst().settings;
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, read.basedOn);
+        assertTrue(TemplateCodec.sameSettings(settings, read));
+        assertEquals(settings.headers.groups, read.headers.groups);
+        assertEquals(settings.headers.headers, read.headers.headers);
+    }
+
+    @Test
+    void readsATemplateWithoutChangesAsItsParent() {
+        String json =
+            "{\"version\": 3, \"defaultTemplateId\": \"\", \"templates\": [{\"id\": \"a\", \"name\": \"A\"," +
+            " \"settings\": {\"basedOn\": \"built-in-defaults\", \"headers\": {\"groups\": {}, \"headers\": {}}," +
+            " \"disposition\": \"horizontal\", \"width\": {\"mode\": \"full\"}, \"highlights\": []," +
+            " \"redactions\": []}}]}";
+        Settings read = TemplateCodec.decode(json).data().templates().getFirst().settings;
+        assertEquals(BuiltInTemplates.defaults().headers.groups, read.headers.groups);
+        assertEquals(Visibility.HIDE, read.headers.of("ETag", CATALOG));
+
+        // A parent this release doesn't ship: the headers are taken as the template's own.
+        Settings unknown = TemplateCodec.decode(json.replace("built-in-defaults", "built-in-future"))
+            .data()
+            .templates()
+            .getFirst()
+            .settings;
+        assertEquals(null, unknown.basedOn);
+        assertTrue(unknown.headers.groups.isEmpty());
+    }
 }

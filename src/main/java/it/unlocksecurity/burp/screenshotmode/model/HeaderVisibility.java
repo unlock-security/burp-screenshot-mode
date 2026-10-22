@@ -1,7 +1,9 @@
 package it.unlocksecurity.burp.screenshotmode.model;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Which headers a template hides. A group setting covers every header the catalog puts in that group, including ones
@@ -10,10 +12,16 @@ import java.util.TreeMap;
  * <p>Header settings that only repeat their group's are dropped, so equal choices are stored the same way. Headers the
  * catalog doesn't know are the exception: they are kept even when shown, as the template is the only place listing
  * them.
+ *
+ * <p>A template based on a built-in one stores only its {@link #changesFrom changes} from the built-in's headers, and
+ * is read back {@link #over over} them, so whatever it doesn't change follows the built-in template.
  */
 public final class HeaderVisibility {
 
-    /** By group id. Only {@link Visibility#HIDE} is stored: a group is shown when it is missing. */
+    /**
+     * By group id. Only {@link Visibility#HIDE} is kept: a group is shown when it is missing. Changes from a built-in
+     * template also keep {@link Visibility#SHOW}, for a group the built-in one hides.
+     */
     public Map<String, Visibility> groups = new TreeMap<>();
     /** By header name, ignoring case. */
     public Map<String, Visibility> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -50,6 +58,61 @@ public final class HeaderVisibility {
             groups.remove(groupId);
         }
         catalog.group(groupId).ifPresent(group -> group.headers().forEach(header -> headers.remove(header.name())));
+    }
+
+    /** The headers of a template whose changes are these, made on top of {@code parent}'s headers. */
+    public HeaderVisibility over(HeaderVisibility parent, HeaderCatalog catalog) {
+        HeaderVisibility result = new HeaderVisibility();
+        result.groups.putAll(parent.groups);
+        groups.forEach((id, visibility) -> {
+            if (visibility == Visibility.HIDE) {
+                result.groups.put(id, Visibility.HIDE);
+            } else {
+                result.groups.remove(id);
+            }
+        });
+        result.headers.putAll(parent.headers);
+        result.headers.putAll(headers);
+        result.headers
+            .entrySet()
+            .removeIf(
+                entry ->
+                    catalog.header(entry.getKey()).isPresent() &&
+                    entry.getValue() == result.groupVisibility(entry.getKey(), catalog)
+            );
+        return result;
+    }
+
+    /**
+     * What these headers change from {@code parent}'s: the fewest settings that give the same headers {@link #over}
+     * them. Headers the catalog doesn't know are always kept, as for {@link #set}.
+     */
+    public HeaderVisibility changesFrom(HeaderVisibility parent, HeaderCatalog catalog) {
+        HeaderVisibility changes = new HeaderVisibility();
+        Set<String> groupIds = new TreeSet<>(groups.keySet());
+        groupIds.addAll(parent.groups.keySet());
+        for (String id : groupIds) {
+            if (isGroupHidden(id) != parent.isGroupHidden(id)) {
+                changes.groups.put(id, isGroupHidden(id) ? Visibility.HIDE : Visibility.SHOW);
+            }
+        }
+        HeaderVisibility inherited = changes.over(parent, catalog);
+        Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        names.addAll(headers.keySet());
+        names.addAll(parent.headers.keySet());
+        for (String name : names) {
+            Visibility own = of(name, catalog);
+            boolean listed = catalog.header(name).isEmpty() && headers.containsKey(name);
+            if (listed || own != inherited.of(name, catalog)) {
+                changes.headers.put(name, own);
+            }
+        }
+        return changes;
+    }
+
+    /** How many group and header settings there are. */
+    public int size() {
+        return groups.size() + headers.size();
     }
 
     public HeaderVisibility copy() {

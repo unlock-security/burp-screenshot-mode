@@ -55,6 +55,7 @@ class TemplatesTabTest {
         assertEquals(source.settings.highlights.size(), copy.settings.highlights.size());
         assertEquals(source.settings.redactions.size(), copy.settings.redactions.size());
         assertTrue(copy.settings.highlights.size() > 0);
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, copy.settings.basedOn, "same built-in parent");
 
         copy.settings.disposition = Disposition.VERTICAL;
         copy.settings.highlights.clear();
@@ -224,6 +225,7 @@ class TemplatesTabTest {
         assertEquals("Clean", created.name);
         assertFalse(created.builtIn);
         assertTrue(created.settings.redactions.isEmpty(), "started from Empty");
+        assertEquals(null, created.settings.basedOn, "and follows it");
         assertEquals(Disposition.VERTICAL, created.settings.disposition);
     }
 

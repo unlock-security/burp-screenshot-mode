@@ -102,6 +102,12 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   user's own. Built-in templates are never stored, updated or deleted; any template, built-in included, can be the
   default (★), and deleting the default one makes Defaults the default. New templates start from a built-in one
   ("Based on" in the editor) or duplicate any template.
+- `Settings.basedOn` is that built-in **parent** (only built-in templates are parents; `null` is Empty, which hides
+  nothing). In memory `Settings.headers` always holds the effective headers. `TemplateCodec` stores only
+  `HeaderVisibility.changesFrom` the parent's headers and reads them back `over` the parent's, so the headers a
+  template doesn't change follow its parent when a release changes it. Rules and appearance are copied once and never
+  inherited. Copies and duplicates keep the parent; the Headers tab shows "Based on … · N changes", and its Restore
+  defaults drops those changes.
 - Enums implement `model.Labeled`: `id()` is the stable id written to saved templates and exports, `label()` is UI
   text. Never change an existing `id()`.
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
@@ -120,7 +126,8 @@ migrates v2, v1 and unversioned v0 payloads; the same codec handles template imp
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules
 there (in Defaults), never change the built-in ids, and update the file whenever `VERSION` changes
 (`BuiltInTemplatesTest` fails otherwise). Optional settings fields
-(`theme`, `view`, `url`) default sensibly when missing. Any schema change must keep loading the templates users already saved
+(`theme`, `view`, `url`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
+none, with the stored headers taken as the template's own. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced
 by the named rules of the current Defaults (`storage.LegacyDefaults`); rules the user edited are kept as they are.
@@ -132,7 +139,8 @@ on screen (`ContentPanel.headerHits`). Its actions open that rule, or add a head
 **Header catalog:** `storage/header-catalog.json` (read by `storage.HeaderCatalogFile` into a `model.HeaderCatalog`)
 lists the known headers in groups, with the messages each is used in and where it is defined. It is reference data,
 read at every start and never stored in templates: templates only store `HeaderVisibility`, i.e. hidden groups by id
-and per-header settings by name, so a release can add headers to a group and every template follows. Never change or
+and per-header settings by name (changes from a parent also store shown groups), so a release can add headers to a
+group and every template follows. Never change or
 reuse a group `id`. Header settings that repeat their group's are dropped, so equal choices store the same; headers
 the catalog doesn't know are kept even when shown. The v2-to-v3 migration needs the catalog: a group whose headers
 were all hidden becomes a hidden group.

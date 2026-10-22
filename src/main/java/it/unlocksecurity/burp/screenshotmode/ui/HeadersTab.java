@@ -9,6 +9,7 @@ import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
@@ -155,6 +157,11 @@ final class HeadersTab extends JPanel {
     private final JTable table = new Table(model);
     private final JPanel details = Widgets.card(new BorderLayout());
     private final JLabel summary = Widgets.hint("");
+    /** The built-in template the headers follow, and how many of them the template changes. */
+    private final JLabel basis = Widgets.hint("");
+    private final JButton restore = Widgets.button("Restore defaults");
+    private Predicate<String> confirmRestore = message ->
+        Widgets.confirm(this, "Restore Defaults", message, "Restore", "Cancel");
     private final Set<String> expanded = new HashSet<>(Set.of(CUSTOM));
     private final Links links;
     /** The rules that changed each header line of the message on screen, by message and header name. */
@@ -211,16 +218,25 @@ final class HeadersTab extends JPanel {
         setUpTable();
         JScrollPane scroll = new JScrollPane(table);
 
-        JButton restore = Widgets.button("Restore defaults");
         restore.putClientProperty("JButton.buttonType", "borderless");
-        restore.setToolTipText("Hide and show the same headers as the built-in Defaults template");
         restore.addActionListener(event -> {
-            settings.headers = BuiltInTemplates.defaults().headers;
-            changed();
+            Template parent = BuiltInTemplates.byId(settings.basedOn);
+            int changes = changes();
+            String question =
+                "Show and hide the headers as \"" +
+                parent.name +
+                "\" does?\nYour " +
+                (changes == 1 ? "change" : changes + " changes") +
+                " to the headers will be lost.";
+            if (confirmRestore.test(question)) {
+                settings.headers = parent.settings.headers;
+                changed();
+            }
         });
-        JPanel footer = new JPanel(new BorderLayout(8, 0));
+        JPanel footer = new JPanel(new BorderLayout(8, 4));
         footer.setOpaque(false);
-        footer.add(summary, BorderLayout.CENTER);
+        footer.add(summary, BorderLayout.NORTH);
+        footer.add(basis, BorderLayout.CENTER);
         footer.add(restore, BorderLayout.EAST);
 
         JPanel bottom = new JPanel(new BorderLayout(0, 8));
@@ -579,6 +595,28 @@ final class HeadersTab extends JPanel {
                     : hidden + " hidden in this message"
                 : catalog.headerCount() + " headers in " + catalog.groups().size() + " groups, " + hidden + " hidden"
         );
+        String parent = BuiltInTemplates.byId(settings.basedOn).name;
+        int changes = changes();
+        basis.setText(
+            "Based on " +
+                parent +
+                " · " +
+                (changes == 0 ? "no changes" : changes == 1 ? "1 change" : changes + " changes")
+        );
+        restore.setEnabled(changes > 0);
+        restore.setToolTipText(
+            changes > 0 ? "Show and hide the headers as " + parent + " does" : "The headers are those of " + parent
+        );
+    }
+
+    /** How many group and header settings differ from the built-in template's the headers are based on. */
+    private int changes() {
+        return settings.headers.changesFrom(BuiltInTemplates.byId(settings.basedOn).settings.headers, catalog).size();
+    }
+
+    /** Replaces the "restore defaults?" dialog (given its message), for tests. */
+    void setRestoreConfirmation(Predicate<String> confirmation) {
+        confirmRestore = confirmation;
     }
 
     private static boolean sameRow(Object a, Object b) {

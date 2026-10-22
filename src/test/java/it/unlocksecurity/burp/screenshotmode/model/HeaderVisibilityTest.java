@@ -86,4 +86,78 @@ class HeaderVisibilityTest {
         assertTrue(headers.headers.isEmpty());
         assertEquals(Visibility.HIDE, copy.of("x-BACKEND", CATALOG), "ignoring case in the copy too");
     }
+
+    private static final HeaderCatalog TWO_GROUPS = new HeaderCatalog(
+        List.of(
+            new HeaderCatalog.Group(
+                "caching",
+                "Caching",
+                List.of(
+                    new HeaderCatalog.Header("Cache-Control", Direction.BOTH, "RFC 9111 §5.2"),
+                    new HeaderCatalog.Header("ETag", Direction.RESPONSE, "RFC 9110 §8.8.3")
+                )
+            ),
+            new HeaderCatalog.Group(
+                "fetch",
+                "Fetch",
+                List.of(
+                    new HeaderCatalog.Header("Sec-Fetch-Mode", Direction.REQUEST, "Fetch"),
+                    new HeaderCatalog.Header("Sec-Fetch-Site", Direction.REQUEST, "Fetch")
+                )
+            )
+        )
+    );
+
+    private static HeaderVisibility parent() {
+        HeaderVisibility parent = new HeaderVisibility();
+        parent.setGroup("caching", true, TWO_GROUPS);
+        parent.set("Sec-Fetch-Site", Visibility.HIDE, TWO_GROUPS);
+        return parent;
+    }
+
+    @Test
+    void storesOnlyTheChangesFromTheParent() {
+        HeaderVisibility parent = parent();
+        HeaderVisibility edited = parent.copy();
+        assertEquals(0, edited.changesFrom(parent, TWO_GROUPS).size(), "no changes yet");
+
+        edited.setGroup("caching", false, TWO_GROUPS);
+        edited.set("Sec-Fetch-Site", Visibility.SHOW, TWO_GROUPS);
+        edited.set("X-Backend", Visibility.HIDE_IN_RESPONSE, TWO_GROUPS);
+        edited.set("X-Shown", Visibility.SHOW, TWO_GROUPS);
+        HeaderVisibility changes = edited.changesFrom(parent, TWO_GROUPS);
+        assertEquals(Map.of("caching", Visibility.SHOW), changes.groups);
+        assertEquals(
+            Map.of(
+                "Sec-Fetch-Site",
+                Visibility.SHOW,
+                "X-Backend",
+                Visibility.HIDE_IN_RESPONSE,
+                "X-Shown",
+                Visibility.SHOW
+            ),
+            changes.headers
+        );
+
+        HeaderVisibility back = changes.over(parent, TWO_GROUPS);
+        assertEquals(edited.groups, back.groups);
+        assertEquals(edited.headers, back.headers);
+    }
+
+    @Test
+    void followsTheParentWhereItChangesNothing() {
+        HeaderVisibility edited = parent();
+        edited.set("ETag", Visibility.SHOW, TWO_GROUPS);
+        HeaderVisibility changes = edited.changesFrom(parent(), TWO_GROUPS);
+
+        // A later release shows Caching, hides Fetch and no longer hides Sec-Fetch-Site on its own.
+        HeaderVisibility updated = new HeaderVisibility();
+        updated.setGroup("fetch", true, TWO_GROUPS);
+        HeaderVisibility headers = changes.over(updated, TWO_GROUPS);
+        assertEquals(Visibility.SHOW, headers.of("Cache-Control", TWO_GROUPS));
+        assertEquals(Visibility.SHOW, headers.of("ETag", TWO_GROUPS), "the template's own choice");
+        assertEquals(Visibility.HIDE, headers.of("Sec-Fetch-Mode", TWO_GROUPS));
+        assertEquals(Visibility.HIDE, headers.of("Sec-Fetch-Site", TWO_GROUPS));
+        assertTrue(headers.headers.isEmpty(), "ETag now repeats its group: " + headers.headers);
+    }
 }
