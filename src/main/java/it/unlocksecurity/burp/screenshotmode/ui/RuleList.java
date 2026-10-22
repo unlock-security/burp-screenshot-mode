@@ -182,6 +182,12 @@ final class RuleList<R extends Rule> extends JPanel {
         addFirst(factory.apply(type));
     }
 
+    /** Shows the rules again after the list was changed from outside, closing the open one. */
+    void reload() {
+        expansion.open(null);
+        rebuild();
+    }
+
     private void rebuild() {
         box.clear();
         rows.clear();

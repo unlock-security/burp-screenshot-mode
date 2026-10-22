@@ -10,12 +10,15 @@ import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
+import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -70,6 +73,20 @@ final class SettingsForm extends JPanel {
     };
     private final JLabel noticeText = new JLabel();
     private int failedRules;
+    /** The built-in template the settings are based on, and what Restore defaults does in the Rules tab. */
+    private final JLabel rulesBasis = Widgets.hint("");
+    private final JButton restoreRules = Widgets.button("Restore defaults…");
+    private final JLabel appearanceBasis = Widgets.hint("");
+    private final JButton restoreAppearance = Widgets.button("Restore defaults");
+    private Chooser chooser = (title, message, action, safe) -> Widgets.choose(this, title, message, action, safe);
+
+    /** Asks a two-option question, as {@link Widgets#choose}; replaced in tests. */
+    interface Chooser {
+        String choose(String title, String message, String action, String safe);
+    }
+
+    private static final String ADD_MISSING = "Add missing defaults";
+    private static final String REPLACE = "Replace with defaults";
 
     SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide) {
         this(settings, onChange, mono, wide, null);
@@ -82,11 +99,14 @@ final class SettingsForm extends JPanel {
         this.mono = mono;
         this.onChange = () -> {
             updateCounts();
+            updateRestore();
             onChange.run();
         };
         setOpaque(false);
 
-        tabs.addTab("Rules", scrollable(rulesTab(wide)));
+        restoreRules.addActionListener(event -> restoreRules());
+        restoreAppearance.addActionListener(event -> restoreAppearance());
+        tabs.addTab("Rules", withFooter(scrollable(rulesTab(wide)), rulesBasis, restoreRules));
         headers = new HeadersTab(
             settings,
             HeaderCatalogFile.bundled(),
@@ -112,10 +132,11 @@ final class SettingsForm extends JPanel {
             }
         );
         tabs.addTab("Headers", headers);
-        tabs.addTab("Appearance", scrollable(appearanceTab()));
+        tabs.addTab("Appearance", appearancePanel());
         tabs.setTabComponentAt(RULES, tabTitle("Rules", rulesCount));
         tabs.setTabComponentAt(HEADERS, tabTitle("Headers", headersCount));
         updateCounts();
+        updateRestore();
         add(tabs, BorderLayout.CENTER);
         // The notice is about the jump that just happened: leaving the Rules tab ends it.
         tabs.addChangeListener(event -> {
@@ -279,6 +300,169 @@ final class SettingsForm extends JPanel {
             case 1 -> "1 match";
             default -> status.matches() + " matches";
         };
+    }
+
+    /** The built-in template the settings are based on: a new copy, free to edit. */
+    private Template parent() {
+        return BuiltInTemplates.byId(settings.basedOn);
+    }
+
+    /** A tab's content with, pinned below it, which built-in template it follows and its Restore defaults. */
+    private static JComponent withFooter(JComponent content, JLabel basis, JButton restore) {
+        restore.putClientProperty("JButton.buttonType", "borderless");
+        JPanel footer = new JPanel(new BorderLayout(8, 0));
+        footer.setOpaque(false);
+        footer.setBorder(BorderFactory.createEmptyBorder(6, 14, 8, 8));
+        footer.add(basis, BorderLayout.CENTER);
+        footer.add(restore, BorderLayout.EAST);
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(content, BorderLayout.CENTER);
+        panel.add(footer, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private JComponent appearancePanel() {
+        return withFooter(scrollable(appearanceTab()), appearanceBasis, restoreAppearance);
+    }
+
+    /** Says what Restore defaults would change in the Rules and Appearance tabs, and enables it only if anything. */
+    private void updateRestore() {
+        Template parent = parent();
+        int total = parent.settings.highlights.size() + parent.settings.redactions.size();
+        int missing = missingRules(parent.settings);
+        rulesBasis.setText(
+            "Based on " +
+                parent.name +
+                " · " +
+                (total == 0
+                    ? "no rules"
+                    : missing == 0
+                      ? "no rules missing"
+                      : missing == 1
+                        ? "1 rule missing"
+                        : missing + " rules missing")
+        );
+        Settings same = settings.copy();
+        same.highlights = parent.settings.highlights;
+        same.redactions = parent.settings.redactions;
+        restoreRules.setEnabled(!TemplateCodec.sameSettings(settings, same));
+        restoreRules.setToolTipText("Add back the rules of " + parent.name + ", or replace yours with them");
+
+        int changes = settings.appearanceChanges(parent.settings);
+        appearanceBasis.setText(
+            "Based on " +
+                parent.name +
+                " · " +
+                (changes == 0 ? "no changes" : changes == 1 ? "1 change" : changes + " changes")
+        );
+        restoreAppearance.setEnabled(changes > 0);
+        restoreAppearance.setToolTipText("Use the appearance of " + parent.name + " again");
+    }
+
+    private int missingRules(Settings parent) {
+        return (
+            Settings.missing(settings.highlights, parent.highlights).size() +
+            Settings.missing(settings.redactions, parent.redactions).size()
+        );
+    }
+
+    /**
+     * Adds back the built-in template's rules that are missing, or replaces all the rules with its own, as the user
+     * chooses. Adding deletes nothing, so it is the default when anything is missing.
+     */
+    private void restoreRules() {
+        Template parent = parent();
+        List<HighlightRule> highlights = Settings.missing(settings.highlights, parent.settings.highlights);
+        List<RedactionRule> redactions = Settings.missing(settings.redactions, parent.settings.redactions);
+        int missing = highlights.size() + redactions.size();
+        int total = parent.settings.highlights.size() + parent.settings.redactions.size();
+        String name = "\"" + parent.name + "\"";
+        String choice;
+        if (missing > 0) {
+            choice = chooser.choose(
+                "Restore Defaults",
+                (missing == 1 ? "1 rule of " + name + " is" : missing + " rules of " + name + " are") +
+                    " missing from this template.\nAdd " +
+                    (missing == 1 ? "it" : "them") +
+                    " back, or replace all your rules with the " +
+                    (total == 1 ? "rule" : total + " rules") +
+                    " of " +
+                    name +
+                    "?",
+                REPLACE,
+                ADD_MISSING
+            );
+        } else {
+            choice = chooser.choose(
+                "Restore Defaults",
+                total == 0
+                    ? name + " has no rules: replacing removes all your rules."
+                    : "Replace your rules with the " +
+                          (total == 1 ? "rule" : total + " rules") +
+                          " of " +
+                          name +
+                          "?\nYour own rules and your changes to the default ones will be lost.",
+                REPLACE,
+                "Cancel"
+            );
+        }
+        if (ADD_MISSING.equals(choice)) {
+            settings.highlights.addAll(highlights);
+            settings.redactions.addAll(redactions);
+        } else if (REPLACE.equals(choice)) {
+            settings.highlights.clear();
+            settings.highlights.addAll(parent.settings.highlights);
+            settings.redactions.clear();
+            settings.redactions.addAll(parent.settings.redactions);
+        } else {
+            return;
+        }
+        highlightList.reload();
+        redactionList.reload();
+        onChange.run();
+    }
+
+    /** Takes the built-in template's appearance again, after asking. */
+    private void restoreAppearance() {
+        Template parent = parent();
+        int changes = settings.appearanceChanges(parent.settings);
+        String question =
+            "Use the appearance of \"" +
+            parent.name +
+            "\" again?\nYour " +
+            (changes == 1 ? "change" : changes + " changes") +
+            " to width, layout, theme, URL bar, body and footer will be lost.";
+        if (!"Restore".equals(chooser.choose("Restore Defaults", question, "Restore", "Cancel"))) {
+            return;
+        }
+        settings.copyAppearance(parent.settings);
+        // The controls show the settings they were built with: build them again.
+        int selected = tabs.getSelectedIndex();
+        tabs.setComponentAt(APPEARANCE, appearancePanel());
+        tabs.setSelectedIndex(selected);
+        onChange.run();
+    }
+
+    /** Replaces the Restore defaults dialogs, for tests. */
+    void setChooser(Chooser chooser) {
+        this.chooser = chooser;
+    }
+
+    JButton restoreRulesButton() {
+        return restoreRules;
+    }
+
+    JButton restoreAppearanceButton() {
+        return restoreAppearance;
+    }
+
+    JLabel rulesBasis() {
+        return rulesBasis;
+    }
+
+    JLabel appearanceBasis() {
+        return appearanceBasis;
     }
 
     /** Settings that change how the screenshot looks, as a label / control grid. */

@@ -57,7 +57,10 @@ No external tools, no manual cropping and blurring.
   *Defaults* (noisy headers hidden, secrets redacted) and *Empty* (messages as they are). They can't be edited or
   deleted: start a new template from one of them, or duplicate it. Your template keeps following its built-in
   template's hidden headers, except the ones you changed, so new releases can hide more noise for you; its rules and
-  appearance are yours and never change by themselves. **Restore defaults** in the *Headers* tab drops your changes.
+  appearance are yours and never change by themselves.
+- **Restore defaults** in each tab, from the built-in template yours is based on, after asking: the *Rules* tab adds
+  back the rules you deleted (or replaces all your rules), the *Headers* tab drops your header changes, and the
+  *Appearance* tab resets width, layout, theme, URL bar, body and footer. Each tab says what it would change.
 - **Export** as a 2× PNG file or straight to the clipboard.
 
 ## Screenshots

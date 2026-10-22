@@ -245,6 +245,15 @@ final class Widgets {
      * @return whether the user chose {@code action}
      */
     static boolean confirm(Component parent, String title, String message, String action, String safe) {
+        return action.equals(choose(parent, title, message, action, safe));
+    }
+
+    /**
+     * Like {@link #confirm}, for two choices that both do something.
+     *
+     * @return the label of the chosen option, or {@code null} if the dialog was closed
+     */
+    static String choose(Component parent, String title, String message, String action, String safe) {
         JButton act = button(action);
         JButton keep = primary(button(safe));
         JOptionPane pane = new JOptionPane(
@@ -262,7 +271,7 @@ final class Widgets {
         dialog.getRootPane().setDefaultButton(keep);
         dialog.setVisible(true);
         dialog.dispose();
-        return pane.getValue() == act;
+        return pane.getValue() == act ? action : pane.getValue() == keep ? safe : null;
     }
 
     /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */

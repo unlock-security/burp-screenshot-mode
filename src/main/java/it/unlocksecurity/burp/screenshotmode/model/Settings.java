@@ -2,6 +2,10 @@ package it.unlocksecurity.burp.screenshotmode.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** Screenshot settings. New templates start from a copy of a built-in template ({@code storage.BuiltInTemplates}). */
 public final class Settings {
@@ -38,6 +42,60 @@ public final class Settings {
             case PIXEL -> widthPixels;
             case A4, LETTER -> widthMode.presetWidth();
         };
+    }
+
+    /**
+     * The rules of {@code parent} that {@code own} doesn't have, matched by name: a built-in rule edited but still
+     * under its name counts as there. Built-in rules all have a name. Returns {@code parent}'s instances, with a new id
+     * where {@code own} already uses theirs.
+     */
+    public static <R extends Rule> List<R> missing(List<R> own, List<R> parent) {
+        Set<String> names = own
+            .stream()
+            .map(rule -> rule.name)
+            .collect(Collectors.toSet());
+        Set<String> ids = own
+            .stream()
+            .map(rule -> rule.id)
+            .collect(Collectors.toSet());
+        List<R> missing = new ArrayList<>();
+        for (R rule : parent) {
+            if (!rule.name.isBlank() && !names.contains(rule.name)) {
+                if (ids.contains(rule.id)) {
+                    rule.id = UUID.randomUUID().toString();
+                }
+                missing.add(rule);
+            }
+        }
+        return missing;
+    }
+
+    /** How many settings of the Appearance tab differ from {@code other}'s. */
+    public int appearanceChanges(Settings other) {
+        return (int) List.of(
+            disposition != other.disposition,
+            !Objects.equals(maxContentWidth(), other.maxContentWidth()) || widthMode != other.widthMode,
+            theme != other.theme,
+            url != other.url,
+            view != other.view,
+            showTimestamp != other.showTimestamp,
+            showResponseInfo != other.showResponseInfo
+        )
+            .stream()
+            .filter(changed -> changed)
+            .count();
+    }
+
+    /** Takes the settings of the Appearance tab from {@code other}. */
+    public void copyAppearance(Settings other) {
+        disposition = other.disposition;
+        widthMode = other.widthMode;
+        widthPixels = other.widthPixels;
+        theme = other.theme;
+        url = other.url;
+        view = other.view;
+        showTimestamp = other.showTimestamp;
+        showResponseInfo = other.showResponseInfo;
     }
 
     public Settings copy() {

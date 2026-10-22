@@ -106,8 +106,11 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   nothing). In memory `Settings.headers` always holds the effective headers. `TemplateCodec` stores only
   `HeaderVisibility.changesFrom` the parent's headers and reads them back `over` the parent's, so the headers a
   template doesn't change follow its parent when a release changes it. Rules and appearance are copied once and never
-  inherited. Copies and duplicates keep the parent; the Headers tab shows "Based on … · N changes", and its Restore
-  defaults drops those changes.
+  inherited. Copies and duplicates keep the parent. Each settings tab ends with "Based on …" and a Restore defaults
+  that always takes the parent's settings (never Defaults by name, so a future built-in template works too): Rules
+  adds the missing rules (`Settings.missing`, matched by name, so built-in rules must be named) or replaces them all,
+  Headers drops the header changes, Appearance copies the parent's (`Settings.copyAppearance`). All ask first
+  (`Widgets.confirm`/`choose`: two options, the safe one primary and default).
 - Enums implement `model.Labeled`: `id()` is the stable id written to saved templates and exports, `label()` is UI
   text. Never change an existing `id()`.
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,

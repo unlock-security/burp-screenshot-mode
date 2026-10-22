@@ -124,13 +124,21 @@ class BuiltInTemplatesTest {
     }
 
     @Test
-    void namesEveryDefaultRuleOnce() {
-        List<String> names = BuiltInTemplates.defaults()
-            .redactions.stream()
-            .map(rule -> rule.name)
-            .toList();
-        assertEquals(names.size(), names.stream().distinct().count(), names.toString());
-        assertTrue(names.stream().noneMatch(String::isBlank));
+    void namesEveryBuiltInRuleOnce() {
+        // Restore defaults finds the missing rules by name.
+        for (Template template : BuiltInTemplates.all()) {
+            for (List<? extends it.unlocksecurity.burp.screenshotmode.model.Rule> rules : List.of(
+                template.settings.highlights,
+                template.settings.redactions
+            )) {
+                List<String> names = rules
+                    .stream()
+                    .map(rule -> rule.name)
+                    .toList();
+                assertEquals(names.size(), names.stream().distinct().count(), template.name + ": " + names);
+                assertTrue(names.stream().noneMatch(String::isBlank), template.name + ": " + names);
+            }
+        }
     }
 
     @Test
