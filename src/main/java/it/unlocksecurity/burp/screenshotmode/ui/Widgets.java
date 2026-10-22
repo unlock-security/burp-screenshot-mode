@@ -16,6 +16,7 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
@@ -27,6 +28,7 @@ import java.awt.geom.Path2D;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -228,11 +230,36 @@ final class Widgets {
      * @return the text entered, or {@code null} when cancelled
      */
     static String askText(Component parent, String label, String title) {
+        return askText(parent, label, title, text -> null);
+    }
+
+    /**
+     * Like {@link #askText(Component, String, String)}, with OK disabled while {@code problem} finds one in the text:
+     * it returns what is wrong, shown under the field, {@code ""} to only disable OK, or {@code null} if nothing is.
+     */
+    static String askText(Component parent, String label, String title, Function<String, String> problem) {
         JTextField field = new JTextField(20);
         JButton ok = primary(button("OK"));
         JButton cancel = button("Cancel");
+        // A space keeps a line for the message, which the dialog is sized for when it opens.
+        JLabel error = new JLabel(" ");
+        error.setForeground(errorColor());
+        Runnable check = () -> {
+            String found = problem.apply(field.getText());
+            ok.setEnabled(found == null);
+            error.setText(found == null || found.isEmpty() ? " " : found);
+            field.putClientProperty("JComponent.outline", found == null || found.isEmpty() ? null : "error");
+            field.getAccessibleContext().setAccessibleDescription(found == null || found.isEmpty() ? null : found);
+            // A message wider than the dialog widens it, once: it never shrinks back, so it doesn't jump while typing.
+            Window window = SwingUtilities.getWindowAncestor(error);
+            if (window != null && error.getPreferredSize().width > error.getWidth()) {
+                window.pack();
+            }
+        };
+        check.run();
+        onTextChange(field, text -> check.run());
         JOptionPane pane = new JOptionPane(
-            new Object[] { label, field },
+            new Object[] { label, field, error },
             JOptionPane.PLAIN_MESSAGE,
             JOptionPane.DEFAULT_OPTION,
             null,

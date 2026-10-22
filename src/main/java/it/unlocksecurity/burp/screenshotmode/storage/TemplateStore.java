@@ -77,7 +77,39 @@ public final class TemplateStore {
         return defaultTemplateId;
     }
 
+    /**
+     * The template with this name, built-in ones included. Names are unique ignoring case and surrounding spaces, so
+     * "report " finds "Report".
+     */
+    public Optional<Template> templateNamed(String name) {
+        String wanted = name.strip();
+        return templates()
+            .stream()
+            .filter(template -> template.name.strip().equalsIgnoreCase(wanted))
+            .findFirst();
+    }
+
+    /** The first of "name (word)", "name (word 2)", ... that no template has. */
+    public String freeName(String name, String word) {
+        String candidate = name.strip() + " (" + word + ")";
+        for (int i = 2; templateNamed(candidate).isPresent(); i++) {
+            candidate = name.strip() + " (" + word + " " + i + ")";
+        }
+        return candidate;
+    }
+
+    /** @throws IllegalArgumentException if another template already has the name */
+    private void checkFree(String name, String id) {
+        templateNamed(name)
+            .filter(other -> !other.id.equals(id))
+            .ifPresent(other -> {
+                throw new IllegalArgumentException("A template named \"" + other.name + "\" already exists");
+            });
+    }
+
+    /** @throws IllegalArgumentException if a template already has the name */
     public Template createTemplate(String name, Settings settings) {
+        checkFree(name, null);
         Template template = Template.create(name, (settings == null ? BuiltInTemplates.defaults() : settings).copy());
         templates.add(template);
         persistAndNotify();
@@ -87,8 +119,13 @@ public final class TemplateStore {
     /**
      * Updates the name and/or settings (either may be {@code null} to keep the current value). Built-in templates are
      * never updated.
+     *
+     * @throws IllegalArgumentException if another template already has the new name
      */
     public Optional<Template> updateTemplate(String id, String name, Settings settings) {
+        if (name != null) {
+            checkFree(name, id);
+        }
         for (int i = 0; i < templates.size(); i++) {
             Template current = templates.get(i);
             if (current.id.equals(id)) {
@@ -137,20 +174,34 @@ public final class TemplateStore {
             .findFirst();
     }
 
+    /** A template imported under another name, because its own was taken. */
+    public record Rename(String from, String to) {}
+
+    /** How many templates an import added, and which of them it renamed. */
+    public record Imported(int count, List<Rename> renamed) {}
+
     /**
-     * Appends the templates from an exported file (any supported version) and returns how many were added.
+     * Appends the templates from an exported file (any supported version). One whose name is taken, also by another
+     * template of the same file, is renamed "name (imported)": nothing is overwritten.
      *
      * @throws IllegalArgumentException if the content is not a supported template export.
      */
-    public int importTemplates(String json) {
+    public Imported importTemplates(String json) {
         List<Template> imported = TemplateCodec.decode(json).data().templates();
+        List<Rename> renamed = new ArrayList<>();
         for (Template template : imported) {
-            templates.add(TemplateCodec.withNewId(template));
+            Template copy = TemplateCodec.withNewId(template);
+            if (templateNamed(copy.name).isPresent()) {
+                String name = freeName(copy.name, "imported");
+                renamed.add(new Rename(copy.name, name));
+                copy = new Template(copy.id, name, copy.settings);
+            }
+            templates.add(copy);
         }
         if (!imported.isEmpty()) {
             persistAndNotify();
         }
-        return imported.size();
+        return new Imported(imported.size(), List.copyOf(renamed));
     }
 
     /** The user's templates, as an export: the built-in ones ship with every installation. */

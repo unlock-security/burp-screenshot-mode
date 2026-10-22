@@ -268,6 +268,67 @@ class TemplatesTabTest {
         });
     }
 
+    @Test
+    void saysWhenTheNameIsTakenAndWontSave() throws Exception {
+        TemplateStore store = store();
+        Template report = store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            button(tab, "New template").doClick();
+            JTextField name = find(tab, JTextField.class, field -> "Template name".equals(placeholder(field))).get();
+            AbstractButton save = button(tab, "Save");
+            assertFalse(save.isEnabled(), "no name yet");
+
+            name.setText(" defaults ");
+            JLabel error = find(tab, JLabel.class, label -> label.getText().contains("already exists")).get();
+            assertEquals("A template named \"Defaults\" already exists", error.getText());
+            assertTrue(error.isVisible());
+            assertEquals("error", name.getClientProperty("JComponent.outline"));
+            assertFalse(save.isEnabled());
+
+            name.setText("Mine");
+            assertFalse(error.isVisible());
+            assertTrue(save.isEnabled());
+
+            // Its own name is not taken.
+            tab.setDiscardConfirmation(message -> true);
+            button(tab, "Cancel").doClick();
+            select(tab, report);
+            button(tab, "Edit").doClick();
+            name = find(tab, JTextField.class, field -> "Template name".equals(placeholder(field))).get();
+            assertTrue(button(tab, "Save").isEnabled());
+            name.setText("REPORT");
+            assertTrue(button(tab, "Save").isEnabled());
+        });
+    }
+
+    @Test
+    void saysWhichImportedTemplatesWereRenamed() {
+        assertEquals("Imported 2 templates", TemplatesTab.importStatus(new TemplateStore.Imported(2, List.of())));
+        assertEquals(
+            "Imported 2 templates, 1 renamed: \"Report\" is now \"Report (imported)\"",
+            TemplatesTab.importStatus(
+                new TemplateStore.Imported(2, List.of(new TemplateStore.Rename("Report", "Report (imported)")))
+            )
+        );
+        assertEquals(
+            "Imported 3 templates, 2 renamed with \"(imported)\" because their names were taken",
+            TemplatesTab.importStatus(
+                new TemplateStore.Imported(
+                    3,
+                    List.of(
+                        new TemplateStore.Rename("A", "A (imported)"),
+                        new TemplateStore.Rename("B", "B (imported)")
+                    )
+                )
+            )
+        );
+    }
+
+    private static Object placeholder(JTextField field) {
+        return field.getClientProperty("JTextField.placeholderText");
+    }
+
     static TemplateStore store() {
         Map<String, String> values = new HashMap<>();
         TemplateStore store = new TemplateStore(preferences(values), message -> {});

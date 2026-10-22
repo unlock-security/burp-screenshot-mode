@@ -203,7 +203,7 @@ public final class TemplatesTab extends JPanel {
         String originalName = switch (mode) {
             case NEW -> "";
             case EDIT -> template.name;
-            case DUPLICATE -> copyName(template.name);
+            case DUPLICATE -> store.freeName(template.name, "copy");
         };
 
         JTextField name = new JTextField(mode == Mode.NEW ? typedName : originalName, 30);
@@ -213,14 +213,27 @@ public final class TemplatesTab extends JPanel {
         JButton save = Widgets.primary(Widgets.button("Save"));
         BooleanSupplier dirty = () ->
             !name.getText().trim().equals(originalName) || !TemplateCodec.sameSettings(original, working);
+        String ownId = editing ? template.id : null;
+        JLabel nameError = new JLabel();
+        nameError.setForeground(Widgets.errorColor());
         Runnable updateState = () -> {
-            save.setEnabled(!name.getText().isBlank());
+            // A taken name is said in words next to the field, not only with the outline.
+            String problem = nameProblem(store, name.getText(), ownId);
+            boolean shown = problem != null && !problem.isEmpty();
+            save.setEnabled(problem == null);
+            nameError.setText(shown ? problem : "");
+            nameError.setVisible(shown);
+            name.putClientProperty("JComponent.outline", shown ? "error" : null);
+            name.getAccessibleContext().setAccessibleDescription(shown ? problem : null);
             unsaved.setVisible(dirty.getAsBoolean());
         };
         updateState.run();
         Widgets.onTextChange(name, text -> updateState.run());
         save.addActionListener(event -> {
             String trimmed = name.getText().trim();
+            if (nameProblem(store, trimmed, ownId) != null) {
+                return;
+            }
             if (editing) {
                 store.updateTemplate(template.id, trimmed, working);
                 showStatus("Template updated", false);
@@ -316,6 +329,8 @@ public final class TemplatesTab extends JPanel {
             nameRow.add(base);
         }
 
+        nameRow.add(nameError);
+
         SettingsHistory history = new SettingsHistory(() -> working);
         SettingsForm form = new SettingsForm(
             working,
@@ -362,18 +377,19 @@ public final class TemplatesTab extends JPanel {
         this.confirmDiscard = confirmation;
     }
 
-    /** First free "name (copy)", "name (copy 2)", ... among the existing template names. */
-    private String copyName(String name) {
-        List<String> names = store
-            .templates()
-            .stream()
-            .map(template -> template.name)
-            .toList();
-        String candidate = name + " (copy)";
-        for (int i = 2; names.contains(candidate); i++) {
-            candidate = name + " (copy " + i + ")";
+    /**
+     * Why {@code name} can't be a template's name: {@code ""} when blank, a sentence when another template than
+     * {@code ownId} has it; {@code null} when it can.
+     */
+    static String nameProblem(TemplateStore store, String name, String ownId) {
+        if (name.isBlank()) {
+            return "";
         }
-        return candidate;
+        return store
+            .templateNamed(name)
+            .filter(other -> !other.id.equals(ownId))
+            .map(other -> "A template named \"" + other.name + "\" already exists")
+            .orElse(null);
     }
 
     /**
@@ -486,10 +502,10 @@ public final class TemplatesTab extends JPanel {
             return;
         }
         try {
-            int count = store.importTemplates(
+            TemplateStore.Imported imported = store.importTemplates(
                 Files.readString(chooser.getSelectedFile().toPath(), StandardCharsets.UTF_8)
             );
-            showStatus("Imported " + count + " template" + (count == 1 ? "" : "s"), false);
+            showStatus(importStatus(imported), false);
         } catch (IOException | IllegalArgumentException e) {
             JOptionPane.showMessageDialog(
                 this,
@@ -498,6 +514,21 @@ public final class TemplatesTab extends JPanel {
                 JOptionPane.ERROR_MESSAGE
             );
         }
+    }
+
+    /** How many templates were imported, and which were renamed because their name was taken. */
+    static String importStatus(TemplateStore.Imported imported) {
+        int count = imported.count();
+        String status = "Imported " + count + " template" + (count == 1 ? "" : "s");
+        List<TemplateStore.Rename> renamed = imported.renamed();
+        if (renamed.size() == 1) {
+            TemplateStore.Rename rename = renamed.getFirst();
+            return status + ", 1 renamed: \"" + rename.from() + "\" is now \"" + rename.to() + "\"";
+        }
+        if (renamed.size() > 1) {
+            return status + ", " + renamed.size() + " renamed with \"(imported)\" because their names were taken";
+        }
+        return status;
     }
 
     private void exportTemplates() {
