@@ -14,6 +14,7 @@ import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
+import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
@@ -24,7 +25,6 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
@@ -48,8 +48,7 @@ import javax.swing.UIManager;
 
 /**
  * Editors for every screenshot setting, mutating the given {@link Settings} in place, in three tabs ordered by how
- * often they are used: Rules, Headers, Appearance. Used both by the screenshot window sidebar and, {@code wide}, by
- * the template editor. Caido shows the same settings in one long column; this layout is our own.
+ * often they are used: Rules, Headers, Appearance. The sidebar of both the screenshot window and the template editor.
  */
 final class SettingsForm extends JPanel {
 
@@ -98,12 +97,12 @@ final class SettingsForm extends JPanel {
     private static final String ADD_MISSING = "Add missing defaults";
     private static final String REPLACE = "Replace with defaults";
 
-    SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide) {
-        this(settings, onChange, mono, wide, null);
+    SettingsForm(Settings settings, Runnable onChange, Font mono) {
+        this(settings, onChange, mono, null);
     }
 
-    /** @param message the headers of the message on screen, or {@code null} in the template editor */
-    SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide, HeadersTab.InMessage message) {
+    /** @param message the headers of the message on screen, or {@code null} for none */
+    SettingsForm(Settings settings, Runnable onChange, Font mono, HeadersTab.InMessage message) {
         super(new BorderLayout());
         this.settings = settings;
         this.mono = mono;
@@ -119,7 +118,7 @@ final class SettingsForm extends JPanel {
 
         restoreRules.addActionListener(event -> restoreRules());
         restoreAppearance.addActionListener(event -> restoreAppearance());
-        tabs.addTab("Rules", withFooter(scrollable(rulesTab(wide)), rulesBasis, restoreRules));
+        tabs.addTab("Rules", withFooter(scrollable(rulesTab()), rulesBasis, restoreRules));
         headers = new HeadersTab(
             settings,
             HeaderCatalogFile.bundled(),
@@ -169,6 +168,42 @@ final class SettingsForm extends JPanel {
 
     JLabel noticeText() {
         return noticeText;
+    }
+
+    /** Takes the headers of the message on screen again, after it was edited. */
+    void setMessage(HeadersTab.InMessage message) {
+        headers.setMessage(message);
+        updateCounts();
+    }
+
+    /**
+     * The actions of the preview's right-click menu. New rules go first, like the ones added with +, and open; when a
+     * rule already redacts or highlights the header, that rule is shown instead of adding a duplicate.
+     */
+    void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
+        switch (action) {
+            case HIGHLIGHT -> highlightList.addFirst(HighlightRule.create(selected, target, MatchMode.STRING), false);
+            case REDACT -> redactionList.addFirst(
+                RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING),
+                false
+            );
+            case HIDE_HEADER -> {
+                settings.headers.set(selected, Visibility.HIDE, HeaderCatalogFile.bundled());
+                headers.reload();
+                onChange.run();
+            }
+            case REDACT_HEADER, HIGHLIGHT_HEADER -> {
+                boolean redaction = action == MessagePane.SelectionAction.REDACT_HEADER;
+                Rule existing = headers.existingRule(List.of(selected), redaction);
+                if (existing != null) {
+                    showRule(existing);
+                } else if (redaction) {
+                    redactionList.addFirst(RedactionRule.forHeaders(List.of(selected), RedactionMode.REPLACE), false);
+                } else {
+                    highlightList.addFirst(HighlightRule.forHeaders(List.of(selected)), false);
+                }
+            }
+        }
     }
 
     /** Takes what the rules changed in the header lines of the message on screen. */
@@ -228,7 +263,7 @@ final class SettingsForm extends JPanel {
         headersCount.setText(headers.hiddenCount() + " hidden");
     }
 
-    private JComponent rulesTab(boolean wide) {
+    private JComponent rulesTab() {
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
         highlightList = new RuleList<>(
             "Highlights",
@@ -260,17 +295,6 @@ final class SettingsForm extends JPanel {
         highlightList.setDeleteListener(this::showDeletedNotice);
         redactionList.setDeleteListener(this::showDeletedNotice);
         buildNotice();
-        if (wide) {
-            JPanel columns = new JPanel(new GridLayout(1, 2, 24, 0));
-            columns.setOpaque(false);
-            columns.add(highlightList);
-            columns.add(redactionList);
-            JPanel wideTab = new JPanel(new BorderLayout(0, 16));
-            wideTab.setOpaque(false);
-            wideTab.add(notice, BorderLayout.NORTH);
-            wideTab.add(columns, BorderLayout.CENTER);
-            return wideTab;
-        }
         Widgets.Stack stack = new Widgets.Stack(20, false);
         stack.addItem(notice());
         stack.addItem(highlightList);

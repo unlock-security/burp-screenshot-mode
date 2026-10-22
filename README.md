@@ -59,6 +59,11 @@ No external tools, no manual cropping and blurring.
   template's hidden headers, except the ones you changed, so new releases can hide more noise for you; its rules and
   appearance are yours and never change by themselves. Template names are unique, ignoring case: an imported template
   whose name is taken is added as "name (imported)", so nothing is overwritten.
+- **Template editor preview** on a made-up sample message, laid out like the screenshot window. With the *Rules* and
+  *Headers* tabs, pick the URL, the request or the response: it is shown as written, and editable, beside how the
+  screenshot shows it, so you can change a rule and the text it must match side by side. Each rule shows its matches
+  in the sample. With the *Appearance* tab, the preview is the whole screenshot. Your edits to the sample last until
+  Burp closes and are never saved in templates; **Restore sample** brings the original back.
 - **Restore defaults** in each tab, from the built-in template yours is based on, after asking: the *Rules* tab adds
   back the rules you deleted (or replaces all your rules), the *Headers* tab drops your header changes, and the
   *Appearance* tab resets width, layout, theme, URL bar, body and footer. Each tab says what it would change.

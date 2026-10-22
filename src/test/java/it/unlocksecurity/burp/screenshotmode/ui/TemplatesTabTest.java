@@ -348,6 +348,27 @@ class TemplatesTabTest {
         });
     }
 
+    @Test
+    void previewsTheSampleMessageInTheEditor() throws Exception {
+        TemplateStore store = store();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            button(tab, "New template").doClick();
+            SettingsForm form = find(tab, SettingsForm.class, f -> true).get();
+            TemplatePreview preview = find(tab, TemplatePreview.class, p -> true).get();
+
+            // Each rule shows what it matched in the sample, as in the screenshot window.
+            RuleList<?>.Row row = find(form.redactionList(), RuleList.Row.class, r -> true).get();
+            assertTrue(row.pill().isVisible());
+            assertEquals(RuleList.Pill.Style.FILLED, row.pill().style());
+
+            form.tabs().setSelectedIndex(SettingsForm.APPEARANCE);
+            assertFalse(preview.parts().isVisible(), "the whole screenshot");
+            form.tabs().setSelectedIndex(SettingsForm.HEADERS);
+            assertTrue(preview.parts().isVisible());
+        });
+    }
+
     private static Object placeholder(JTextField field) {
         return field.getClientProperty("JTextField.placeholderText");
     }

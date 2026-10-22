@@ -26,6 +26,11 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.text.NumberFormat;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -62,6 +67,8 @@ final class ContentPanel extends JPanel {
     private final JLabel timestampLabel = new JLabel();
     private final JLabel responseInfoLabel = new JLabel();
 
+    /** The only part shown, or {@code null} for the whole screenshot. */
+    private RuleTarget only;
     private double splitRatio = 0.5;
     private boolean applyingRatio;
     private DoubleConsumer splitRatioListener = ratio -> {};
@@ -155,6 +162,14 @@ final class ContentPanel extends JPanel {
         this.errorListener = listener;
     }
 
+    /**
+     * Shows only the URL bar, the request or the response, without the footer, from the next {@link #render}; {@code
+     * null} shows the whole screenshot again.
+     */
+    void showOnly(RuleTarget part) {
+        only = part;
+    }
+
     void setSplitRatio(double ratio) {
         splitRatio = ratio;
         split.setResizeWeight(ratio);
@@ -189,7 +204,7 @@ final class ContentPanel extends JPanel {
         urlLabel.setFont(ui.deriveFont(Font.BOLD, ui.getSize2D() - 2));
         urlLabel.setForeground(palette.muted());
         urlBox.setBackground(palette.codeBackground());
-        urlHeader.setVisible(settings.url != UrlMode.HIDDEN);
+        urlHeader.setVisible(only == null ? settings.url != UrlMode.HIDDEN : only == RuleTarget.URL);
         urlLabel.setText(settings.url == UrlMode.PATH ? "Path" : "URL");
         Decorated decoratedUrl = decorate(
             data.url() == null ? "" : data.url(),
@@ -216,7 +231,10 @@ final class ContentPanel extends JPanel {
         split.setDividerColor(palette.border());
         split.setBackground(palette.background());
 
-        footer.setVisible(timestamp != null || responseInfo != null);
+        requestPane.setVisible(only == null || only == RuleTarget.REQUEST);
+        responsePane.setVisible(only == null || only == RuleTarget.RESPONSE);
+        split.setVisible(only != RuleTarget.URL);
+        footer.setVisible(only == null && (timestamp != null || responseInfo != null));
         footer.setBackground(palette.background());
         footer.setBorder(
             BorderFactory.createCompoundBorder(
@@ -269,6 +287,26 @@ final class ContentPanel extends JPanel {
             }
         });
         pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
+    }
+
+    private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM);
+
+    /** The footer's timestamp: when the request was sent, or now when Burp doesn't know. */
+    static String timestamp(MessageData data) {
+        ZonedDateTime time =
+            data.requestTime() != null
+                ? data.requestTime().withZoneSameInstant(ZoneId.systemDefault())
+                : ZonedDateTime.now();
+        return TIMESTAMP.format(time);
+    }
+
+    /** The footer's response size and round-trip time, or {@code null} without a response. */
+    static String responseInfo(MessageData data) {
+        if (data.responseLength() == null) {
+            return null;
+        }
+        String info = NumberFormat.getIntegerInstance().format(data.responseLength()) + " bytes";
+        return data.roundtripMillis() == null ? info : info + " | " + data.roundtripMillis() + "ms";
     }
 
     /** Where the path starts in a URL: after the scheme, host and port, at the first "/", "?" or "#". */

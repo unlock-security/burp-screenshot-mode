@@ -33,6 +33,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -73,6 +74,8 @@ public final class TemplatesTab extends JPanel {
     /** The editor's "Based on" choice, while a new template is being edited. */
     private JComboBox<Template> basedOn;
     private Predicate<String> confirmDiscard = this::askDiscard;
+    /** The template editor's sample message, as edited: kept until Burp closes. */
+    private final TemplatePreview.Sample sample = new TemplatePreview.Sample();
 
     public TemplatesTab(TemplateStore store, Host host) {
         this.store = store;
@@ -333,16 +336,29 @@ public final class TemplatesTab extends JPanel {
 
         nameRow.add(nameError);
 
+        TemplatePreview preview = new TemplatePreview(sample, working, host);
         SettingsHistory history = new SettingsHistory(() -> working);
         SettingsForm form = new SettingsForm(
             working,
             () -> {
                 history.changed();
                 updateState.run();
+                preview.changed();
             },
             host.editorFont().get(),
-            true
+            HeadersTab.InMessage.of(sample.data())
         );
+        // The rules and headers show what they do in the sample, as in the screenshot window.
+        preview.setRenderListener((data, content) -> {
+            form.setMessage(HeadersTab.InMessage.of(data));
+            form.showRuleStatuses(content.ruleStatuses());
+            form.showHeaderHits(content.headerHits());
+        });
+        preview.setSelectionListener(form::onSelectionAction);
+        form.tabs().addChangeListener(event ->
+            preview.showWhole(form.tabs().getSelectedIndex() == SettingsForm.APPEARANCE)
+        );
+        preview.render();
         Consumer<Settings> undone = before -> {
             if (before == null) {
                 UIManager.getLookAndFeel().provideErrorFeedback(form);
@@ -350,6 +366,7 @@ public final class TemplatesTab extends JPanel {
             }
             form.reload(before);
             updateState.run();
+            preview.render();
         };
         Runnable undo = () -> undone.accept(history.undo());
         form.setUndo(undo);
@@ -358,9 +375,14 @@ public final class TemplatesTab extends JPanel {
             undone.accept(history.redo())
         );
 
+        // Laid out like the screenshot window: the settings on the left, the preview on the right.
+        form.setMinimumSize(new java.awt.Dimension(300, 0));
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, form, preview);
+        split.setDividerLocation(400);
+        split.setBorder(null);
         JPanel body = new JPanel(new BorderLayout());
         body.add(nameRow, BorderLayout.NORTH);
-        body.add(form, BorderLayout.CENTER);
+        body.add(split, BorderLayout.CENTER);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 0, 16));

@@ -150,7 +150,7 @@ final class HeadersTab extends JPanel {
 
     private final Settings settings;
     private final HeaderCatalog catalog;
-    private final InMessage message;
+    private InMessage message;
     private final Runnable onChange;
     private final JTextField filter = new JTextField();
     private final Model model = new Model();
@@ -571,6 +571,18 @@ final class HeadersTab extends JPanel {
 
     /** Shows the headers again after the settings changed from outside, keeping the filter, groups and selection. */
     void reload() {
+        refresh();
+    }
+
+    /**
+     * Takes the headers of a message that changed on screen, as the template editor's sample does when edited. Only
+     * where the tab was built with a message.
+     */
+    void setMessage(InMessage message) {
+        if (this.message == null || message.equals(this.message)) {
+            return;
+        }
+        this.message = message;
         refresh();
     }
 

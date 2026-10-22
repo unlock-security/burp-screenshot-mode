@@ -171,12 +171,21 @@ final class RuleList<R extends Rule> extends JPanel {
         onDelete = listener;
     }
 
-    /** Adds a rule at the top and opens it. */
+    /** Adds a rule at the top and opens it, with the focus in it. */
     void addFirst(R rule) {
+        addFirst(rule, true);
+    }
+
+    /** Adds a rule at the top and opens it; without {@code focus}, the focus stays where it is (in the preview). */
+    void addFirst(R rule, boolean focus) {
         rules.addFirst(rule);
         rebuild();
         onChange.run();
-        reveal(rule);
+        if (focus) {
+            reveal(rule);
+        } else {
+            expansion.open(rule);
+        }
     }
 
     void addRuleForTests(RuleType type) {

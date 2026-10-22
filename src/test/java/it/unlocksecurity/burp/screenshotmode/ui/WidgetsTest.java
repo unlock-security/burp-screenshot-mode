@@ -92,8 +92,7 @@ class WidgetsTest {
         List<String> html = new ArrayList<>();
         SwingUtilities.invokeAndWait(() -> {
             Font mono = new Font(Font.MONOSPACED, Font.PLAIN, 13);
-            collectHtml(new SettingsForm(settings, () -> {}, mono, false), html);
-            collectHtml(new SettingsForm(settings, () -> {}, mono, true), html);
+            collectHtml(new SettingsForm(settings, () -> {}, mono), html);
             collectHtml(new TemplatesTab(TemplatesTabTest.store(), TemplatesTabTest.host()), html);
         });
         assertTrue(html.isEmpty(), "HTML texts: " + html);

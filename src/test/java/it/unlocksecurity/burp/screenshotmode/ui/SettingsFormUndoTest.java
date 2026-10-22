@@ -25,7 +25,6 @@ class SettingsFormUndoTest {
         settings,
         () -> history.changed(false),
         new Font(Font.MONOSPACED, Font.PLAIN, 12),
-        false,
         new HeadersTab.InMessage(List.of("Cookie"), List.of())
     );
 

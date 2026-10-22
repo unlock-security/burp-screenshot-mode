@@ -1,18 +1,11 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
-import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
-import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
-import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
-import it.unlocksecurity.burp.screenshotmode.model.Rule;
-import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
-import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
-import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
@@ -20,7 +13,6 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -32,12 +24,8 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.text.NumberFormat;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -63,7 +51,6 @@ import javax.swing.text.JTextComponent;
 final class ScreenshotDialog extends JDialog {
 
     private static final String LAST_DIRECTORY_KEY = "screenshot-mode.lastDirectory";
-    private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM);
     private static final DateTimeFormatter FILE_NAME = DateTimeFormatter.ofPattern(
         "'screenshot-'yyyyMMdd-HHmmss'.png'"
     );
@@ -135,7 +122,7 @@ final class ScreenshotDialog extends JDialog {
         // Text components bind Copy themselves, so a window-level key binding would never fire: dispatch it first.
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(copyShortcut);
 
-        content.setSelectionListener(this::onSelectionAction);
+        content.setSelectionListener((action, text, target) -> form.onSelectionAction(action, text, target));
         content.setSplitRatio(state.splitRatio);
         content.setSplitRatioListener(ratio -> state.splitRatio = ratio);
         content.setErrorListener(host.logError());
@@ -296,7 +283,6 @@ final class ScreenshotDialog extends JDialog {
                 renderTimer.restart();
             },
             host.editorFont().get(),
-            false,
             HeadersTab.InMessage.of(data)
         );
         form.setUndo(() -> undo(false));
@@ -423,8 +409,8 @@ final class ScreenshotDialog extends JDialog {
                 palette,
                 host.editorFont().get(),
                 host.displayFont().get(),
-                settings.showTimestamp ? timestamp() : null,
-                settings.showResponseInfo ? responseInfo() : null
+                settings.showTimestamp ? ContentPanel.timestamp(data) : null,
+                settings.showResponseInfo ? ContentPanel.responseInfo(data) : null
             );
         } catch (RuntimeException | StackOverflowError e) {
             // Runs on the Swing thread: report it in the extension's error log rather than Burp's.
@@ -517,22 +503,6 @@ final class ScreenshotDialog extends JDialog {
         getRootPane().validate();
     }
 
-    private String timestamp() {
-        ZonedDateTime time =
-            data.requestTime() != null
-                ? data.requestTime().withZoneSameInstant(ZoneId.systemDefault())
-                : ZonedDateTime.now();
-        return TIMESTAMP.format(time);
-    }
-
-    private String responseInfo() {
-        if (data.responseLength() == null) {
-            return null;
-        }
-        String info = NumberFormat.getIntegerInstance().format(data.responseLength()) + " bytes";
-        return data.roundtripMillis() == null ? info : info + " | " + data.roundtripMillis() + "ms";
-    }
-
     private void reloadTemplates() {
         updatingCombo = true;
         try {
@@ -586,53 +556,6 @@ final class ScreenshotDialog extends JDialog {
         reloadTemplates();
         updateTemplateState();
         showStatus("Template \"" + template.name + "\" created", false);
-    }
-
-    /**
-     * The actions of the preview's right-click menu. New rules go first, like the ones added with +, and open; when a
-     * rule already redacts or highlights the header, that rule is shown instead of adding a duplicate.
-     */
-    private void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
-        Settings settings = state.settings;
-        Rule added = null;
-        switch (action) {
-            case HIGHLIGHT -> {
-                HighlightRule rule = HighlightRule.create(selected, target, MatchMode.STRING);
-                settings.highlights.addFirst(rule);
-                added = rule;
-            }
-            case REDACT -> {
-                RedactionRule rule = RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING);
-                settings.redactions.addFirst(rule);
-                added = rule;
-            }
-            case HIDE_HEADER -> settings.headers.set(selected, Visibility.HIDE, HeaderCatalogFile.bundled());
-            case REDACT_HEADER, HIGHLIGHT_HEADER -> {
-                boolean redaction = action == MessagePane.SelectionAction.REDACT_HEADER;
-                Rule existing = form.headersTab().existingRule(List.of(selected), redaction);
-                if (existing != null) {
-                    // Already done by a rule: show it rather than add a duplicate.
-                    form.showRule(existing);
-                    return;
-                }
-                if (redaction) {
-                    RedactionRule rule = RedactionRule.forHeaders(List.of(selected), RedactionMode.REPLACE);
-                    settings.redactions.addFirst(rule);
-                    added = rule;
-                } else {
-                    HighlightRule rule = HighlightRule.forHeaders(List.of(selected));
-                    settings.highlights.addFirst(rule);
-                    added = rule;
-                }
-            }
-        }
-        history.record();
-        rebuildForm();
-        if (added != null) {
-            // Open, so its card shows what was added; the focus stays in the preview.
-            form.expand(added);
-        }
-        render();
     }
 
     /** Undoes or redoes the last change to the settings, showing where it was. */

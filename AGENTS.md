@@ -119,9 +119,15 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
   template id, split ratio, crop). Edits in the screenshot window affect only that session until the user explicitly
   updates/saves a template.
-- `SettingsForm` mutates a `Settings` in place, in three tabs (Rules, Headers, Appearance), and is reused by both the
-  screenshot sidebar and the template editor in `TemplatesTab`. `TemplateCodec.sameSettings` (comparison of the
-  stored form) drives the "Modified"/"Unsaved" state of both.
+- `SettingsForm` mutates a `Settings` in place, in three tabs (Rules, Headers, Appearance), and is the sidebar of both
+  the screenshot window and the template editor in `TemplatesTab`, which share its preview right-click actions
+  (`onSelectionAction`). `TemplateCodec.sameSettings` (comparison of the stored form) drives the "Modified"/"Unsaved"
+  state of both.
+- The template editor previews `ui.TemplatePreview`: the sample message (`storage/sample-message.json`, read by
+  `storage.SampleMessage`; something for every rule of Defaults to match), edited in place and kept in memory by
+  `TemplatesTab` (`TemplatePreview.Sample`), never stored. With the Rules and Headers tabs it shows one part beside its
+  source (`ContentPanel.showOnly`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
+  the screenshot window and feeds the form the rule statuses, header hits and the sample's headers.
 - Undo/redo: the screenshot window and the template editor each own a `ui.SettingsHistory` of `Settings` snapshots,
   told of every change through the form's `onChange` (a no-op change is no step; typing in a text field is one step,
   taken when it pauses). Undo restores the snapshot **in place** (`Settings.copyFrom`, which keeps the rule lists that

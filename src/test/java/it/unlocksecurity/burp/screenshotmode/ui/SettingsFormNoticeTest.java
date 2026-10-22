@@ -18,7 +18,6 @@ class SettingsFormNoticeTest {
         settings,
         () -> {},
         new Font(Font.MONOSPACED, Font.PLAIN, 12),
-        false,
         new HeadersTab.InMessage(List.of("X-Backend"), List.of())
     );
 

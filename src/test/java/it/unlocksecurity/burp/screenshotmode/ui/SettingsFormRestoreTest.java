@@ -24,12 +24,7 @@ class SettingsFormRestoreTest {
     private int changes;
 
     private SettingsForm form() {
-        SettingsForm form = new SettingsForm(
-            settings,
-            () -> changes++,
-            new Font(Font.MONOSPACED, Font.PLAIN, 12),
-            true
-        );
+        SettingsForm form = new SettingsForm(settings, () -> changes++, new Font(Font.MONOSPACED, Font.PLAIN, 12));
         form.setChooser((title, message, action, safe) -> {
             asked.add(message + " [" + action + " | " + safe + "]");
             return answer;

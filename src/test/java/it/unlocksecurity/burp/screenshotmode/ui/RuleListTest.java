@@ -25,7 +25,7 @@ class RuleListTest {
 
     private final Settings settings = BuiltInTemplates.defaults();
     private int changes;
-    private final SettingsForm form = new SettingsForm(settings, () -> changes++, MONO, false);
+    private final SettingsForm form = new SettingsForm(settings, () -> changes++, MONO);
 
     private RedactionRule named(String name) {
         return settings.redactions
@@ -55,7 +55,7 @@ class RuleListTest {
     @Test
     void opensOneRuleAtATimeAcrossBothLists() {
         settings.highlights.add(HighlightRule.create("x", RuleTarget.REQUEST, MatchMode.STRING));
-        SettingsForm form = new SettingsForm(settings, () -> {}, MONO, false);
+        SettingsForm form = new SettingsForm(settings, () -> {}, MONO);
         RuleList<RedactionRule>.Row cookie = form.redactionList().row(named("Cookie values"));
         RuleList<HighlightRule>.Row highlight = form.highlightList().row(settings.highlights.getFirst());
 
@@ -101,7 +101,7 @@ class RuleListTest {
     void flagsRulesThatFailed() {
         RedactionRule rule = RedactionRule.create("(", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
         settings.redactions.addFirst(rule);
-        SettingsForm form = new SettingsForm(settings, () -> {}, MONO, false);
+        SettingsForm form = new SettingsForm(settings, () -> {}, MONO);
         Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
         statuses.put(rule, new RuleStatus(0, RuleStatus.Problem.INVALID, "Unclosed group"));
         form.showRuleStatuses(statuses);

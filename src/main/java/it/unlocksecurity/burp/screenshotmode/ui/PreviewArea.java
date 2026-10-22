@@ -61,6 +61,12 @@ final class PreviewArea extends JPanel implements Scrollable {
         return cropHeight;
     }
 
+    /** Without the drag handle, for a preview that is not captured, such as the template editor's. */
+    void hideCropHandle() {
+        handle.setVisible(false);
+        revalidate();
+    }
+
     void setHandleColors(Color background, Color grip) {
         handle.background = background;
         handle.grip = grip;
@@ -83,7 +89,7 @@ final class PreviewArea extends JPanel implements Scrollable {
         }
         Container parent = getParent();
         int viewport = parent instanceof JViewport ? parent.getHeight() : getHeight();
-        return Math.max(MIN_HEIGHT, viewport - 2 * MARGIN - HANDLE_HEIGHT);
+        return Math.max(MIN_HEIGHT, viewport - 2 * MARGIN - (handle.isVisible() ? HANDLE_HEIGHT : 0));
     }
 
     @Override

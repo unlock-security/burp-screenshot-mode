@@ -265,18 +265,16 @@ class RenderPreviewTest {
             Settings empty = BuiltInTemplates.defaults();
             empty.highlights.clear();
             empty.redactions.clear();
-            saveForm(sampleSettings(), false, "form-sidebar.png");
-            saveForm(sampleSettings(), true, "form-wide.png");
-            saveForm(empty, false, "form-empty.png");
-            saveForm(empty, true, "form-empty-wide.png");
+            saveForm(sampleSettings(), "form-sidebar.png");
+            saveForm(empty, "form-empty.png");
         });
     }
 
-    private static void saveForm(Settings settings, boolean wide, String name) {
+    private static void saveForm(Settings settings, String name) {
         Widgets.Stack holder = new Widgets.Stack(0);
         holder.setOpaque(true);
-        holder.addItem(new SettingsForm(settings, () -> {}, MONO, wide));
-        holder.setSize(wide ? 1100 : 360, 2000);
+        holder.addItem(new SettingsForm(settings, () -> {}, MONO));
+        holder.setSize(360, 2000);
         layoutTree(holder);
         layoutTree(holder);
         holder.setSize(holder.getWidth(), holder.getPreferredSize().height);
