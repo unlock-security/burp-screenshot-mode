@@ -79,6 +79,8 @@ final class ScreenshotDialog extends JDialog {
     private final JButton update = Widgets.button("Update template");
     private final JLabel output = Widgets.hint("");
     private final JLabel failedRules = new JLabel();
+    private final JLabel pageNote = new JLabel();
+    private final JLabel tooLarge = new JLabel("⚠ Too large to export: choose a smaller height");
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
     private int selectedTab = SettingsForm.RULES;
@@ -252,6 +254,11 @@ final class ScreenshotDialog extends JDialog {
         left.add(output);
         left.add(tip);
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        for (JLabel warning : new JLabel[] { pageNote, tooLarge }) {
+            warning.setForeground(Widgets.errorColor());
+            warning.setVisible(false);
+            right.add(warning);
+        }
         right.add(failedRules);
         JPanel bar = new JPanel(new BorderLayout(8, 0));
         bar.add(left, BorderLayout.CENTER);
@@ -364,6 +371,10 @@ final class ScreenshotDialog extends JDialog {
     /** The size of the image Copy and Save produce: the content as laid out, at the capture scale. */
     private void updateOutputLabel() {
         output.setText(ImageCapture.sizeLabel(content.getWidth(), content.getHeight()));
+        String note = ImageCapture.pageNote(state.settings.widthMode, content.getHeight());
+        pageNote.setText(note == null ? "" : "⚠ " + note);
+        pageNote.setVisible(note != null);
+        tooLarge.setVisible(ImageCapture.tooLarge(content.getWidth(), content.getHeight()));
     }
 
     /**
@@ -426,6 +437,7 @@ final class ScreenshotDialog extends JDialog {
         failedRules.setText("⚠ " + failed + (failed == 1 ? " redaction rule failed" : " redaction rules failed"));
         failedRules.setVisible(failed > 0);
         updateTemplateState();
+        updateOutputLabel();
         preview.setBackground(palette.canvas());
         preview.setHandleColors(palette.canvas(), palette.muted());
         previewScroll.getViewport().setBackground(palette.canvas());
@@ -574,6 +586,11 @@ final class ScreenshotDialog extends JDialog {
 
     private void takeScreenshot(boolean toClipboard) {
         flushRender();
+        if (ImageCapture.tooLarge(content.getWidth(), content.getHeight())) {
+            // The preview bar says why and what to do.
+            showStatus("Too large to export", true);
+            return;
+        }
         if (!confirmFailedRedactions(toClipboard)) {
             return;
         }

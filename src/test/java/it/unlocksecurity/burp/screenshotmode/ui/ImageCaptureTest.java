@@ -2,7 +2,11 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
 import java.util.Locale;
@@ -30,6 +34,23 @@ class ImageCaptureTest {
             assertEquals("2,400 × 1,522 px PNG (2×)", ImageCapture.sizeLabel(1200, 761));
         } finally {
             Locale.setDefault(before);
+        }
+    }
+
+    @Test
+    void refusesImagesTooLargeToBuild() {
+        assertFalse(ImageCapture.tooLarge(1200, 10_000), "2,400 × 20,000 px: 48 megapixels");
+        assertTrue(ImageCapture.tooLarge(1200, 10_500), "2,400 × 21,000 px: 50.4 megapixels");
+    }
+
+    @Test
+    void notesAScreenshotTallerThanOnePage() {
+        assertNull(ImageCapture.pageNote(WidthMode.A4, 842), "exactly one page");
+        assertEquals("Taller than one A4 page", ImageCapture.pageNote(WidthMode.A4, 843));
+        assertNull(ImageCapture.pageNote(WidthMode.LETTER, 792));
+        assertEquals("Taller than one Letter page", ImageCapture.pageNote(WidthMode.LETTER, 793));
+        for (WidthMode other : new WidthMode[] { WidthMode.FULL, WidthMode.CONTENT, WidthMode.PIXEL }) {
+            assertNull(ImageCapture.pageNote(other, 5000), "no page for " + other);
         }
     }
 }

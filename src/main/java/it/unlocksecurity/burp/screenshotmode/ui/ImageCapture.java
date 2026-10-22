@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Toolkit;
@@ -68,6 +69,19 @@ final class ImageCapture {
             NumberFormat.getInstance().format(SCALE) +
             "×)"
         );
+    }
+
+    /** The most pixels an image may have: beyond, building it could run Burp out of memory. */
+    static final long MAX_PIXELS = 50_000_000;
+
+    /** Whether content of {@code width} × {@code height} on screen makes an image too large to build. */
+    static boolean tooLarge(int width, int height) {
+        return (long) pixels(width) * pixels(height) > MAX_PIXELS;
+    }
+
+    /** A note when content {@code height} tall won't fit on one page of the paper width chosen, or {@code null}. */
+    static String pageNote(WidthMode width, int height) {
+        return width.page() != null && height > width.pageHeight() ? "Taller than one " + width.page() + " page" : null;
     }
 
     static void save(BufferedImage image, File file) throws IOException {

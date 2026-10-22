@@ -53,7 +53,9 @@ No external tools, no manual cropping and blurring.
   of the PNG that Copy and Save produce.
 - **Height**: as tall as the preview (*Full Height*), **Fit to content** to show every line of the request and
   response, which keeps fitting as you change the settings, or a custom height you set by dragging the handle below
-  the screenshot. Saved in templates like the width.
+  the screenshot. Saved in templates like the width. With A4 or Letter, the preview warns when the screenshot is taller
+  than one page, and an image over 50 megapixels (about 2,400 × 21,000 px) can't be exported, as building it could run
+  Burp out of memory.
 - **Metadata footer**: request timestamp and response size/round-trip time.
 - **URL bar**: the full URL, only the path and query (the label reads *Path*), or no URL bar at all. Path only leaves
   out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
