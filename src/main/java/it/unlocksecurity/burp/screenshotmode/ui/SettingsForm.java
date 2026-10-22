@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
@@ -422,8 +423,13 @@ final class SettingsForm extends JPanel {
         redactionList.showStatuses(statuses);
         failedRules = (int) Stream.concat(settings.highlights.stream(), settings.redactions.stream())
             .filter(rule -> rule.enabled)
-            .map(statuses::get)
-            .filter(status -> status != null && status.failed())
+            .filter(rule -> {
+                RuleStatus status = statuses.get(rule);
+                return (
+                    (status != null && status.failed()) ||
+                    (rule instanceof RedactionRule redaction && RuleEngine.redactsNothing(redaction))
+                );
+            })
             .count();
         updateCounts();
         revalidate();

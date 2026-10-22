@@ -123,15 +123,150 @@ class RuleListTest {
     }
 
     @Test
-    void showsTheGroupsRowOnlyForAPatternWithGroups() {
+    void choosesBetweenTheWholeMatchAndSomeCaptureGroups() {
         RedactionRule rule = RedactionRule.create("token", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
         form.redactionList().addFirst(rule);
         RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
-        javax.swing.JLabel groups = label(row.editorPanel(), "Groups");
-        assertFalse(groups.isVisible());
+        javax.swing.JLabel what = label(row.editorPanel(), "What");
+        assertFalse(what.isVisible(), "no capture groups, nothing to choose");
+
         ((javax.swing.text.JTextComponent) find(row.editorPanel(), "Pattern")).setText("token=(?<Value>\\w+)");
-        assertTrue(groups.isVisible());
-        assertTrue(button(row.editorPanel(), "Value").isSelected());
+        assertTrue(what.isVisible());
+        javax.swing.AbstractButton some = button(row.editorPanel(), "Only these capture groups:");
+        javax.swing.AbstractButton value = button(row.editorPanel(), "Value");
+        assertTrue(some.isSelected(), "a new group is redacted on its own");
+        assertTrue(value.isSelected() && value.isEnabled());
+
+        button(row.editorPanel(), "The whole match").doClick();
+        assertFalse(rule.useCaptureGroups);
+        assertFalse(value.isEnabled(), "the groups belong to the other choice");
+        some.doClick();
+        assertEquals(List.of(1), rule.selectedGroups);
+
+        // Only some groups, but none: the card says the rule redacts nothing.
+        javax.swing.JTextArea nothing = textArea(row.editorPanel(), "Tick at least one group");
+        assertFalse(nothing.isVisible());
+        value.doClick();
+        assertTrue(rule.selectedGroups.isEmpty());
+        assertTrue(nothing.isVisible());
+        value.doClick();
+        assertFalse(nothing.isVisible());
+        value.doClick();
+        button(row.editorPanel(), "The whole match").doClick();
+        assertFalse(nothing.isVisible(), "the whole match is redacted again");
+    }
+
+    private static javax.swing.JTextArea textArea(java.awt.Container container, String start) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith(start)) {
+                return area;
+            }
+            if (component instanceof java.awt.Container child) {
+                javax.swing.JTextArea found = textArea(child, start);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void groupsTheCardIntoMatchAndRedact() {
+        RedactionRule rule = named("Authorization credentials");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        List<String> order = new java.util.ArrayList<>();
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JLabel label && label.isVisible()) {
+                order.add(label.getText());
+            }
+        }
+        assertEquals(List.of("Name", "MATCH", "Pattern", "Options", "Applies to", "REDACT", "What", "With"), order);
+        assertTrue(button(row.editorPanel(), "Delete rule") != null, "a labelled action at the end of the card");
+    }
+
+    @Test
+    void explainsAnInvalidPatternRightUnderIt() {
+        RedactionRule rule = RedactionRule.create(
+            "(unclosed",
+            RuleTarget.REQUEST,
+            RedactionMode.REPLACE,
+            MatchMode.REGEX
+        );
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        form.showRuleStatuses(
+            java.util.Map.of(
+                rule,
+                new it.unlocksecurity.burp.screenshotmode.render.RuleStatus(
+                    0,
+                    it.unlocksecurity.burp.screenshotmode.render.RuleStatus.Problem.INVALID,
+                    "Unclosed group"
+                )
+            )
+        );
+        java.awt.GridBagLayout grid = (java.awt.GridBagLayout) row.editorPanel().getLayout();
+        java.awt.Component pattern = find(row.editorPanel(), "Pattern");
+        java.awt.Component problem = null;
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith("⚠ Not applied")) {
+                problem = area;
+            }
+        }
+        assertTrue(problem != null && problem.isVisible());
+        assertEquals(grid.getConstraints(pattern).gridy + 1, grid.getConstraints(problem).gridy);
+    }
+
+    @Test
+    void anyPlaceCanBeUntickedAndTheCardSaysSo() {
+        RedactionRule rule = RedactionRule.create("token", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        javax.swing.AbstractButton request = button(row.editorPanel(), "Request");
+        assertTrue(request.isEnabled(), "the last place is not greyed out");
+        request.doClick();
+        assertTrue(rule.targets.isEmpty());
+        assertEquals("Off", row.pill().getText());
+        assertTrue(row.summaryLabel().getText().startsWith("Applies nowhere"));
+        javax.swing.JTextArea nowhere = null;
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith("Tick at least one")) {
+                nowhere = area;
+            }
+        }
+        assertTrue(nowhere != null && nowhere.isVisible());
+        request.doClick();
+        assertFalse(nowhere.isVisible());
+    }
+
+    @Test
+    void offersTheSafestRedactionStyleFirst() {
+        RedactionRule rule = named("Authorization credentials");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        javax.swing.JComboBox<?> style = (javax.swing.JComboBox<?>) find(row.editorPanel(), "With");
+        List<String> labels = new java.util.ArrayList<>();
+        for (int i = 0; i < style.getItemCount(); i++) {
+            labels.add(style.getItemAt(i).toString());
+        }
+        assertEquals(List.of("Text", "Black box", "Blur"), labels);
+    }
+
+    @Test
+    void deletesFromTheEndOfTheCard() {
+        RedactionRule rule = named("Cookie values");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        javax.swing.AbstractButton delete = button(row.editorPanel(), "Delete rule");
+        assertEquals(java.awt.Font.PLAIN, delete.getFont().getStyle(), "not bold: it shouldn't invite a click");
+        assertEquals(
+            java.awt.BorderLayout.EAST,
+            ((java.awt.BorderLayout) delete.getParent().getLayout()).getConstraints(delete),
+            "on the right"
+        );
+        delete.doClick();
+        assertFalse(settings.redactions.contains(rule));
     }
 
     @Test
@@ -154,13 +289,11 @@ class RuleListTest {
         assertEquals(rule.regex, pattern.getText());
         assertTrue(pattern.getLineWrap(), "wraps instead of scrolling sideways");
 
-        // A labelled row each, in words: how the pattern matches, then which part of a match is redacted.
+        // Options in Burp's words, Regex first.
         javax.swing.AbstractButton regex = button(row.editorPanel(), "Regex");
         assertTrue(regex.isSelected());
         assertSame(regex.getParent(), find(row.editorPanel(), "Options").getParent());
-        javax.swing.AbstractButton redactOnly = button(row.editorPanel(), "Redact only");
-        assertSame(redactOnly.getParent(), find(row.editorPanel(), "Groups").getParent());
-        button(row.editorPanel(), "Match case").doClick();
+        button(row.editorPanel(), "Case sensitive").doClick();
         assertFalse(rule.matchCase);
 
         pattern.setText("a\nb\nc");

@@ -20,6 +20,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
@@ -41,6 +42,7 @@ import javax.accessibility.AccessibleState;
 import javax.accessibility.AccessibleStateSet;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JCheckBoxMenuItem;
@@ -51,6 +53,7 @@ import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JRadioButton;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
@@ -393,6 +396,8 @@ final class RuleList<R extends Rule> extends JPanel {
             RuleStatus status = statuses == null ? null : statuses.get(rule);
             if (!rule.enabled) {
                 pill.show("Off", Pill.Style.OUTLINE, "The rule is off");
+            } else if (rule.type == RuleType.PATTERN && rule.targets.isEmpty()) {
+                pill.show("Off", Pill.Style.OUTLINE, "The rule applies nowhere");
             } else if (status == null) {
                 pill.setVisible(false);
             } else if (status.failed()) {
@@ -421,7 +426,17 @@ final class RuleList<R extends Rule> extends JPanel {
             if (open) {
                 Fields fields = new Fields(this);
                 editor.build(rule, fields);
-                fields.addFull(problem);
+                if (!fields.problemPlaced) {
+                    fields.addFull(problem);
+                }
+                // At the bottom right of the card, set apart from the fields; ⌘Z brings the rule back.
+                // Never disabled: no greyed-out style, which would replace its own.
+                JButton delete = new DeleteButton();
+                delete.addActionListener(event -> delete());
+                JPanel footer = new JPanel(new BorderLayout());
+                footer.setOpaque(false);
+                footer.add(delete, BorderLayout.EAST);
+                fields.addFull(footer, 16);
                 editorPanel = fields.panel;
                 add(editorPanel, BorderLayout.CENTER);
             } else {
@@ -537,10 +552,94 @@ final class RuleList<R extends Rule> extends JPanel {
         }
     }
 
+    /**
+     * Delete, marked as destructive in words, icon and the theme's error text color, and not bold, so it doesn't invite
+     * a click. Under the pointer it turns red as a whole: a red background, and a shade of red text that still reads on
+     * it.
+     */
+    private static final class DeleteButton extends JButton {
+
+        private Color red;
+        private Color hoverRed;
+        private Color pressedRed;
+
+        DeleteButton() {
+            super("Delete rule");
+            putClientProperty("JButton.buttonType", "borderless");
+            // The trash, in the same red as the text.
+            setIcon(
+                new javax.swing.Icon() {
+                    private final JLabel tinted = new JLabel();
+
+                    @Override
+                    public void paintIcon(Component c, Graphics g, int x, int y) {
+                        tinted.setForeground(
+                            getModel().isArmed() && getModel().isPressed()
+                                ? pressedRed
+                                : getModel().isRollover()
+                                  ? hoverRed
+                                  : red
+                        );
+                        Widgets.Glyph.TRASH.paintIcon(tinted, g, x, y);
+                    }
+
+                    @Override
+                    public int getIconWidth() {
+                        return Widgets.Glyph.TRASH.getIconWidth();
+                    }
+
+                    @Override
+                    public int getIconHeight() {
+                        return Widgets.Glyph.TRASH.getIconHeight();
+                    }
+                }
+            );
+        }
+
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            // Burp's theme switch calls this again, resetting the color and the bold font.
+            red = Widgets.themeColor("Colors.ui.text.error", new Color(0xc4314b));
+            setForeground(red);
+            setFont(getFont().deriveFont(Font.PLAIN));
+            // Under the pointer, a red background instead of the grey one, from the theme's error palette (pale in the
+            // light theme, dark in the dark one, like Burp's error tones), with a shade of red text that keeps 4.5:1 on
+            // it.
+            boolean dark = Widgets.themeColor("Panel.background", Color.WHITE).getRed() < 128;
+            hoverRed = Widgets.themeColor(dark ? "Colors.palette.error.6" : "Colors.palette.error.2", red);
+            Color hover = Widgets.themeColor(
+                dark ? "Colors.palette.error.1" : "Colors.palette.error.7",
+                getBackground()
+            );
+            Color pressed = Widgets.themeColor(dark ? "Colors.palette.error.2" : "Colors.palette.error.6", hover);
+            pressedRed = Widgets.themeColor(dark ? "Colors.palette.error.7" : "Colors.palette.error.1", hoverRed);
+            String text = hex(hoverRed);
+            String pressedText = hex(pressedRed);
+            putClientProperty(
+                "FlatLaf.style",
+                String.join(
+                    "; ",
+                    "hoverForeground: " + text,
+                    "pressedForeground: " + pressedText,
+                    "toolbar.hoverForeground: " + text,
+                    "toolbar.pressedForeground: " + pressedText,
+                    "toolbar.hoverBackground: " + hex(hover),
+                    "toolbar.pressedBackground: " + hex(pressed)
+                )
+            );
+        }
+
+        private static String hex(Color color) {
+            return String.format("#%06x", color.getRGB() & 0xffffff);
+        }
+    }
+
     /** The label / control grid of an open rule, on a tinted background below its line. */
     final class Fields {
 
         private final Row row;
+        private boolean problemPlaced;
         private final JPanel panel = new JPanel(new GridBagLayout()) {
             @Override
             public Color getBackground() {
@@ -575,10 +674,6 @@ final class RuleList<R extends Rule> extends JPanel {
             onChange.run();
         }
 
-        void deleteRule() {
-            row.delete();
-        }
-
         /** The field that takes the focus when the rule is revealed: what it matches, the one field to fill. */
         void focusFirst(JComponent field) {
             row.firstField = field;
@@ -587,6 +682,16 @@ final class RuleList<R extends Rule> extends JPanel {
         /** @return the row's label */
         JLabel add(String label, JComponent control) {
             return add(label, control, control);
+        }
+
+        /** A row whose label stays level with the top of a control several lines tall. */
+        JLabel addTop(String label, JComponent control) {
+            JLabel title = add(label, control, control);
+            GridBagConstraints at = ((GridBagLayout) panel.getLayout()).getConstraints(title);
+            at.anchor = GridBagConstraints.FIRST_LINE_START;
+            ((GridBagLayout) panel.getLayout()).setConstraints(title, at);
+            title.setBorder(BorderFactory.createEmptyBorder(LABEL_TOP, 0, 0, 0));
+            return title;
         }
 
         /** @param labelFor what the label names, inside {@code control} */
@@ -616,35 +721,54 @@ final class RuleList<R extends Rule> extends JPanel {
         }
 
         void addFull(JComponent component) {
+            addFull(component, 6);
+        }
+
+        void addFull(JComponent component, int top) {
             GridBagConstraints at = new GridBagConstraints();
             at.gridx = 0;
             at.gridy = y++;
             at.gridwidth = 2;
             at.weightx = 1;
             at.fill = GridBagConstraints.HORIZONTAL;
-            at.insets = new Insets(6, 0, 0, 0);
+            at.insets = new Insets(top, 0, 0, 0);
             panel.add(component, at);
         }
 
+        /** A section title: what the rule matches, then what it does with a match. */
+        void heading(String text) {
+            JLabel label = new JLabel(text.toUpperCase(java.util.Locale.ROOT));
+            label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 2.5f));
+            label.setForeground(Widgets.mutedColor());
+            addFull(label, y == 0 ? 0 : 14);
+        }
+
+        /** Why the rule did not fully apply, right under what it matches. */
+        void addProblem() {
+            problemPlaced = true;
+            addUnder(row.problem, 3);
+        }
+
         /** The control column only, under the previous control. */
-        void addUnder(JComponent component) {
+        void addUnder(JComponent component, int top) {
             GridBagConstraints at = new GridBagConstraints();
             at.gridx = 1;
             at.gridy = y++;
             at.weightx = 1;
             at.fill = GridBagConstraints.HORIZONTAL;
-            at.insets = new Insets(4, 0, 0, 0);
+            at.insets = new Insets(top, 0, 0, 0);
             panel.add(component, at);
         }
     }
 
     // --- Editors ---
 
-    /** Name, what to match, then how to highlight it. */
+    /** Name; what to match; then how to highlight it. */
     static void highlightEditor(HighlightRule rule, RuleList<HighlightRule>.Fields fields, HeaderCatalog catalog) {
         nameField(rule, fields);
         matchFields(rule, fields, catalog, null);
 
+        fields.heading("Highlight");
         JComboBox<HighlightMode> mode = combo(HighlightMode.values(), rule.mode, value -> {
             rule.mode = value;
             fields.changed();
@@ -656,11 +780,20 @@ final class RuleList<R extends Rule> extends JPanel {
         fields.add("Style", flush(mode, color));
     }
 
-    /** Name, what to match (with the capture groups to redact), then how to redact it. */
+    /** The redaction styles, the one that removes the value first. */
+    private static final RedactionMode[] REDACTION_MODES = {
+        RedactionMode.REPLACE,
+        RedactionMode.OPAQUE,
+        RedactionMode.BLUR,
+    };
+
+    /** Name; what to match; then what to redact of a match, and with what. */
     static void redactionEditor(RedactionRule rule, RuleList<RedactionRule>.Fields fields, HeaderCatalog catalog) {
         nameField(rule, fields);
-        matchFields(rule, fields, catalog, rule);
+        Runnable groupsRow = matchFields(rule, fields, catalog, rule);
 
+        fields.heading("Redact");
+        groupsRow.run();
         JTextField replacement = new JTextField(rule.replacementText, 11);
         replacement.setFont(fields.mono());
         replacement.setCaretPosition(0);
@@ -673,16 +806,17 @@ final class RuleList<R extends Rule> extends JPanel {
         Runnable updateModeFields = () -> replacement.setVisible(rule.mode == RedactionMode.REPLACE);
         updateModeFields.run();
         JPanel row = flush();
-        JComboBox<RedactionMode> mode = combo(RedactionMode.values(), rule.mode, value -> {
+        JComboBox<RedactionMode> mode = combo(REDACTION_MODES, rule.mode, value -> {
             rule.mode = value;
             updateModeFields.run();
             row.revalidate();
             fields.changed();
         });
+        mode.getAccessibleContext().setAccessibleName("Redaction style");
         row.add(mode);
         row.add(javax.swing.Box.createHorizontalStrut(6));
         row.add(replacement);
-        fields.add("Redact with", row);
+        fields.add("With", row);
     }
 
     private static void nameField(Rule rule, RuleList<?>.Fields fields) {
@@ -692,15 +826,22 @@ final class RuleList<R extends Rule> extends JPanel {
             rule.name = text;
             fields.changed();
         });
-        JPanel row = new JPanel(new BorderLayout(4, 0));
-        row.setOpaque(false);
-        row.add(name, BorderLayout.CENTER);
-        row.add(Widgets.flatIconButton(Widgets.Glyph.TRASH, "Delete rule", fields::deleteRule), BorderLayout.EAST);
-        fields.add("Name", row);
+        fields.add("Name", name);
     }
 
-    /** Headers for a header rule; pattern, targets and (for redactions) capture groups for a pattern rule. */
-    private static void matchFields(Rule rule, RuleList<?>.Fields fields, HeaderCatalog catalog, RedactionRule groups) {
+    /**
+     * The Match section: the headers of a header rule; the pattern, its options and where it applies for a pattern rule.
+     *
+     * @param groups the redaction whose capture groups to choose, or {@code null}
+     * @return adds the choice of which part of a match to redact, for the Redact section; does nothing without groups
+     */
+    private static Runnable matchFields(
+        Rule rule,
+        RuleList<?>.Fields fields,
+        HeaderCatalog catalog,
+        RedactionRule groups
+    ) {
+        fields.heading("Match");
         if (rule.type == RuleType.HEADER) {
             JTextArea headers = Widgets.wrappingField(String.join(", ", rule.headers), 12);
             // A list of names: break between them rather than inside one.
@@ -729,14 +870,20 @@ final class RuleList<R extends Rule> extends JPanel {
             row.add(headers, BorderLayout.CENTER);
             row.add(button, BorderLayout.EAST);
             fields.add("Headers", row, headers);
-            return;
+            return () -> {};
         }
 
         JTextArea pattern = patternField(rule, fields.mono());
         pattern.getAccessibleContext().setAccessibleName("Pattern");
         fields.focusFirst(pattern);
         List<Consumer<String>> patternChanged = new ArrayList<>(1);
-        JCheckBox matchCase = checkBox("Match case", rule.matchCase, value -> {
+        // Burp's words, Regex first: it decides how the pattern is read.
+        JCheckBox regex = checkBox("Regex", rule.matchMode == MatchMode.REGEX, value -> {
+            rule.matchMode = value ? MatchMode.REGEX : MatchMode.STRING;
+            setPlaceholder(pattern, rule.matchMode);
+            patternChanged.getFirst().accept(rule.regex);
+        });
+        JCheckBox matchCase = checkBox("Case sensitive", rule.matchCase, value -> {
             rule.matchCase = value;
             validate(pattern, rule);
             fields.changed();
@@ -746,22 +893,25 @@ final class RuleList<R extends Rule> extends JPanel {
             validate(pattern, rule);
             fields.changed();
         });
-        JCheckBox regex = checkBox("Regex", rule.matchMode == MatchMode.REGEX, value -> {
-            rule.matchMode = value ? MatchMode.REGEX : MatchMode.STRING;
-            setPlaceholder(pattern, rule.matchMode);
-            patternChanged.getFirst().accept(rule.regex);
-        });
-        // A row each, labelled: how the pattern matches, then (redactions) which part of a match is redacted.
         fields.add("Pattern", pattern);
-        fields.add("Options", wrapRow(matchCase, wholeWord, regex));
+        // Why the pattern did not apply, where it is being fixed.
+        fields.addProblem();
+        fields.add("Options", wrapRow(regex, matchCase, wholeWord));
+
+        Runnable groupsRow = () -> {};
         if (groups != null) {
-            JPanel groupPanel = wrapRow();
+            JPanel groupPanel = new JPanel(new BorderLayout(0, 2));
+            groupPanel.setOpaque(false);
             AtomicReference<List<String>> labels = new AtomicReference<>(
                 RuleEngine.groupLabels(rule.regex, rule.matchMode)
             );
-            JLabel groupLabel = fields.add("Groups", groupPanel);
-            Runnable rebuildGroups = () -> rebuildGroups(groupPanel, groupLabel, groups, labels.get(), fields::changed);
-            rebuildGroups.run();
+            AtomicReference<JLabel> groupLabel = new AtomicReference<>();
+            Runnable rebuildGroups = () ->
+                rebuildGroups(groupPanel, groupLabel.get(), groups, labels.get(), fields::changed);
+            groupsRow = () -> {
+                groupLabel.set(fields.addTop("What", groupPanel));
+                rebuildGroups.run();
+            };
             // Selects capture groups as they appear in the pattern.
             patternChanged.add(text -> {
                 List<String> newLabels = RuleEngine.groupLabels(text, rule.matchMode);
@@ -801,8 +951,10 @@ final class RuleList<R extends Rule> extends JPanel {
         }
         Widgets.onTextChange(pattern, text -> patternChanged.getFirst().accept(text));
 
-        List<JCheckBox> boxes = new ArrayList<>();
-        Runnable keepOne = () -> boxes.forEach(box -> box.setEnabled(!(box.isSelected() && rule.targets.size() == 1)));
+        // Every place can be unticked: with none, the card says so rather than greying out the last one.
+        JTextArea nowhere = Widgets.wrappingHint("Tick at least one: the rule matches nothing now.", 260);
+        nowhere.setForeground(Widgets.errorColor());
+        nowhere.setVisible(rule.targets.isEmpty());
         JPanel targets = flush();
         for (RuleTarget target : RuleTarget.values()) {
             JCheckBox box = new JCheckBox(target.label(), rule.targets.contains(target));
@@ -813,17 +965,17 @@ final class RuleList<R extends Rule> extends JPanel {
                 } else {
                     rule.targets.remove(target);
                 }
-                keepOne.run();
+                nowhere.setVisible(rule.targets.isEmpty());
                 fields.changed();
             });
-            boxes.add(box);
             if (targets.getComponentCount() > 0) {
                 targets.add(javax.swing.Box.createHorizontalStrut(10));
             }
             targets.add(box);
         }
-        keepOne.run();
         fields.add("Applies to", targets);
+        fields.addUnder(nowhere, 3);
+        return groupsRow;
     }
 
     /** The catalog's groups, each a submenu of its headers, checked when the rule names them. */
@@ -852,7 +1004,8 @@ final class RuleList<R extends Rule> extends JPanel {
     }
 
     /**
-     * The choice to redact only some of the pattern's capture groups: shown, with its label, only when it has some.
+     * What a match of a pattern with capture groups redacts: the whole match, or only the chosen groups, listed under
+     * that choice. Shown, with its label, only when the pattern has groups.
      *
      * @param labels label of each capture group, see {@link RuleEngine#groupLabels}
      */
@@ -867,10 +1020,26 @@ final class RuleList<R extends Rule> extends JPanel {
         panel.removeAll();
         panel.setVisible(count > 0);
         label.setVisible(count > 0);
-        JCheckBox enabled = new JCheckBox("Redact only", rule.useCaptureGroups);
-        enabled.setToolTipText("Redact only the selected capture groups instead of the whole match");
-        enabled.setOpaque(false);
-        panel.add(enabled);
+        if (count == 0) {
+            panel.revalidate();
+            return;
+        }
+        ButtonGroup choice = new ButtonGroup();
+        JRadioButton whole = new JRadioButton("The whole match", !rule.useCaptureGroups);
+        JRadioButton some = new JRadioButton("Only these capture groups:", rule.useCaptureGroups);
+        JPanel options = new JPanel(new GridLayout(0, 1, 0, 2));
+        options.setOpaque(false);
+        for (JRadioButton option : List.of(whole, some)) {
+            option.setOpaque(false);
+            choice.add(option);
+            options.add(option);
+        }
+
+        // Only some groups, but none ticked: a match redacts nothing. Said in words, as for Applies to.
+        JTextArea nothing = Widgets.wrappingHint("Tick at least one group: the rule redacts nothing now.", 260);
+        nothing.setForeground(Widgets.errorColor());
+        Runnable updateNothing = () -> nothing.setVisible(rule.useCaptureGroups && rule.selectedGroups.isEmpty());
+        updateNothing.run();
 
         List<JCheckBox> boxes = new ArrayList<>();
         for (int group = 1; group <= count; group++) {
@@ -887,21 +1056,33 @@ final class RuleList<R extends Rule> extends JPanel {
                     selected.sort(null);
                 }
                 rule.selectedGroups = selected;
+                updateNothing.run();
                 onChange.run();
             });
             boxes.add(box);
-            panel.add(box);
         }
+        // Under the option they belong to.
+        JPanel groupBoxes = wrapRow(boxes.toArray(JComponent[]::new));
+        groupBoxes.setBorder(BorderFactory.createEmptyBorder(0, GROUP_INDENT - ROW_GAP, 0, 0));
 
-        enabled.addActionListener(event -> {
-            rule.useCaptureGroups = enabled.isSelected();
-            rule.selectedGroups = enabled.isSelected() ? allGroups(1, count) : new ArrayList<>();
-            for (JCheckBox box : boxes) {
-                box.setEnabled(rule.useCaptureGroups);
-                box.setSelected(rule.useCaptureGroups);
-            }
-            onChange.run();
-        });
+        for (JRadioButton option : List.of(whole, some)) {
+            option.addActionListener(event -> {
+                if (rule.useCaptureGroups == some.isSelected()) {
+                    return;
+                }
+                rule.useCaptureGroups = some.isSelected();
+                rule.selectedGroups = rule.useCaptureGroups ? allGroups(1, count) : new ArrayList<>();
+                for (JCheckBox box : boxes) {
+                    box.setEnabled(rule.useCaptureGroups);
+                    box.setSelected(rule.useCaptureGroups);
+                }
+                updateNothing.run();
+                onChange.run();
+            });
+        }
+        panel.add(options, BorderLayout.NORTH);
+        panel.add(groupBoxes, BorderLayout.CENTER);
+        panel.add(nothing, BorderLayout.SOUTH);
         panel.revalidate();
         panel.repaint();
     }
@@ -929,12 +1110,15 @@ final class RuleList<R extends Rule> extends JPanel {
         return box;
     }
 
+    private static final int ROW_GAP = 10;
+    /** Lines the capture groups up with the text of the option above them, past its radio button. */
+    private static final int GROUP_INDENT = 24;
+
     /** A row that starts at the left edge of the control column and wraps when the editor is too narrow for it. */
     private static JPanel wrapRow(Component... components) {
-        int gap = 10;
-        JPanel row = new JPanel(new WrapLayout(gap, 0));
+        JPanel row = new JPanel(new WrapLayout(ROW_GAP, 0));
         // The layout leaves a gap before the first component too: take it back, so the row lines up with the fields.
-        row.setBorder(BorderFactory.createEmptyBorder(0, -gap, 0, 0));
+        row.setBorder(BorderFactory.createEmptyBorder(0, -ROW_GAP, 0, 0));
         row.setOpaque(false);
         for (Component component : components) {
             row.add(component);

@@ -343,6 +343,21 @@ public final class RuleEngine {
     }
 
     /**
+     * Whether a redaction is set to hide only some of its pattern's capture groups but none is chosen: it matches, and a
+     * match hides nothing. A rule that is off, or applies nowhere (also shown as off), doesn't count.
+     */
+    public static boolean redactsNothing(RedactionRule rule) {
+        return (
+            rule.enabled &&
+            rule.type == RuleType.PATTERN &&
+            !rule.targets.isEmpty() &&
+            rule.useCaptureGroups &&
+            rule.selectedGroups.isEmpty() &&
+            !groupLabels(rule.regex, rule.matchMode).isEmpty()
+        );
+    }
+
+    /**
      * Labels of the capture groups in a pattern, the label of group {@code n} at index {@code n - 1}: its name for a
      * named group, its number otherwise. Empty for literal strings and invalid patterns. Caido only shows numbers.
      */

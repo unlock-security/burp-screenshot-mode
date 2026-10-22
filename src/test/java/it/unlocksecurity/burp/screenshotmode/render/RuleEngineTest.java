@@ -198,6 +198,31 @@ class RuleEngineTest {
     }
 
     @Test
+    void aRedactionOfNoChosenGroupRedactsNothing() {
+        RedactionRule rule = RedactionRule.create(
+            "token=(\\w+)",
+            RuleTarget.REQUEST,
+            RedactionMode.REPLACE,
+            MatchMode.REGEX
+        );
+        rule.useCaptureGroups = true;
+        rule.selectedGroups = List.of();
+        assertTrue(RuleEngine.redactsNothing(rule));
+
+        rule.selectedGroups = List.of(1);
+        assertFalse(RuleEngine.redactsNothing(rule), "a group is chosen");
+        rule.selectedGroups = List.of();
+        rule.enabled = false;
+        assertFalse(RuleEngine.redactsNothing(rule), "off");
+        rule.enabled = true;
+        rule.targets.clear();
+        assertFalse(RuleEngine.redactsNothing(rule), "applies nowhere, shown as off");
+        rule.targets.add(RuleTarget.REQUEST);
+        rule.regex = "token=\\w+";
+        assertFalse(RuleEngine.redactsNothing(rule), "no groups: the whole match is redacted");
+    }
+
+    @Test
     void captureGroupsDisabledRedactWholeMatch() {
         RedactionRule rule = redaction("session=(\\w+)", RedactionMode.BLUR);
         rule.selectedGroups = List.of(1);

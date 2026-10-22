@@ -101,4 +101,17 @@ class SettingsFormUndoTest {
         RedactionRule reloaded = settings.redactions.get(2);
         assertTrue(form.redactionList().row(reloaded).isExpanded());
     }
+
+    @Test
+    void warnsInTheRulesTabWhenARedactionRedactsNothing() {
+        RedactionRule rule = settings.redactions
+            .stream()
+            .filter(r -> r.name.equals("Authorization credentials"))
+            .findFirst()
+            .orElseThrow();
+        rule.selectedGroups = new java.util.ArrayList<>();
+        form.showRuleStatuses(java.util.Map.of());
+        javax.swing.JPanel title = (javax.swing.JPanel) form.tabs().getTabComponentAt(SettingsForm.RULES);
+        assertEquals("⚠ 1", ((javax.swing.JLabel) title.getComponent(1)).getText());
+    }
 }

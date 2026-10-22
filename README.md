@@ -30,17 +30,18 @@ No external tools, no manual cropping and blurring.
   also says in words whether a rule redacts or highlights it, and links to that rule, or adds one with **Redact
   value…** or **Highlight…**.
 - **Highlights**: painted as a translucent marker or as a rectangle, in any color.
-- **Redactions**: blur, opaque box or replacement text (`[REDACTED]`).
+- **Redactions**: replacement text (`[REDACTED]`), a black box or blur.
 - **Two kinds of rules**, chosen when you add one with **+**: a **header** rule names one or more headers and
   redacts their whole value (a highlight marks the whole line), in requests and responses; a **text pattern** rule
   matches a regex or literal text in the request, the response, the URL or any of them, and a redaction can be
   limited to selected capture groups (e.g. `session=([0-9a-f]+)` redacts only the value).
 - **One list of rules**: each rule has an optional name, an on/off checkbox and a one-line summary, and opens into
-  its editor when clicked. Long patterns and header lists wrap in their field, so they are always shown whole. The built-in *Defaults* template comes with named redactions for credentials, cookies, API keys,
+  its editor when clicked: what it matches (pattern, options, where it applies), then what it does with a match.
+  Long patterns and header lists wrap in their field, so they are always shown whole. The built-in *Defaults* template comes with named redactions for credentials, cookies, API keys,
   passwords, tokens and JWTs, including in the URL, so a secret in the request line doesn't show up above it.
 - **Rule checks**: in the screenshot window, each rule shows how many times it matched. A redaction with an invalid
-  or too slow pattern is flagged on its line, on the *Rules* tab and above the preview, and **Copy** and **Save** ask
-  before exporting a screenshot it may not fully cover.
+  or too slow pattern, or set to redact only some capture groups with none chosen, is flagged on the *Rules* tab and
+  above the preview, and **Copy** and **Save** ask before exporting a screenshot it may not fully cover.
 - **Pretty view** for JSON, HTML, XML (SVG, RSS, SOAP, …), CSS and JavaScript bodies, like Burp's Pretty tab.
   Only line breaks and indentation change, so your rules still match and broken or malicious markup shows exactly as
   sent.

@@ -5,6 +5,7 @@ import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
@@ -441,13 +442,16 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.getViewport().setBackground(palette.canvas());
     }
 
-    /** The redaction rules that did not fully apply in the last render. */
+    /**
+     * The redaction rules that did not fully apply in the last render, or that redact nothing (only some capture groups,
+     * none chosen): what they should hide may show.
+     */
     private List<RedactionRule> failedRedactions() {
         return state.settings.redactions
             .stream()
             .filter(rule -> {
                 RuleStatus status = content.ruleStatuses().get(rule);
-                return status != null && status.failed();
+                return (status != null && status.failed()) || RuleEngine.redactsNothing(rule);
             })
             .toList();
     }
