@@ -26,6 +26,9 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -40,6 +43,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
 /**
@@ -63,7 +67,7 @@ final class SettingsForm extends JPanel {
     private RuleList<HighlightRule> highlightList;
     private RuleList<RedactionRule> redactionList;
     private final HeadersTab headers;
-    /** Above the rules after a jump from the Headers tab, with the way back. */
+    /** Above the rules after a jump from the Headers tab, with the way back, or after a deletion, with Undo. */
     private final JPanel notice = new JPanel(new BorderLayout(8, 0)) {
         @Override
         public java.awt.Color getBackground() {
@@ -72,6 +76,12 @@ final class SettingsForm extends JPanel {
         }
     };
     private final JLabel noticeText = new JLabel();
+    private final JButton noticeAction = Widgets.button("");
+    private Runnable noticeRun = () -> {};
+    /** Whether the notice offers Undo, which would undo another change once the settings change again. */
+    private boolean undoNotice;
+    /** Undoes the last change, or {@code null} where there is no undo. */
+    private Runnable undo;
     private int failedRules;
     /** The built-in template the settings are based on, and what Restore defaults does in the Rules tab. */
     private final JLabel rulesBasis = Widgets.hint("");
@@ -98,6 +108,9 @@ final class SettingsForm extends JPanel {
         this.settings = settings;
         this.mono = mono;
         this.onChange = () -> {
+            if (undoNotice) {
+                notice.setVisible(false);
+            }
             updateCounts();
             updateRestore();
             onChange.run();
@@ -121,13 +134,13 @@ final class SettingsForm extends JPanel {
                         redactionList.addFirst((RedactionRule) rule);
                     }
                     showRule(rule);
-                    showNotice(text);
+                    showBackNotice(text);
                 }
 
                 @Override
                 public void open(Rule rule, String text) {
                     showRule(rule);
-                    showNotice(text);
+                    showBackNotice(text);
                 }
             }
         );
@@ -163,10 +176,40 @@ final class SettingsForm extends JPanel {
         headers.showHits(hits);
     }
 
-    private void showNotice(String text) {
+    JButton noticeAction() {
+        return noticeAction;
+    }
+
+    /** "‹ Back to Headers" returns to the header the user came from, still selected there. */
+    private void showBackNotice(String text) {
+        showNotice(text, "‹ Back to Headers", null, false, () -> {
+            tabs.setSelectedIndex(HEADERS);
+            headers.table().requestFocusInWindow();
+        });
+    }
+
+    /** After a rule was deleted with its trash button, where the settings can be undone. */
+    private void showDeletedNotice() {
+        if (undo != null) {
+            showNotice("Rule deleted.", "Undo", "Undo (" + Widgets.shortcut(KeyEvent.VK_Z) + ")", true, undo);
+        }
+    }
+
+    private void showNotice(String text, String action, String tooltip, boolean undoes, Runnable run) {
         noticeText.setText(text);
+        noticeAction.setText(action);
+        noticeAction.setToolTipText(tooltip);
+        noticeRun = run;
+        undoNotice = undoes;
         notice.setVisible(true);
         notice.revalidate();
+        // The first layout wraps the row for the width it had while hidden: lay it out again at its real width.
+        SwingUtilities.invokeLater(notice::revalidate);
+    }
+
+    /** Offers Undo after a deletion: the settings have an undo history. */
+    void setUndo(Runnable undo) {
+        this.undo = undo;
     }
 
     JTabbedPane tabs() {
@@ -214,6 +257,8 @@ final class SettingsForm extends JPanel {
             onChange,
             mono
         );
+        highlightList.setDeleteListener(this::showDeletedNotice);
+        redactionList.setDeleteListener(this::showDeletedNotice);
         buildNotice();
         if (wide) {
             JPanel columns = new JPanel(new GridLayout(1, 2, 24, 0));
@@ -233,18 +278,13 @@ final class SettingsForm extends JPanel {
         return stack;
     }
 
-    /** "‹ Back to Headers" returns to the header the user came from, still selected there. */
     private void buildNotice() {
-        JButton back = Widgets.button("‹ Back to Headers");
-        back.putClientProperty("JButton.buttonType", "borderless");
-        back.addActionListener(event -> {
-            tabs.setSelectedIndex(HEADERS);
-            headers.table().requestFocusInWindow();
-        });
+        noticeAction.putClientProperty("JButton.buttonType", "borderless");
+        noticeAction.addActionListener(event -> noticeRun.run());
         notice.setOpaque(true);
         notice.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 6));
         // The link moves under the text when the sidebar is too narrow for both.
-        notice.add(Widgets.row(noticeText, back), BorderLayout.CENTER);
+        notice.add(Widgets.row(noticeText, noticeAction), BorderLayout.CENTER);
         notice.setVisible(false);
     }
 
@@ -269,6 +309,84 @@ final class SettingsForm extends JPanel {
                 list.reveal(rule);
             }
         }
+    }
+
+    /**
+     * Shows the settings again after undo or redo changed them under the form, and where they changed: their tab, if
+     * the open one didn't change, and the rule that changed or came back, open.
+     *
+     * @param before the settings as they were
+     */
+    void reload(Settings before) {
+        String open = expansion.open() == null ? null : expansion.open().id;
+        highlightList.reload();
+        redactionList.reload();
+        headers.reload();
+        int selected = tabs.getSelectedIndex();
+        // The controls show the settings they were built with: build them again.
+        tabs.setComponentAt(APPEARANCE, appearancePanel());
+        notice.setVisible(false);
+        updateCounts();
+        updateRestore();
+
+        Rule changed = ruleChangedSince(before);
+        boolean rules =
+            changed != null ||
+            settings.highlights.size() != before.highlights.size() ||
+            settings.redactions.size() != before.redactions.size();
+        Settings sameHeaders = settings.copy();
+        sameHeaders.headers = before.headers;
+        List<Integer> tabsChanged = new ArrayList<>();
+        if (rules) {
+            tabsChanged.add(RULES);
+        }
+        if (!TemplateCodec.sameSettings(settings, sameHeaders)) {
+            tabsChanged.add(HEADERS);
+        }
+        if (settings.appearanceChanges(before) > 0) {
+            tabsChanged.add(APPEARANCE);
+        }
+        tabs.setSelectedIndex(
+            tabsChanged.isEmpty() || tabsChanged.contains(selected) ? selected : tabsChanged.getFirst()
+        );
+
+        if (changed != null && tabs.getSelectedIndex() == RULES) {
+            showRule(changed);
+        } else if (changed != null) {
+            expand(changed);
+        } else {
+            // The rule open before, if it is still there: its row was built again.
+            Stream.concat(settings.highlights.stream(), settings.redactions.stream())
+                .filter(rule -> rule.id.equals(open))
+                .findFirst()
+                .ifPresent(this::expand);
+        }
+        revalidate();
+        repaint();
+    }
+
+    /** The first rule that {@code before} doesn't have, or has with other settings. */
+    private Rule ruleChangedSince(Settings before) {
+        Map<String, Rule> old = new HashMap<>();
+        Stream.concat(before.highlights.stream(), before.redactions.stream()).forEach(rule -> old.put(rule.id, rule));
+        return Stream.concat(settings.highlights.stream(), settings.redactions.stream())
+            .filter(rule -> !old.containsKey(rule.id) || !sameRule(rule, old.get(rule.id)))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private static boolean sameRule(Rule a, Rule b) {
+        return a.getClass() == b.getClass() && TemplateCodec.sameSettings(holding(a), holding(b));
+    }
+
+    private static Settings holding(Rule rule) {
+        Settings settings = new Settings();
+        if (rule instanceof HighlightRule highlight) {
+            settings.highlights.add(highlight);
+        } else {
+            settings.redactions.add((RedactionRule) rule);
+        }
+        return settings;
     }
 
     /**

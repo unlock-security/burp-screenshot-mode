@@ -98,6 +98,7 @@ final class RuleList<R extends Rule> extends JPanel {
     private final Widgets.Stack box = new Widgets.Stack(0, false);
     private final Map<Rule, Row> rows = new IdentityHashMap<>();
     private Map<Object, RuleStatus> statuses = null;
+    private Runnable onDelete = () -> {};
 
     RuleList(
         String title,
@@ -163,6 +164,11 @@ final class RuleList<R extends Rule> extends JPanel {
 
     boolean contains(Rule rule) {
         return rows.containsKey(rule);
+    }
+
+    /** Runs after a rule was deleted with its trash button, and after {@code onChange}. */
+    void setDeleteListener(Runnable listener) {
+        onDelete = listener;
     }
 
     /** Adds a rule at the top and opens it. */
@@ -426,6 +432,7 @@ final class RuleList<R extends Rule> extends JPanel {
             }
             rebuild();
             onChange.run();
+            onDelete.run();
         }
 
         /** The rule's line: focusable, Enter or Space opens and closes it, like a disclosure button. */

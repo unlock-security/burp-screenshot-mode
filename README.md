@@ -61,6 +61,10 @@ No external tools, no manual cropping and blurring.
 - **Restore defaults** in each tab, from the built-in template yours is based on, after asking: the *Rules* tab adds
   back the rules you deleted (or replaces all your rules), the *Headers* tab drops your header changes, and the
   *Appearance* tab resets width, layout, theme, URL bar, body and footer. Each tab says what it would change.
+- **Undo and redo** every change to the settings with **⌘Z** / **⇧⌘Z** (**Ctrl+Z** / **Ctrl+Shift+Z** or **Ctrl+Y**),
+  in the screenshot window and in the template editor: deleted rules, restored defaults, rules added from the preview
+  or the *Headers* tab, and **Revert** too. Typing counts as one step. Undo shows what it changed: it opens the tab
+  and the rule it brought back. Deleting a rule also offers **Undo** right above the rules.
 - **Export** as a 2× PNG file or straight to the clipboard.
 
 ## Screenshots

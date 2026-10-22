@@ -55,6 +55,7 @@ import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.JTextComponent;
 
@@ -73,6 +74,7 @@ final class ScreenshotDialog extends JDialog {
     private final TemplateStore store;
     private final SessionState state;
     private final MessageData data;
+    private final SettingsHistory history;
 
     private final ContentPanel content = new ContentPanel();
     private final PreviewArea preview = new PreviewArea(content);
@@ -105,6 +107,7 @@ final class ScreenshotDialog extends JDialog {
         this.store = store;
         this.state = state;
         this.data = data;
+        history = new SettingsHistory(() -> state.settings);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         statusTimer.setRepeats(false);
         renderTimer.setRepeats(false);
@@ -128,6 +131,7 @@ final class ScreenshotDialog extends JDialog {
             KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_SHORTCUT),
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+        SettingsHistory.bindKeys(getRootPane(), JComponent.WHEN_IN_FOCUSED_WINDOW, () -> undo(false), () -> undo(true));
         // Text components bind Copy themselves, so a window-level key binding would never fire: dispatch it first.
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(copyShortcut);
 
@@ -191,6 +195,8 @@ final class ScreenshotDialog extends JDialog {
             }
             state.templateId = template.id;
             state.settings = template.settings.copy();
+            // Undo stays within a template's settings.
+            history.reset();
             selectCurrentTemplate();
             rebuildForm();
             render();
@@ -204,10 +210,10 @@ final class ScreenshotDialog extends JDialog {
         saveAs.addActionListener(event -> saveAsNewTemplate());
 
         JButton save = Widgets.button("Save PNG…");
-        save.setToolTipText("Save the screenshot as a PNG file (" + shortcut(KeyEvent.VK_S) + ")");
+        save.setToolTipText("Save the screenshot as a PNG file (" + Widgets.shortcut(KeyEvent.VK_S) + ")");
         save.addActionListener(event -> takeScreenshot(false));
         JButton copy = Widgets.primary(Widgets.button("Copy image"));
-        copy.setToolTipText("Copy the screenshot to the clipboard (" + shortcut(KeyEvent.VK_C) + ")");
+        copy.setToolTipText("Copy the screenshot to the clipboard (" + Widgets.shortcut(KeyEvent.VK_C) + ")");
         copy.addActionListener(event -> takeScreenshot(true));
 
         JLabel templateLabel = new JLabel("Template");
@@ -285,11 +291,15 @@ final class ScreenshotDialog extends JDialog {
         formHolder.removeAll();
         form = new SettingsForm(
             state.settings,
-            renderTimer::restart,
+            () -> {
+                history.changed();
+                renderTimer.restart();
+            },
             host.editorFont().get(),
             false,
             HeadersTab.InMessage.of(data)
         );
+        form.setUndo(() -> undo(false));
         form.tabs().setSelectedIndex(selectedTab);
         form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
         formHolder.add(form, BorderLayout.CENTER);
@@ -400,11 +410,6 @@ final class ScreenshotDialog extends JDialog {
         // Later, not inside the key dispatch: the screenshot may first open a confirmation dialog.
         SwingUtilities.invokeLater(() -> takeScreenshot(true));
         return true;
-    }
-
-    private static String shortcut(int keyCode) {
-        String key = KeyEvent.getKeyText(keyCode);
-        return System.getProperty("os.name", "").toLowerCase().contains("mac") ? "⌘" + key : "Ctrl+" + key;
     }
 
     private void render() {
@@ -551,6 +556,7 @@ final class ScreenshotDialog extends JDialog {
         store.getTemplateById(state.templateId).ifPresentOrElse(
             template -> {
                 state.settings = template.settings.copy();
+                history.record();
                 rebuildForm();
                 render();
                 showStatus("Reverted to \"" + template.name + "\"", false);
@@ -618,11 +624,23 @@ final class ScreenshotDialog extends JDialog {
                 }
             }
         }
+        history.record();
         rebuildForm();
         if (added != null) {
             // Open, so its card shows what was added; the focus stays in the preview.
             form.expand(added);
         }
+        render();
+    }
+
+    /** Undoes or redoes the last change to the settings, showing where it was. */
+    private void undo(boolean redo) {
+        Settings before = redo ? history.redo() : history.undo();
+        if (before == null) {
+            UIManager.getLookAndFeel().provideErrorFeedback(getRootPane());
+            return;
+        }
+        form.reload(before);
         render();
     }
 

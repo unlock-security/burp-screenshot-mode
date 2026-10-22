@@ -18,6 +18,8 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
@@ -202,6 +204,21 @@ final class Widgets {
     static JButton primary(JButton button) {
         button.putClientProperty("FlatLaf.styleClass", "primary");
         return button;
+    }
+
+    /** The menu shortcut of a key as written in tooltips: "⌘Z" on macOS, "Ctrl+Z" elsewhere. */
+    static String shortcut(int keyCode) {
+        String key = KeyEvent.getKeyText(keyCode);
+        return isMac() ? "⌘" + key : "Ctrl+" + key;
+    }
+
+    /** The modifier of menu shortcuts: ⌘ on macOS, Ctrl elsewhere. Unlike the toolkit's, also known headless. */
+    static int menuShortcutMask() {
+        return isMac() ? InputEvent.META_DOWN_MASK : InputEvent.CTRL_DOWN_MASK;
+    }
+
+    private static boolean isMac() {
+        return System.getProperty("os.name", "").toLowerCase().contains("mac");
     }
 
     /**

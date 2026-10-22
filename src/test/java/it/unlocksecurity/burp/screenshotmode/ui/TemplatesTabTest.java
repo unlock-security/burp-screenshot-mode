@@ -13,6 +13,7 @@ import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Font;
+import java.awt.event.KeyEvent;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,8 +21,11 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import javax.swing.AbstractButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
@@ -235,6 +239,32 @@ class TemplatesTabTest {
         SwingUtilities.invokeAndWait(() -> {
             TemplatesTab tab = new TemplatesTab(store, host());
             assertEquals("primary", button(tab, "New template").getClientProperty("FlatLaf.styleClass"));
+        });
+    }
+
+    @Test
+    void undoesInTheEditorWithTheMenuShortcut() throws Exception {
+        TemplateStore store = store();
+        Template template = store.createTemplate("Report", BuiltInTemplates.defaults());
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            select(tab, template);
+            button(tab, "Edit").doClick();
+            SettingsForm form = find(tab, SettingsForm.class, f -> true).get();
+            JLabel unsaved = find(tab, JLabel.class, label -> "Unsaved".equals(label.getText())).get();
+            int count = template.settings.redactions.size();
+
+            find(form.redactionList(), RuleList.Row.class, row -> true)
+                .get()
+                .delete();
+            assertTrue(unsaved.isVisible());
+
+            KeyStroke undo = KeyStroke.getKeyStroke(KeyEvent.VK_Z, Widgets.menuShortcutMask());
+            Object action = form.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(undo);
+            form.getActionMap().get(action).actionPerformed(null);
+            assertFalse(unsaved.isVisible(), "back to the saved settings");
+            button(tab, "Save").doClick();
+            assertEquals(count, store.getTemplateById(template.id).get().settings.redactions.size());
         });
     }
 

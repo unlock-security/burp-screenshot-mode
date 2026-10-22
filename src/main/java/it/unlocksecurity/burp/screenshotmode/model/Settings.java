@@ -100,18 +100,23 @@ public final class Settings {
 
     public Settings copy() {
         Settings copy = new Settings();
-        copy.basedOn = basedOn;
-        copy.headers = headers.copy();
-        copy.disposition = disposition;
-        copy.widthMode = widthMode;
-        copy.widthPixels = widthPixels;
-        copy.highlights = new ArrayList<>(highlights.stream().map(HighlightRule::copy).toList());
-        copy.redactions = new ArrayList<>(redactions.stream().map(RedactionRule::copy).toList());
-        copy.showTimestamp = showTimestamp;
-        copy.showResponseInfo = showResponseInfo;
-        copy.theme = theme;
-        copy.view = view;
-        copy.url = url;
+        copy.copyFrom(this);
         return copy;
+    }
+
+    /**
+     * Takes copies of all of {@code other}'s settings. The rule lists stay the same objects, refilled, since editors
+     * hold them.
+     */
+    public void copyFrom(Settings other) {
+        List<HighlightRule> otherHighlights = other.highlights.stream().map(HighlightRule::copy).toList();
+        List<RedactionRule> otherRedactions = other.redactions.stream().map(RedactionRule::copy).toList();
+        highlights.clear();
+        highlights.addAll(otherHighlights);
+        redactions.clear();
+        redactions.addAll(otherRedactions);
+        basedOn = other.basedOn;
+        headers = other.headers.copy();
+        copyAppearance(other);
     }
 }

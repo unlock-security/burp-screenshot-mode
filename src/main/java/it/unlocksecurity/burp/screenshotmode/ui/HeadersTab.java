@@ -569,6 +569,11 @@ final class HeadersTab extends JPanel {
         }
     }
 
+    /** Shows the headers again after the settings changed from outside, keeping the filter, groups and selection. */
+    void reload() {
+        refresh();
+    }
+
     /** Lists the rows again after a change, keeping the selection. */
     private void refresh() {
         Object selected = selectedRow().orElse(null);

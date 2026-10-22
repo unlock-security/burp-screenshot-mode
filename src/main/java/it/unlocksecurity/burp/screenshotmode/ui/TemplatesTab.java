@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
@@ -315,9 +316,34 @@ public final class TemplatesTab extends JPanel {
             nameRow.add(base);
         }
 
+        SettingsHistory history = new SettingsHistory(() -> working);
+        SettingsForm form = new SettingsForm(
+            working,
+            () -> {
+                history.changed();
+                updateState.run();
+            },
+            host.editorFont().get(),
+            true
+        );
+        Consumer<Settings> undone = before -> {
+            if (before == null) {
+                UIManager.getLookAndFeel().provideErrorFeedback(form);
+                return;
+            }
+            form.reload(before);
+            updateState.run();
+        };
+        Runnable undo = () -> undone.accept(history.undo());
+        form.setUndo(undo);
+        // In the settings only: the name field and the buttons above are not part of the history.
+        SettingsHistory.bindKeys(form, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, undo, () ->
+            undone.accept(history.redo())
+        );
+
         JPanel body = new JPanel(new BorderLayout());
         body.add(nameRow, BorderLayout.NORTH);
-        body.add(new SettingsForm(working, updateState, host.editorFont().get(), true), BorderLayout.CENTER);
+        body.add(form, BorderLayout.CENTER);
 
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 0, 16));

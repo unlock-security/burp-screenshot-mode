@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import java.util.ArrayList;
@@ -53,5 +54,28 @@ class SettingsTest {
         settings.copyAppearance(parent);
         assertEquals(0, settings.appearanceChanges(parent));
         assertEquals(1, settings.redactions.size(), "rules are not appearance");
+    }
+
+    @Test
+    void copiesEverythingIntoTheSameRuleLists() {
+        Settings other = new Settings();
+        other.basedOn = "defaults";
+        other.disposition = Disposition.VERTICAL;
+        RedactionRule rule = named("Tokens", "t");
+        other.redactions.add(rule);
+
+        Settings settings = new Settings();
+        List<RedactionRule> redactions = settings.redactions;
+        settings.redactions.add(named("Gone", "g"));
+        settings.copyFrom(other);
+
+        assertSame(redactions, settings.redactions, "editors hold the list");
+        assertEquals(1, settings.redactions.size());
+        assertEquals(rule.id, settings.redactions.getFirst().id);
+        assertNotSame(rule, settings.redactions.getFirst());
+        assertNotSame(other.headers, settings.headers);
+        assertEquals("defaults", settings.basedOn);
+        assertEquals(Disposition.VERTICAL, settings.disposition);
+        assertEquals(0, settings.appearanceChanges(other));
     }
 }

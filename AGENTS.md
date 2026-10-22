@@ -119,6 +119,12 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 - `SettingsForm` mutates a `Settings` in place, in three tabs (Rules, Headers, Appearance), and is reused by both the
   screenshot sidebar and the template editor in `TemplatesTab`. `TemplateCodec.sameSettings` (comparison of the
   stored form) drives the "Modified"/"Unsaved" state of both.
+- Undo/redo: the screenshot window and the template editor each own a `ui.SettingsHistory` of `Settings` snapshots,
+  told of every change through the form's `onChange` (a no-op change is no step; typing in a text field is one step,
+  taken when it pauses). Undo restores the snapshot **in place** (`Settings.copyFrom`, which keeps the rule lists that
+  `RuleList` holds) and calls `SettingsForm.reload(before)`, which refreshes every tab without rebuilding the form and
+  shows the tab and the rule that changed. Changes made outside the form (preview right-click, Revert) call
+  `record()`; switching template calls `reset()`. History lives as long as the window or editor, not in `SessionState`.
 
 **Persistence:** `TemplateStore` saves the user's templates (not the built-in ones) as one JSON string under the Burp
 preference key `screenshot-mode.templates`; exports leave the built-in ones out too. If that value can't be read at
