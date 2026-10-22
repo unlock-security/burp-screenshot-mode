@@ -47,7 +47,9 @@ No external tools, no manual cropping and blurring.
   sent.
 - **Right-click** in the preview to highlight or redact the selected text, or to hide, redact or highlight the header
   under the pointer, in one click.
-- **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
+- **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px). A fixed width is
+  exact whatever the window size (the preview scrolls sideways when it doesn't fit), and the toolbar shows the size of
+  the PNG that Copy and Save produce.
 - **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
 - **Metadata footer**: request timestamp and response size/round-trip time.
 - **URL bar**: the full URL, only the path and query (the label reads *Path*), or no URL bar at all. Path only leaves

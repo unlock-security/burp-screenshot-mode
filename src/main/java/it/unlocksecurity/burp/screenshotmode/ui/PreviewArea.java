@@ -17,8 +17,9 @@ import javax.swing.JViewport;
 import javax.swing.Scrollable;
 
 /**
- * Hosts the {@link ContentPanel}: centred, limited to the configured width, and as tall as the viewport unless
- * cropped with the drag handle underneath (port of the Caido {@code useCrop} composable).
+ * Hosts the {@link ContentPanel}: centred, exactly as wide as the configured width (scrolling sideways when the window
+ * is narrower) or as the viewport for full width, and as tall as the viewport unless cropped with the drag handle
+ * underneath.
  */
 final class PreviewArea extends JPanel implements Scrollable {
 
@@ -75,12 +76,20 @@ final class PreviewArea extends JPanel implements Scrollable {
 
     @Override
     public void doLayout() {
-        int available = Math.max(100, getWidth() - 2 * MARGIN);
-        int width = maxContentWidth == null ? available : Math.min(available, maxContentWidth);
-        int x = (getWidth() - width) / 2;
+        int width = contentWidth();
+        int x = Math.max(MARGIN, (getWidth() - width) / 2);
         int height = contentHeight();
         content.setBounds(x, MARGIN, width, height);
         handle.setBounds(x, MARGIN + height, width, HANDLE_HEIGHT);
+    }
+
+    /** The configured width, whatever the window: only full width follows the viewport. */
+    private int contentWidth() {
+        return maxContentWidth != null ? maxContentWidth : Math.max(100, viewportWidth() - 2 * MARGIN);
+    }
+
+    private int viewportWidth() {
+        return getParent() instanceof JViewport viewport ? viewport.getWidth() : getWidth();
     }
 
     private int contentHeight() {
@@ -115,7 +124,8 @@ final class PreviewArea extends JPanel implements Scrollable {
 
     @Override
     public boolean getScrollableTracksViewportWidth() {
-        return true;
+        // A fixed width wider than the window scrolls sideways rather than shrinking the screenshot.
+        return maxContentWidth == null || maxContentWidth + 2 * MARGIN <= viewportWidth();
     }
 
     @Override

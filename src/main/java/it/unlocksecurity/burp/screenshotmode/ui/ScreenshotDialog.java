@@ -141,6 +141,14 @@ final class ScreenshotDialog extends JDialog {
         };
         content.requestPane().addComponentListener(resized);
         content.responsePane().addComponentListener(resized);
+        content.addComponentListener(
+            new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    updateOutputLabel();
+                }
+            }
+        );
 
         store.addListener(templatesListener);
         reloadTemplates();
@@ -364,13 +372,9 @@ final class ScreenshotDialog extends JDialog {
         }
     }
 
-    private void updateOutputLabel(Settings settings) {
-        String width = switch (settings.widthMode) {
-            case FULL -> "full width";
-            case PIXEL -> settings.widthPixels + " px wide";
-            case A4, LETTER -> settings.widthMode.label();
-        };
-        output.setText("2× PNG · " + width);
+    /** The size of the image Copy and Save produce: the content as laid out, at the capture scale. */
+    private void updateOutputLabel() {
+        output.setText(ImageCapture.sizeLabel(content.getWidth(), content.getHeight()));
     }
 
     /**
@@ -433,7 +437,6 @@ final class ScreenshotDialog extends JDialog {
         failedRules.setText("⚠ " + failed + (failed == 1 ? " redaction rule failed" : " redaction rules failed"));
         failedRules.setVisible(failed > 0);
         updateTemplateState();
-        updateOutputLabel(settings);
         preview.setBackground(palette.canvas());
         preview.setHandleColors(palette.canvas(), palette.muted());
         previewScroll.getViewport().setBackground(palette.canvas());

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 
 class ImageCaptureTest {
@@ -19,5 +20,16 @@ class ImageCaptureTest {
             "image/png",
             ImageCapture.PNG_FLAVOR.getPrimaryType() + "/" + ImageCapture.PNG_FLAVOR.getSubType()
         );
+    }
+
+    @Test
+    void sizeLabelReportsThePngPixels() {
+        Locale before = Locale.getDefault();
+        Locale.setDefault(Locale.US);
+        try {
+            assertEquals("2,400 × 1,522 px PNG (2×)", ImageCapture.sizeLabel(1200, 761));
+        } finally {
+            Locale.setDefault(before);
+        }
     }
 }

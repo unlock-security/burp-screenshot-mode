@@ -13,6 +13,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.text.NumberFormat;
 import java.util.Locale;
 import javax.imageio.ImageIO;
 
@@ -34,8 +35,8 @@ final class ImageCapture {
         content.setCaptureMode(true);
         try {
             BufferedImage image = new BufferedImage(
-                (int) Math.ceil(content.getWidth() * SCALE),
-                (int) Math.ceil(content.getHeight() * SCALE),
+                pixels(content.getWidth()),
+                pixels(content.getHeight()),
                 BufferedImage.TYPE_INT_RGB
             );
             Graphics2D g = image.createGraphics();
@@ -49,6 +50,24 @@ final class ImageCapture {
         } finally {
             content.setCaptureMode(false);
         }
+    }
+
+    /** The image pixels for {@code size} on screen. */
+    static int pixels(int size) {
+        return (int) Math.ceil(size * SCALE);
+    }
+
+    /** The size of the PNG for content of {@code width} × {@code height} on screen, such as "2,400 × 1,520 px PNG (2×)". */
+    static String sizeLabel(int width, int height) {
+        NumberFormat number = NumberFormat.getIntegerInstance();
+        return (
+            number.format(pixels(width)) +
+            " × " +
+            number.format(pixels(height)) +
+            " px PNG (" +
+            NumberFormat.getInstance().format(SCALE) +
+            "×)"
+        );
     }
 
     static void save(BufferedImage image, File file) throws IOException {
