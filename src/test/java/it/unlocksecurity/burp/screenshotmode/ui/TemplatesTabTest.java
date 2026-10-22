@@ -325,6 +325,29 @@ class TemplatesTabTest {
         );
     }
 
+    @Test
+    void searchIsAStandardSearchField() throws Exception {
+        TemplateStore store = store();
+        store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            JTextField search = find(tab, JTextField.class, field ->
+                "Search templates...".equals(placeholder(field))
+            ).get();
+            assertEquals(Widgets.Glyph.SEARCH, search.getClientProperty("JTextField.leadingIcon"));
+            assertEquals(true, search.getClientProperty("JTextField.showClearButton"));
+            assertEquals("Search templates", search.getAccessibleContext().getAccessibleName());
+
+            JTable table = find(tab, JTable.class, t -> true).get();
+            search.setText("rep");
+            assertEquals(1, table.getRowCount());
+            Object clear = search.getInputMap(JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("ESCAPE"));
+            search.getActionMap().get(clear).actionPerformed(null);
+            assertEquals("", search.getText(), "Escape clears it");
+            assertEquals(store.templates().size(), table.getRowCount());
+        });
+    }
+
     private static Object placeholder(JTextField field) {
         return field.getClientProperty("JTextField.placeholderText");
     }

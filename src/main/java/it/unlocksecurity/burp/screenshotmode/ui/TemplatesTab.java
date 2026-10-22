@@ -94,6 +94,8 @@ public final class TemplatesTab extends JPanel {
 
         JTextField search = new JTextField(24);
         Widgets.placeholder(search, "Search templates...");
+        Widgets.searchField(search);
+        search.getAccessibleContext().setAccessibleName("Search templates");
         Widgets.onTextChange(search, query ->
             sorter.setRowFilter(
                 query.isBlank()
