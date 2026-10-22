@@ -156,7 +156,6 @@ final class HeadersTab extends JPanel {
     private final Model model = new Model();
     private final JTable table = new Table(model);
     private final JPanel details = Widgets.card(new BorderLayout());
-    private final JLabel summary = Widgets.hint("");
     /** The built-in template the headers follow, and how many of them the template changes. */
     private final JLabel basis = Widgets.hint("");
     private final JButton restore = Widgets.button("Restore defaults");
@@ -233,9 +232,8 @@ final class HeadersTab extends JPanel {
                 changed();
             }
         });
-        JPanel footer = new JPanel(new BorderLayout(8, 4));
+        JPanel footer = new JPanel(new BorderLayout(8, 0));
         footer.setOpaque(false);
-        footer.add(summary, BorderLayout.NORTH);
         footer.add(basis, BorderLayout.CENTER);
         footer.add(restore, BorderLayout.EAST);
 
@@ -587,14 +585,6 @@ final class HeadersTab extends JPanel {
         }
         showDetails();
 
-        int hidden = hiddenCount();
-        summary.setText(
-            message != null
-                ? hidden == 0
-                    ? "Nothing hidden in this message"
-                    : hidden + " hidden in this message"
-                : catalog.headerCount() + " headers in " + catalog.groups().size() + " groups, " + hidden + " hidden"
-        );
         String parent = BuiltInTemplates.byId(settings.basedOn).name;
         int changes = changes();
         basis.setText(
