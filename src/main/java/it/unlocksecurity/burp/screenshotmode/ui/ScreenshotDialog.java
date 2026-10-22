@@ -79,7 +79,7 @@ final class ScreenshotDialog extends JDialog {
     private final JButton revert = Widgets.button("Revert");
     private final JButton update = Widgets.button("Update template");
     private final JLabel output = Widgets.hint("");
-    private final JButton failedRules = new JButton();
+    private final JLabel failedRules = new JLabel();
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
     private int selectedTab = SettingsForm.RULES;
@@ -245,11 +245,8 @@ final class ScreenshotDialog extends JDialog {
         tip.setToolTipText(
             "Select text in the request or response, then right-click to highlight it, redact it or hide its header"
         );
-        failedRules.putClientProperty("JButton.buttonType", "borderless");
         failedRules.setForeground(Widgets.errorColor());
-        failedRules.setToolTipText("Show the rules");
         failedRules.setVisible(false);
-        failedRules.addActionListener(event -> showRules());
 
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         left.add(output);
