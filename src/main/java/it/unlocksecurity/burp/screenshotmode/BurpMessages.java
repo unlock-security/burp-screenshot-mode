@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode;
 
+import burp.api.montoya.core.ByteArray;
 import burp.api.montoya.http.HttpService;
 import burp.api.montoya.http.handler.TimingData;
 import burp.api.montoya.http.message.HttpRequestResponse;
@@ -24,7 +25,7 @@ final class BurpMessages {
         HttpResponse response = requestResponse.response();
         String url = url(request, requestResponse.httpService());
         byte[] requestBytes = request.toByteArray().getBytes();
-        byte[] responseBytes = response == null ? null : response.toByteArray().getBytes();
+        ByteArray responseBytes = response == null ? null : response.toByteArray();
 
         Long roundtrip = null;
         ZonedDateTime requestTime = null;
@@ -44,8 +45,8 @@ final class BurpMessages {
             key(url, requestBytes),
             url,
             MessageText.fromBytes(requestBytes),
-            responseBytes == null ? null : MessageText.fromBytes(responseBytes),
-            responseBytes == null ? null : responseBytes.length,
+            responseBytes == null ? null : text(responseBytes),
+            responseBytes == null ? null : responseBytes.length(),
             roundtrip,
             requestTime
         );
@@ -78,6 +79,14 @@ final class BurpMessages {
         } catch (RuntimeException e) {
             return Optional.empty();
         }
+    }
+
+    /** Only the part that can be shown is copied out of Burp: responses can be hundreds of megabytes. */
+    private static String text(ByteArray bytes) {
+        int length = bytes.length();
+        byte[] head =
+            length > MessageText.MAX_BYTES ? bytes.subArray(0, MessageText.MAX_BYTES).getBytes() : bytes.getBytes();
+        return MessageText.fromBytes(head, length);
     }
 
     private static String key(String url, byte[] request) {

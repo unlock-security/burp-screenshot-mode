@@ -1,7 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.model;
 
 /**
- * An enum constant with a stable storage id (shared with the Caido plugin's JSON format) and a UI label.
+ * An enum constant with a stable storage id (written to saved templates and exports) and a UI label.
  */
 public interface Labeled {
     String id();

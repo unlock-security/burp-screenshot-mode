@@ -2,70 +2,25 @@ package it.unlocksecurity.burp.screenshotmode.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
+/** Screenshot settings. New templates start from a copy of a built-in template ({@code storage.BuiltInTemplates}). */
 public final class Settings {
 
     public static final int DEFAULT_PIXEL_WIDTH = 800;
     public static final int MIN_PIXEL_WIDTH = 200;
     public static final int MAX_PIXEL_WIDTH = 2000;
 
-    private static final List<String> DEFAULT_HEADERS_TO_HIDE = List.of(
-        "Accept",
-        "Accept-Encoding",
-        "Accept-Language",
-        "Accept-Ranges",
-        "Age",
-        "Alt-Svc",
-        "Cache-Control",
-        "CF-Cache-Status",
-        "CF-RAY",
-        "Connection",
-        "Content-Length",
-        "Date",
-        "ETag",
-        "Expect-CT",
-        "Expires",
-        "Keep-Alive",
-        "Last-Modified",
-        "NEL",
-        "Permissions-Policy",
-        "Pragma",
-        "Priority",
-        "Report-To",
-        "Sec-CH-UA",
-        "Sec-CH-UA-Arch",
-        "Sec-CH-UA-Bitness",
-        "Sec-CH-UA-Full-Version",
-        "Sec-CH-UA-Full-Version-List",
-        "Sec-CH-UA-Mobile",
-        "Sec-CH-UA-Model",
-        "Sec-CH-UA-Platform",
-        "Sec-CH-UA-Platform-Version",
-        "Sec-Fetch-Dest",
-        "Sec-Fetch-Mode",
-        "Sec-Fetch-Site",
-        "Sec-Fetch-User",
-        "Server-Timing",
-        "Strict-Transport-Security",
-        "Transfer-Encoding",
-        "Upgrade-Insecure-Requests",
-        "Vary",
-        "Via",
-        "X-Amz-Cf-Id",
-        "X-Amz-Cf-Pop",
-        "X-Amz-Id-2",
-        "X-Amz-Request-Id",
-        "X-Cache",
-        "X-Content-Type-Options",
-        "X-Frame-Options",
-        "X-Powered-By",
-        "X-Request-Id",
-        "X-Served-By",
-        "X-Timer",
-        "X-XSS-Protection"
-    );
-
-    public HiddenHeaders headersToHide = new HiddenHeaders();
+    /**
+     * The id of the built-in template these settings are based on: the headers that {@link #headers} doesn't set
+     * itself follow that template, also when a release changes it. {@code null} is Empty, which hides nothing.
+     */
+    public String basedOn;
+    /** The headers shown and hidden, the built-in template's included. */
+    public HeaderVisibility headers = new HeaderVisibility();
     public Disposition disposition = Disposition.HORIZONTAL;
     public WidthMode widthMode = WidthMode.FULL;
     /** Only meaningful when {@link #widthMode} is {@link WidthMode#PIXEL}. */
@@ -74,16 +29,11 @@ public final class Settings {
     public List<RedactionRule> redactions = new ArrayList<>();
     public boolean showTimestamp = false;
     public boolean showResponseInfo = true;
-    /** Not part of the Caido plugin: Swing has no CSS theme to inherit, so the capture palette is selectable. */
+    /** The capture palette: Swing has no CSS theme to inherit, so it is selectable. */
     public ThemeMode theme = ThemeMode.AUTO;
-    /** Not part of the Caido plugin: Caido's editors cannot pretty print, Burp's can. */
+    /** Raw or Pretty, like the tabs of Burp's message editor. */
     public ViewMode view = ViewMode.RAW;
-
-    public static Settings defaults() {
-        Settings settings = new Settings();
-        settings.headersToHide.both = new ArrayList<>(DEFAULT_HEADERS_TO_HIDE);
-        return settings;
-    }
+    public UrlMode url = UrlMode.FULL;
 
     /** Maximum width of the captured content in pixels, or {@code null} for full width. */
     public Integer maxContentWidth() {
@@ -94,9 +44,64 @@ public final class Settings {
         };
     }
 
+    /**
+     * The rules of {@code parent} that {@code own} doesn't have, matched by name: a built-in rule edited but still
+     * under its name counts as there. Built-in rules all have a name. Returns {@code parent}'s instances, with a new id
+     * where {@code own} already uses theirs.
+     */
+    public static <R extends Rule> List<R> missing(List<R> own, List<R> parent) {
+        Set<String> names = own
+            .stream()
+            .map(rule -> rule.name)
+            .collect(Collectors.toSet());
+        Set<String> ids = own
+            .stream()
+            .map(rule -> rule.id)
+            .collect(Collectors.toSet());
+        List<R> missing = new ArrayList<>();
+        for (R rule : parent) {
+            if (!rule.name.isBlank() && !names.contains(rule.name)) {
+                if (ids.contains(rule.id)) {
+                    rule.id = UUID.randomUUID().toString();
+                }
+                missing.add(rule);
+            }
+        }
+        return missing;
+    }
+
+    /** How many settings of the Appearance tab differ from {@code other}'s. */
+    public int appearanceChanges(Settings other) {
+        return (int) List.of(
+            disposition != other.disposition,
+            !Objects.equals(maxContentWidth(), other.maxContentWidth()) || widthMode != other.widthMode,
+            theme != other.theme,
+            url != other.url,
+            view != other.view,
+            showTimestamp != other.showTimestamp,
+            showResponseInfo != other.showResponseInfo
+        )
+            .stream()
+            .filter(changed -> changed)
+            .count();
+    }
+
+    /** Takes the settings of the Appearance tab from {@code other}. */
+    public void copyAppearance(Settings other) {
+        disposition = other.disposition;
+        widthMode = other.widthMode;
+        widthPixels = other.widthPixels;
+        theme = other.theme;
+        url = other.url;
+        view = other.view;
+        showTimestamp = other.showTimestamp;
+        showResponseInfo = other.showResponseInfo;
+    }
+
     public Settings copy() {
         Settings copy = new Settings();
-        copy.headersToHide = headersToHide.copy();
+        copy.basedOn = basedOn;
+        copy.headers = headers.copy();
         copy.disposition = disposition;
         copy.widthMode = widthMode;
         copy.widthPixels = widthPixels;
@@ -106,6 +111,7 @@ public final class Settings {
         copy.showResponseInfo = showResponseInfo;
         copy.theme = theme;
         copy.view = view;
+        copy.url = url;
         return copy;
     }
 }

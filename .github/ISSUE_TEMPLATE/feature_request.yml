@@ -33,20 +33,6 @@ body:
       label: Alternatives considered
       description: Workarounds you use today or other approaches you thought about.
 
-  - type: dropdown
-    id: caido
-    attributes:
-      label: Does Caido's Screenshot Mode have this feature?
-      description: |
-        This extension is a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
-        plugin. Knowing whether Caido already does this helps decide how it should behave here.
-      options:
-        - "I don't know"
-        - "Yes"
-        - "No"
-    validations:
-      required: true
-
   - type: textarea
     id: context
     attributes:

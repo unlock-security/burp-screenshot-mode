@@ -7,51 +7,49 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import it.unlocksecurity.burp.screenshotmode.model.Direction;
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
-import it.unlocksecurity.burp.screenshotmode.model.HiddenHeaders;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderVisibility;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.Labeled;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
+import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
- * Reads and writes templates using the same JSON layout as the Caido plugin (storage version 2), including the
- * migrations from its legacy formats (version 1, and the unversioned single-settings object of version 0).
+ * Reads and writes templates as JSON (storage version 3), including the migrations from the older formats (versions 2
+ * and 1, and the unversioned single-settings object of version 0).
  */
 public final class TemplateCodec {
 
-    public static final int VERSION = 2;
+    public static final int VERSION = 3;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
     public record Decoded(StoredData data, boolean migrated) {}
 
     private TemplateCodec() {}
-
-    public static StoredData createDefault() {
-        Template template = Template.create("Default", Settings.defaults());
-        return new StoredData(new ArrayList<>(List.of(template)), template.id);
-    }
-
-    /** Port of {@code migrateStorage}: never fails, falling back to a fresh default template. */
-    public static Decoded decodeOrDefault(String json) {
-        try {
-            return decode(json);
-        } catch (IllegalArgumentException e) {
-            return new Decoded(createDefault(), true);
-        }
-    }
 
     /**
      * Decodes any supported version.
@@ -70,17 +68,28 @@ public final class TemplateCodec {
             throw new IllegalArgumentException("Invalid JSON: " + e.getMessage(), e);
         }
         JsonObject object = asObject(root, "root");
+        JsonElement version = object.get("version");
+        if (
+            version != null &&
+            version.isJsonPrimitive() &&
+            version.getAsJsonPrimitive().isNumber() &&
+            version.getAsDouble() > VERSION
+        ) {
+            throw new IllegalArgumentException(
+                "Saved by a newer version of Screenshot Mode (storage version " +
+                    version.getAsString() +
+                    "); this version reads up to " +
+                    VERSION
+            );
+        }
 
         List<String> errors = new ArrayList<>();
-        try {
-            return new Decoded(parseStoredData(object, 2), false);
-        } catch (IllegalArgumentException e) {
-            errors.add("v2: " + e.getMessage());
-        }
-        try {
-            return new Decoded(parseStoredData(object, 1), true);
-        } catch (IllegalArgumentException e) {
-            errors.add("v1: " + e.getMessage());
+        for (int v = VERSION; v >= 1; v--) {
+            try {
+                return new Decoded(parseStoredData(object, v), v < VERSION);
+            } catch (IllegalArgumentException e) {
+                errors.add("v" + v + ": " + e.getMessage());
+            }
         }
         try {
             Template template = Template.create("Default", parseSettings(object, 0));
@@ -122,11 +131,19 @@ public final class TemplateCodec {
     private static JsonObject encodeSettings(Settings settings) {
         JsonObject object = new JsonObject();
 
+        // A template based on a built-in one stores only what it changes from its headers.
+        HeaderVisibility visibility = settings.headers;
+        if (settings.basedOn != null) {
+            object.addProperty("basedOn", settings.basedOn);
+            visibility = visibility.changesFrom(
+                BuiltInTemplates.byId(settings.basedOn).settings.headers,
+                HeaderCatalogFile.bundled()
+            );
+        }
         JsonObject headers = new JsonObject();
-        headers.add("both", stringArray(settings.headersToHide.both));
-        headers.add("request", stringArray(settings.headersToHide.request));
-        headers.add("response", stringArray(settings.headersToHide.response));
-        object.add("headersToHide", headers);
+        headers.add("groups", visibilityMap(visibility.groups));
+        headers.add("headers", visibilityMap(visibility.headers));
+        object.add("headers", headers);
 
         object.addProperty("disposition", settings.disposition.id());
 
@@ -139,32 +156,18 @@ public final class TemplateCodec {
 
         JsonArray highlights = new JsonArray();
         for (HighlightRule rule : settings.highlights) {
-            JsonObject json = new JsonObject();
-            json.addProperty("id", rule.id);
-            json.addProperty("regex", rule.regex);
-            json.addProperty("target", rule.target.id());
-            json.addProperty("color", rule.color);
+            JsonObject json = encodeRule(rule, null);
             json.addProperty("mode", rule.mode.id());
-            json.addProperty("matchMode", rule.matchMode.id());
+            json.addProperty("color", rule.color);
             highlights.add(json);
         }
         object.add("highlights", highlights);
 
         JsonArray redactions = new JsonArray();
         for (RedactionRule rule : settings.redactions) {
-            JsonObject json = new JsonObject();
-            json.addProperty("id", rule.id);
-            json.addProperty("regex", rule.regex);
-            json.addProperty("target", rule.target.id());
-            json.addProperty("useCaptureGroups", rule.useCaptureGroups);
-            JsonArray groups = new JsonArray();
-            rule.selectedGroups.forEach(groups::add);
-            json.add("selectedGroups", groups);
-            json.addProperty("matchMode", rule.matchMode.id());
+            JsonObject json = encodeRule(rule, rule.useCaptureGroups ? rule.selectedGroups : null);
             json.addProperty("mode", rule.mode.id());
-            if (rule.mode == RedactionMode.OPAQUE) {
-                json.addProperty("color", rule.color);
-            } else if (rule.mode == RedactionMode.REPLACE) {
+            if (rule.mode == RedactionMode.REPLACE) {
                 json.addProperty("replacementText", rule.replacementText);
             }
             redactions.add(json);
@@ -175,7 +178,40 @@ public final class TemplateCodec {
         object.addProperty("showResponseInfo", settings.showResponseInfo);
         object.addProperty("theme", settings.theme.id());
         object.addProperty("view", settings.view.id());
+        object.addProperty("url", settings.url.id());
         return object;
+    }
+
+    /** @param groups the capture groups a pattern redaction is limited to, or {@code null} for the whole match */
+    private static JsonObject encodeRule(Rule rule, List<Integer> groups) {
+        JsonObject json = new JsonObject();
+        json.addProperty("id", rule.id);
+        json.addProperty("name", rule.name);
+        json.addProperty("enabled", rule.enabled);
+        JsonObject match = new JsonObject();
+        match.addProperty("type", rule.type.id());
+        if (rule.type == RuleType.HEADER) {
+            match.add("headers", stringArray(rule.headers));
+        } else {
+            JsonArray targets = new JsonArray();
+            for (RuleTarget target : RuleTarget.values()) {
+                if (rule.targets.contains(target)) {
+                    targets.add(target.id());
+                }
+            }
+            match.add("targets", targets);
+            match.addProperty("regex", rule.regex);
+            match.addProperty("matchMode", rule.matchMode.id());
+            match.addProperty("matchCase", rule.matchCase);
+            match.addProperty("wholeWord", rule.wholeWord);
+            if (groups != null) {
+                JsonArray array = new JsonArray();
+                groups.forEach(array::add);
+                match.add("groups", array);
+            }
+        }
+        json.add("match", match);
+        return json;
     }
 
     private static StoredData parseStoredData(JsonObject object, int version) {
@@ -203,12 +239,29 @@ public final class TemplateCodec {
     }
 
     /**
-     * @param version schema version of the payload: v0 has a plain header array, v1 either form, v2 split
-     *                headers. Legacy versions reset the metadata toggles, like the Caido {@code fromV1} migration.
+     * @param version schema version of the payload: v0 has a plain list of hidden headers, v1 either a list or three
+     *                lists split by message, v2 three lists, v3 group and header settings. Versions before 2 reset the
+     *                metadata toggles.
      */
     private static Settings parseSettings(JsonObject object, int version) {
         Settings settings = new Settings();
-        settings.headersToHide = parseHiddenHeaders(object.get("headersToHide"), version);
+        if (version >= 3) {
+            // Without a parent (or with one this release doesn't ship), the headers are all the template's own.
+            JsonElement basedOn = object.get("basedOn");
+            if (basedOn != null && isString(basedOn) && BuiltInTemplates.isParent(basedOn.getAsString())) {
+                settings.basedOn = basedOn.getAsString();
+            }
+            HeaderVisibility parent =
+                settings.basedOn == null
+                    ? new HeaderVisibility()
+                    : BuiltInTemplates.byId(settings.basedOn).settings.headers;
+            settings.headers = parseHeaders(asObject(object.get("headers"), "headers")).over(
+                parent,
+                HeaderCatalogFile.bundled()
+            );
+        } else {
+            settings.headers = migrateHiddenHeaders(object.get("headersToHide"), version, HeaderCatalogFile.bundled());
+        }
         settings.disposition = enumValue(Disposition.class, object, "disposition");
 
         JsonObject width = asObject(object.get("width"), "width");
@@ -223,8 +276,11 @@ public final class TemplateCodec {
         for (JsonElement element : asArray(object.get("redactions"), "redactions")) {
             settings.redactions.add(parseRedaction(asObject(element, "redaction")));
         }
+        if (version < 3) {
+            settings.redactions = LegacyDefaults.name(settings.redactions);
+        }
 
-        if (version < VERSION) {
+        if (version < 2) {
             settings.showTimestamp = false;
             settings.showResponseInfo = true;
         } else {
@@ -243,54 +299,163 @@ public final class TemplateCodec {
             view != null && isString(view)
                 ? lenientEnum(ViewMode.class, view.getAsString(), ViewMode.RAW)
                 : ViewMode.RAW;
+
+        JsonElement url = object.get("url");
+        settings.url =
+            url != null && isString(url) ? lenientEnum(UrlMode.class, url.getAsString(), UrlMode.FULL) : UrlMode.FULL;
         return settings;
     }
 
-    private static HiddenHeaders parseHiddenHeaders(JsonElement element, int version) {
-        HiddenHeaders headers = new HiddenHeaders();
-        if (version == 0 || (version == 1 && element != null && element.isJsonArray())) {
-            headers.both = stringList(element, "headersToHide");
-            return headers;
-        }
-        JsonObject object = asObject(element, "headersToHide");
-        headers.both = stringList(object.get("both"), "headersToHide.both");
-        headers.request = stringList(object.get("request"), "headersToHide.request");
-        headers.response = stringList(object.get("response"), "headersToHide.response");
+    private static HeaderVisibility parseHeaders(JsonObject object) {
+        HeaderVisibility headers = new HeaderVisibility();
+        parseVisibilityMap(object.get("groups"), "headers.groups").forEach((group, visibility) ->
+            headers.groups.put(group, visibility == Visibility.SHOW ? Visibility.SHOW : Visibility.HIDE)
+        );
+        headers.headers.putAll(parseVisibilityMap(object.get("headers"), "headers.headers"));
         return headers;
+    }
+
+    /**
+     * Converts the lists of hidden headers of versions 0 to 2 (one list for both messages, one for requests, one for
+     * responses; a {@code !} prefix forces a header to show in the messages of its list) to group and header settings.
+     * A group whose headers were all hidden becomes a hidden group.
+     */
+    static HeaderVisibility migrateHiddenHeaders(JsonElement element, int version, HeaderCatalog catalog) {
+        List<String> both;
+        List<String> request = List.of();
+        List<String> response = List.of();
+        if (version == 0 || (version == 1 && element != null && element.isJsonArray())) {
+            both = stringList(element, "headersToHide");
+        } else {
+            JsonObject object = asObject(element, "headersToHide");
+            both = stringList(object.get("both"), "headersToHide.both");
+            request = stringList(object.get("request"), "headersToHide.request");
+            response = stringList(object.get("response"), "headersToHide.response");
+        }
+
+        // Header name, as first written, by lowercase name.
+        Map<String, String> names = new LinkedHashMap<>();
+        Stream.of(both, request, response)
+            .flatMap(List::stream)
+            .map(rule -> rule.startsWith("!") ? rule.substring(1) : rule)
+            .forEach(name -> names.putIfAbsent(name.toLowerCase(Locale.ROOT), name));
+
+        Map<String, Visibility> migrated = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<String, String> name : names.entrySet()) {
+            boolean inRequests = hiddenByLists(name.getKey(), both, request);
+            boolean inResponses = hiddenByLists(name.getKey(), both, response);
+            Direction in = catalog.header(name.getValue()).map(HeaderCatalog.Header::in).orElse(Direction.BOTH);
+            // Hidden in the only messages the catalog says it is used in: hidden.
+            if (in == Direction.REQUEST && inRequests) {
+                inResponses = true;
+            } else if (in == Direction.RESPONSE && inResponses) {
+                inRequests = true;
+            }
+            migrated.put(
+                name.getValue(),
+                inRequests && inResponses
+                    ? Visibility.HIDE
+                    : inRequests
+                      ? Visibility.HIDE_IN_REQUEST
+                      : inResponses
+                        ? Visibility.HIDE_IN_RESPONSE
+                        : Visibility.SHOW
+            );
+        }
+
+        HeaderVisibility headers = new HeaderVisibility();
+        for (HeaderCatalog.Group group : catalog.groups()) {
+            List<HeaderCatalog.Header> members = group.headers();
+            if (
+                !members.isEmpty() &&
+                members.stream().allMatch(header -> migrated.get(header.name()) == Visibility.HIDE)
+            ) {
+                headers.groups.put(group.id(), Visibility.HIDE);
+            }
+        }
+        migrated.forEach((name, visibility) -> headers.set(name, visibility, catalog));
+        return headers;
+    }
+
+    /** Whether the old lists hid a header in one message: the shared list and that message's, where ! wins. */
+    private static boolean hiddenByLists(String lowercaseName, List<String> shared, List<String> own) {
+        boolean hidden = false;
+        for (String rule : Stream.concat(shared.stream(), own.stream()).toList()) {
+            String lower = rule.toLowerCase(Locale.ROOT);
+            if (lower.equals("!" + lowercaseName)) {
+                return false;
+            }
+            hidden |= lower.equals(lowercaseName);
+        }
+        return hidden;
     }
 
     private static HighlightRule parseHighlight(JsonObject object) {
         HighlightRule rule = new HighlightRule();
-        rule.id = string(object, "id");
-        rule.regex = string(object, "regex");
-        rule.target = enumValue(RuleTarget.class, object, "target");
+        parseRule(object, rule);
         rule.color = string(object, "color");
         rule.mode = enumValue(HighlightMode.class, object, "mode");
-        rule.matchMode = optionalMatchMode(object);
         return rule;
     }
 
     private static RedactionRule parseRedaction(JsonObject object) {
         RedactionRule rule = new RedactionRule();
-        rule.id = string(object, "id");
-        rule.regex = string(object, "regex");
-        rule.target = enumValue(RuleTarget.class, object, "target");
-        rule.useCaptureGroups = bool(object, "useCaptureGroups");
-        rule.selectedGroups = new ArrayList<>();
-        for (JsonElement group : asArray(object.get("selectedGroups"), "selectedGroups")) {
-            if (!group.isJsonPrimitive() || !group.getAsJsonPrimitive().isNumber()) {
-                throw new IllegalArgumentException("selectedGroups must contain numbers");
-            }
-            rule.selectedGroups.add(group.getAsInt());
+        List<Integer> groups = parseRule(object, rule);
+        if (groups != null) {
+            rule.useCaptureGroups = true;
+            rule.selectedGroups = groups;
+        } else if (!object.has("match")) {
+            rule.useCaptureGroups = bool(object, "useCaptureGroups");
+            rule.selectedGroups = numberList(object.get("selectedGroups"), "selectedGroups");
         }
-        rule.matchMode = optionalMatchMode(object);
         rule.mode = enumValue(RedactionMode.class, object, "mode");
-        if (rule.mode == RedactionMode.OPAQUE) {
-            rule.color = string(object, "color");
-        } else if (rule.mode == RedactionMode.REPLACE) {
+        // The "color" of opaque redactions saved before they followed the screenshot theme is ignored.
+        if (rule.mode == RedactionMode.REPLACE) {
             rule.replacementText = string(object, "replacementText");
         }
         return rule;
+    }
+
+    /**
+     * Reads what all rules have: a {@code match} object, or the {@code regex} and single {@code target} of versions 0
+     * to 2. Returns the capture groups of a pattern match, or {@code null} if it has none.
+     */
+    private static List<Integer> parseRule(JsonObject object, Rule rule) {
+        rule.id = string(object, "id");
+        rule.name = object.has("name") ? string(object, "name") : "";
+        rule.enabled = optionalBoolean(object, "enabled", true);
+        if (!object.has("match")) {
+            rule.regex = string(object, "regex");
+            rule.targets = EnumSet.of(enumValue(RuleTarget.class, object, "target"));
+            rule.matchMode = optionalMatchMode(object);
+            return null;
+        }
+        JsonObject match = asObject(object.get("match"), "match");
+        rule.type = enumValue(RuleType.class, match, "type");
+        if (rule.type == RuleType.HEADER) {
+            rule.headers = stringList(match.get("headers"), "match.headers");
+            return null;
+        }
+        rule.targets = EnumSet.noneOf(RuleTarget.class);
+        for (String target : stringList(match.get("targets"), "match.targets")) {
+            rule.targets.add(Labeled.fromId(RuleTarget.class, target));
+        }
+        rule.regex = string(match, "regex");
+        rule.matchMode = optionalMatchMode(match);
+        rule.matchCase = optionalBoolean(match, "matchCase", true);
+        rule.wholeWord = optionalBoolean(match, "wholeWord", false);
+        return match.has("groups") ? numberList(match.get("groups"), "match.groups") : null;
+    }
+
+    private static List<Integer> numberList(JsonElement element, String name) {
+        List<Integer> values = new ArrayList<>();
+        for (JsonElement value : asArray(element, name)) {
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+                throw new IllegalArgumentException(name + " must contain numbers");
+            }
+            values.add(value.getAsInt());
+        }
+        return values;
     }
 
     private static MatchMode optionalMatchMode(JsonObject object) {
@@ -358,8 +523,25 @@ public final class TemplateCodec {
 
     private static JsonArray stringArray(List<String> values) {
         JsonArray array = new JsonArray();
-        values.forEach(value -> array.add(new JsonPrimitive(value)));
+        values.forEach(array::add);
         return array;
+    }
+
+    private static Map<String, Visibility> parseVisibilityMap(JsonElement element, String name) {
+        Map<String, Visibility> values = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonElement> entry : asObject(element, name).entrySet()) {
+            if (!isString(entry.getValue())) {
+                throw new IllegalArgumentException(name + " must contain strings");
+            }
+            values.put(entry.getKey(), Labeled.fromId(Visibility.class, entry.getValue().getAsString()));
+        }
+        return values;
+    }
+
+    private static JsonObject visibilityMap(Map<String, Visibility> values) {
+        JsonObject object = new JsonObject();
+        values.forEach((key, visibility) -> object.add(key, new JsonPrimitive(visibility.id())));
+        return object;
     }
 
     private static <E extends Enum<E> & Labeled> E enumValue(Class<E> type, JsonObject object, String name) {

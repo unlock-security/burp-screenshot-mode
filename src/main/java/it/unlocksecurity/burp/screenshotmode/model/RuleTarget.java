@@ -2,7 +2,9 @@ package it.unlocksecurity.burp.screenshotmode.model;
 
 public enum RuleTarget implements Labeled {
     REQUEST("request", "Request"),
-    RESPONSE("response", "Response");
+    RESPONSE("response", "Response"),
+    /** The URL bar above the messages. */
+    URL("url", "URL");
 
     private final String id;
     private final String label;

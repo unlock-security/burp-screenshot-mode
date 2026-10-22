@@ -4,11 +4,15 @@ import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
+import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
@@ -23,6 +27,8 @@ import java.awt.KeyboardFocusManager;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.Window;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -32,7 +38,9 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -45,6 +53,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.JTextComponent;
@@ -73,14 +82,18 @@ final class ScreenshotDialog extends JDialog {
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final Timer renderTimer = new Timer(150, event -> render());
+    private final JButton fit = Widgets.button("Fit to content");
     private final JButton resetHeight = Widgets.button("Reset height");
+    private boolean fitCheckPending;
     private final JLabel modified = Widgets.chip("Modified");
     private final JButton revert = Widgets.button("Revert");
     private final JButton update = Widgets.button("Update template");
     private final JLabel output = Widgets.hint("");
+    private final JButton failedRules = new JButton();
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
     private int selectedTab = SettingsForm.RULES;
+    private SettingsForm form;
 
     private boolean updatingCombo;
     private boolean rendered;
@@ -121,11 +134,21 @@ final class ScreenshotDialog extends JDialog {
         content.setSelectionListener(this::onSelectionAction);
         content.setSplitRatio(state.splitRatio);
         content.setSplitRatioListener(ratio -> state.splitRatio = ratio);
+        content.setErrorListener(host.logError());
         preview.setCropListener(height -> {
             state.cropHeight = height;
             resetHeight.setEnabled(height != null);
         });
         preview.setCropHeight(state.cropHeight);
+        // What a pane needs changes with its size (window, crop, divider, width) and with each render.
+        ComponentAdapter resized = new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                updateFit();
+            }
+        };
+        content.requestPane().addComponentListener(resized);
+        content.responsePane().addComponentListener(resized);
 
         store.addListener(templatesListener);
         reloadTemplates();
@@ -156,21 +179,25 @@ final class ScreenshotDialog extends JDialog {
     private JComponent buildTopBar() {
         templateCombo.addActionListener(event -> {
             if (
-                !updatingCombo &&
-                templateCombo.getSelectedItem() instanceof Template template &&
-                !template.id.equals(state.templateId)
+                updatingCombo ||
+                !(templateCombo.getSelectedItem() instanceof Template template) ||
+                template.id.equals(state.templateId)
             ) {
-                state.templateId = template.id;
-                state.settings = template.settings.copy();
-                rebuildForm();
-                render();
+                return;
             }
+            if (hasUnsavedChanges() && !confirmSwitch(template)) {
+                selectCurrentTemplate();
+                return;
+            }
+            state.templateId = template.id;
+            state.settings = template.settings.copy();
+            selectCurrentTemplate();
+            rebuildForm();
+            render();
         });
         templateCombo.setPrototypeDisplayValue(new Template("", "Client report – redacted tokens", null));
-        modified.setToolTipText("These settings differ from the template. They apply to this message only.");
         revert.setToolTipText("Discard the changes and go back to the template's settings");
         revert.addActionListener(event -> resetToTemplate());
-        update.setToolTipText("Save the current settings into the selected template");
         update.addActionListener(event -> updateTemplate());
         JButton saveAs = Widgets.button("Save as new…");
         saveAs.setToolTipText("Create a new template from the current settings");
@@ -179,7 +206,7 @@ final class ScreenshotDialog extends JDialog {
         JButton save = Widgets.button("Save PNG…");
         save.setToolTipText("Save the screenshot as a PNG file (" + shortcut(KeyEvent.VK_S) + ")");
         save.addActionListener(event -> takeScreenshot(false));
-        JButton copy = Widgets.primary(Widgets.button("Copy to clipboard"));
+        JButton copy = Widgets.primary(Widgets.button("Copy image"));
         copy.setToolTipText("Copy the screenshot to the clipboard (" + shortcut(KeyEvent.VK_C) + ")");
         copy.addActionListener(event -> takeScreenshot(true));
 
@@ -214,7 +241,6 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        JButton fit = Widgets.button("Fit to content");
         fit.setToolTipText("Crop the height so the whole request and response are visible");
         fit.addActionListener(event -> fitToContent());
         resetHeight.setToolTipText("Fill the window height again");
@@ -225,8 +251,15 @@ final class ScreenshotDialog extends JDialog {
         tip.setToolTipText(
             "Select text in the request or response, then right-click to highlight it, redact it or hide its header"
         );
+        failedRules.putClientProperty("JButton.buttonType", "borderless");
+        failedRules.setForeground(Widgets.errorColor());
+        failedRules.setToolTipText("Show the rules");
+        failedRules.setVisible(false);
+        failedRules.addActionListener(event -> showRules());
+
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         left.add(output);
+        left.add(failedRules);
         left.add(tip);
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.add(fit);
@@ -250,7 +283,13 @@ final class ScreenshotDialog extends JDialog {
 
     private void rebuildForm() {
         formHolder.removeAll();
-        SettingsForm form = new SettingsForm(state.settings, renderTimer::restart, host.editorFont().get(), false);
+        form = new SettingsForm(
+            state.settings,
+            renderTimer::restart,
+            host.editorFont().get(),
+            false,
+            HeadersTab.InMessage.of(data)
+        );
         form.tabs().setSelectedIndex(selectedTab);
         form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
         formHolder.add(form, BorderLayout.CENTER);
@@ -260,13 +299,75 @@ final class ScreenshotDialog extends JDialog {
 
     /** Shows whether the settings differ from the selected template; Revert and Update only make sense if so. */
     private void updateTemplateState() {
-        boolean differs = store
+        Optional<Template> template = store.getTemplateById(state.templateId);
+        boolean differs = template
+            .map(selected -> !TemplateCodec.sameSettings(selected.settings, state.settings))
+            .orElse(false);
+        // Deleted in the suite tab while this window is open: these settings now exist only here.
+        boolean deleted = template.isEmpty();
+        modified.setText(deleted ? "Template deleted" : "Modified");
+        modified.setToolTipText(
+            deleted
+                ? "The template was deleted. These settings apply to this message only: save them as a new template to keep them."
+                : "These settings differ from the template. They apply to this message only."
+        );
+        modified.setVisible(differs || deleted);
+        revert.setEnabled(differs);
+        boolean builtIn = template.map(selected -> selected.builtIn).orElse(false);
+        update.setEnabled(differs && !builtIn);
+        update.setToolTipText(
+            builtIn
+                ? "Built-in templates can't be changed: use Save as new… to keep these settings"
+                : "Save the current settings into the selected template"
+        );
+    }
+
+    /** Whether switching template would lose settings: changed for this message, or left by a deleted template. */
+    private boolean hasUnsavedChanges() {
+        return store
             .getTemplateById(state.templateId)
             .map(template -> !TemplateCodec.sameSettings(template.settings, state.settings))
-            .orElse(false);
-        modified.setVisible(differs);
-        revert.setEnabled(differs);
-        update.setEnabled(differs);
+            .orElse(true);
+    }
+
+    /**
+     * Asks before switching template would discard this message's settings, like the template editor does before
+     * discarding its edits. Keep editing is the default.
+     *
+     * @return whether to switch to {@code target}
+     */
+    private boolean confirmSwitch(Template target) {
+        JButton discard = Widgets.button("Discard and switch");
+        // The safe choice is the primary, default one.
+        JButton keep = Widgets.primary(Widgets.button("Keep editing"));
+        JOptionPane pane = new JOptionPane(
+            "You changed the settings of this screenshot.\nSwitching to \"" +
+                target.name +
+                "\" discards those changes.",
+            JOptionPane.WARNING_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { discard, keep },
+            keep
+        );
+        // Custom option buttons don't close the pane on their own.
+        discard.addActionListener(event -> pane.setValue(discard));
+        keep.addActionListener(event -> pane.setValue(keep));
+        JDialog dialog = pane.createDialog(this, "Switch Template");
+        dialog.getRootPane().setDefaultButton(keep);
+        dialog.setVisible(true);
+        dialog.dispose();
+        return pane.getValue() == discard;
+    }
+
+    /** Shows the session's template in the combo box without treating it as a new choice. */
+    private void selectCurrentTemplate() {
+        updatingCombo = true;
+        try {
+            templateCombo.setSelectedItem(store.getTemplateById(state.templateId).orElse(null));
+        } finally {
+            updatingCombo = false;
+        }
     }
 
     private void updateOutputLabel(Settings settings) {
@@ -296,7 +397,8 @@ final class ScreenshotDialog extends JDialog {
             return false;
         }
         e.consume();
-        takeScreenshot(true);
+        // Later, not inside the key dispatch: the screenshot may first open a confirmation dialog.
+        SwingUtilities.invokeLater(() -> takeScreenshot(true));
         return true;
     }
 
@@ -309,15 +411,21 @@ final class ScreenshotDialog extends JDialog {
         renderTimer.stop();
         Settings settings = state.settings;
         Palette palette = host.palette(settings.theme);
-        content.render(
-            data,
-            settings,
-            palette,
-            host.editorFont().get(),
-            host.displayFont().get(),
-            settings.showTimestamp ? timestamp() : null,
-            settings.showResponseInfo ? responseInfo() : null
-        );
+        try {
+            content.render(
+                data,
+                settings,
+                palette,
+                host.editorFont().get(),
+                host.displayFont().get(),
+                settings.showTimestamp ? timestamp() : null,
+                settings.showResponseInfo ? responseInfo() : null
+            );
+        } catch (RuntimeException | StackOverflowError e) {
+            // Runs on the Swing thread: report it in the extension's error log rather than Burp's.
+            host.logError().accept("Could not render the screenshot: " + e);
+            showStatus("Could not render the screenshot, see the extension's errors", true);
+        }
 
         // Like Caido, a new content width resets the request/response split.
         Integer maxWidth = settings.maxContentWidth();
@@ -329,11 +437,72 @@ final class ScreenshotDialog extends JDialog {
         rendered = true;
 
         preview.setMaxContentWidth(maxWidth);
+        updateFit();
+        form.showRuleStatuses(content.ruleStatuses());
+        form.showHeaderHits(content.headerHits());
+        int failed = failedRedactions().size();
+        failedRules.setText("⚠ " + failed + (failed == 1 ? " redaction rule failed" : " redaction rules failed"));
+        failedRules.setVisible(failed > 0);
         updateTemplateState();
         updateOutputLabel(settings);
         preview.setBackground(palette.canvas());
         preview.setHandleColors(palette.canvas(), palette.muted());
         previewScroll.getViewport().setBackground(palette.canvas());
+    }
+
+    /** The redaction rules that did not fully apply in the last render. */
+    private List<RedactionRule> failedRedactions() {
+        return state.settings.redactions
+            .stream()
+            .filter(rule -> {
+                RuleStatus status = content.ruleStatuses().get(rule);
+                return status != null && status.failed();
+            })
+            .toList();
+    }
+
+    /** Opens the first redaction that failed, or just the Rules tab. */
+    private void showRules() {
+        List<RedactionRule> failed = failedRedactions();
+        if (failed.isEmpty()) {
+            form.tabs().setSelectedIndex(SettingsForm.RULES);
+        } else {
+            form.showRule(failed.getFirst());
+        }
+    }
+
+    /**
+     * Asks before exporting a screenshot in which some redactions did not fully apply: what they should hide may show.
+     * The user decides; nothing is blocked.
+     */
+    private boolean confirmFailedRedactions(boolean toClipboard) {
+        if (failedRedactions().isEmpty()) {
+            return true;
+        }
+        String message =
+            "One or more redaction rules did not fully apply.\nWhat they should hide may be visible in the screenshot.";
+        JButton export = Widgets.button(toClipboard ? "Copy anyway" : "Save anyway");
+        // The safe choice is the primary, default one.
+        JButton show = Widgets.primary(Widgets.button("Show rules"));
+        JOptionPane pane = new JOptionPane(
+            message,
+            JOptionPane.WARNING_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { export, show },
+            show
+        );
+        // Custom option buttons don't close the pane on their own.
+        export.addActionListener(event -> pane.setValue(export));
+        show.addActionListener(event -> pane.setValue(show));
+        JDialog dialog = pane.createDialog(this, toClipboard ? "Copy Screenshot" : "Save Screenshot");
+        dialog.getRootPane().setDefaultButton(show);
+        dialog.setVisible(true);
+        dialog.dispose();
+        if (pane.getValue() == show) {
+            showRules();
+        }
+        return pane.getValue() == export;
     }
 
     private void flushRender() {
@@ -400,12 +569,7 @@ final class ScreenshotDialog extends JDialog {
     }
 
     private void saveAsNewTemplate() {
-        String name = JOptionPane.showInputDialog(
-            this,
-            "Template name:",
-            "Save As New Template",
-            JOptionPane.PLAIN_MESSAGE
-        );
+        String name = Widgets.askText(this, "Template name:", "Save As New Template");
         if (name == null || name.isBlank()) {
             return;
         }
@@ -417,27 +581,67 @@ final class ScreenshotDialog extends JDialog {
     }
 
     /**
-     * Port of the Caido selection context menu actions. Unlike Caido, new rules go first, like the ones added with the
-     * "+" button in {@link RuleCards#section}.
+     * The actions of the preview's right-click menu. New rules go first, like the ones added with +, and open; when a
+     * rule already redacts or highlights the header, that rule is shown instead of adding a duplicate.
      */
     private void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
         Settings settings = state.settings;
+        Rule added = null;
         switch (action) {
-            case HIGHLIGHT -> settings.highlights.addFirst(HighlightRule.create(selected, target, MatchMode.STRING));
-            case REDACT -> settings.redactions.addFirst(
-                RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING)
-            );
-            case HIDE_HEADER -> {
-                int colon = selected.indexOf(':');
-                String header = (colon > 0 ? selected.substring(0, colon) : selected).trim();
-                if (header.isEmpty() || settings.headersToHide.both.contains(header)) {
+            case HIGHLIGHT -> {
+                HighlightRule rule = HighlightRule.create(selected, target, MatchMode.STRING);
+                settings.highlights.addFirst(rule);
+                added = rule;
+            }
+            case REDACT -> {
+                RedactionRule rule = RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING);
+                settings.redactions.addFirst(rule);
+                added = rule;
+            }
+            case HIDE_HEADER -> settings.headers.set(selected, Visibility.HIDE, HeaderCatalogFile.bundled());
+            case REDACT_HEADER, HIGHLIGHT_HEADER -> {
+                boolean redaction = action == MessagePane.SelectionAction.REDACT_HEADER;
+                Rule existing = form.headersTab().existingRule(List.of(selected), redaction);
+                if (existing != null) {
+                    // Already done by a rule: show it rather than add a duplicate.
+                    form.showRule(existing);
                     return;
                 }
-                settings.headersToHide.both.add(header);
+                if (redaction) {
+                    RedactionRule rule = RedactionRule.forHeaders(List.of(selected), RedactionMode.REPLACE);
+                    settings.redactions.addFirst(rule);
+                    added = rule;
+                } else {
+                    HighlightRule rule = HighlightRule.forHeaders(List.of(selected));
+                    settings.highlights.addFirst(rule);
+                    added = rule;
+                }
             }
         }
         rebuildForm();
+        if (added != null) {
+            // Open, so its card shows what was added; the focus stays in the preview.
+            form.expand(added);
+        }
         render();
+    }
+
+    /** Turns "Fit to content" off while it would change nothing, once the layout has caught up. */
+    private void updateFit() {
+        if (fitCheckPending) {
+            return;
+        }
+        fitCheckPending = true;
+        SwingUtilities.invokeLater(() -> {
+            fitCheckPending = false;
+            getRootPane().validate();
+            int requestOverflow = content.requestPane().overflow();
+            int responseOverflow = content.responsePane().overflow();
+            boolean fits = content.isSideBySide()
+                ? Math.max(requestOverflow, responseOverflow) == 0
+                : requestOverflow == 0 && responseOverflow == 0;
+            fit.setEnabled(!fits);
+        });
     }
 
     private void fitToContent() {
@@ -458,11 +662,14 @@ final class ScreenshotDialog extends JDialog {
 
     private void takeScreenshot(boolean toClipboard) {
         flushRender();
+        if (!confirmFailedRedactions(toClipboard)) {
+            return;
+        }
         try {
             BufferedImage image = ImageCapture.render(content);
             if (toClipboard) {
                 ImageCapture.copyToClipboard(image);
-                showStatus("Copied to clipboard", false);
+                showStatus("Image copied", false);
                 return;
             }
 

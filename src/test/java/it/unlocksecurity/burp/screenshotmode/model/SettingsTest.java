@@ -1,0 +1,57 @@
+package it.unlocksecurity.burp.screenshotmode.model;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class SettingsTest {
+
+    private static RedactionRule named(String name, String regex) {
+        RedactionRule rule = RedactionRule.create(regex, RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
+        rule.name = name;
+        return rule;
+    }
+
+    @Test
+    void findsTheParentRulesMissingByName() {
+        RedactionRule cookies = named("Cookies", "c");
+        RedactionRule tokens = named("Tokens", "t");
+        List<RedactionRule> parent = List.of(cookies, tokens);
+
+        RedactionRule edited = named("Cookies", "edited");
+        edited.id = cookies.id;
+        List<RedactionRule> own = new ArrayList<>(List.of(edited, named("", "mine")));
+        assertEquals(List.of(tokens), Settings.missing(own, parent), "an edited rule still counts");
+
+        // Renamed: its id stays taken, so the rule added back gets a new one.
+        edited.name = "My cookies";
+        String id = cookies.id;
+        List<RedactionRule> missing = Settings.missing(own, parent);
+        assertEquals(List.of(cookies, tokens), missing);
+        assertSame(cookies, missing.getFirst());
+        assertNotEquals(id, cookies.id);
+    }
+
+    @Test
+    void countsAndCopiesTheAppearance() {
+        Settings parent = new Settings();
+        Settings settings = new Settings();
+        assertEquals(0, settings.appearanceChanges(parent));
+
+        settings.disposition = Disposition.VERTICAL;
+        settings.widthMode = WidthMode.PIXEL;
+        settings.widthPixels = 900;
+        settings.theme = ThemeMode.DARK;
+        settings.showTimestamp = true;
+        settings.redactions.add(named("Kept", "k"));
+        assertEquals(4, settings.appearanceChanges(parent));
+
+        settings.copyAppearance(parent);
+        assertEquals(0, settings.appearanceChanges(parent));
+        assertEquals(1, settings.redactions.size(), "rules are not appearance");
+    }
+}

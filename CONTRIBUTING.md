@@ -5,8 +5,9 @@ Thanks for helping improve the extension! To report a bug or ask for a feature, 
 Please remove client data from any screenshot or request you attach.
 
 The extension started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
-plugin and now has its own features and UI, so changes don't need to match Caido. What must stay compatible is the
-template format: templates exported here have to import into Caido and the other way round.
+plugin and is now an independent project, with its own features and UI: changes don't need to match Caido, and the
+template format doesn't need to stay compatible with it. What must keep working are the templates users already saved
+or exported with earlier versions of this extension.
 
 ## Building and testing
 

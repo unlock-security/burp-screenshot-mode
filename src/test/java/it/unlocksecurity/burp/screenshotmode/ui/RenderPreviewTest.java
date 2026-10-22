@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.PreferenceStore;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.Component;
@@ -75,7 +76,7 @@ class RenderPreviewTest {
     }
 
     static Settings sampleSettings() {
-        Settings settings = Settings.defaults();
+        Settings settings = BuiltInTemplates.defaults();
         settings.showTimestamp = true;
 
         HighlightRule role = HighlightRule.create("\"role\": \"admin\"", RuleTarget.REQUEST, MatchMode.STRING);
@@ -194,11 +195,11 @@ class RenderPreviewTest {
 
     @Test
     void blurAltersThePixelsItCovers() throws Exception {
-        Settings blurred = Settings.defaults();
+        Settings blurred = BuiltInTemplates.defaults();
         blurred.redactions.add(
             RedactionRule.create("Mallory", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.STRING)
         );
-        Settings plain = Settings.defaults();
+        Settings plain = BuiltInTemplates.defaults();
         BufferedImage a = render(blurred, Palette.DARK, 800, 700);
         BufferedImage b = render(plain, Palette.DARK, 800, 700);
         int differing = 0;
@@ -241,7 +242,7 @@ class RenderPreviewTest {
         );
         TemplateStore store = new TemplateStore(preferences, System.out::println);
         store.initialize();
-        store.updateTemplate(store.defaultTemplateId(), null, sampleSettings());
+        store.setDefaultTemplate(store.createTemplate("Report", sampleSettings()).id);
 
         SwingUtilities.invokeAndWait(() -> {
             ScreenshotLauncher launcher = new ScreenshotLauncher(host, store);
@@ -261,18 +262,26 @@ class RenderPreviewTest {
             layoutTree(tab);
             saveComponent(tab, "templates-tab.png");
 
-            for (boolean wide : new boolean[] { false, true }) {
-                Widgets.Stack holder = new Widgets.Stack(0);
-                holder.setOpaque(true);
-                holder.addItem(new SettingsForm(sampleSettings(), () -> {}, MONO, wide));
-                holder.setSize(wide ? 1100 : 360, 2000);
-                layoutTree(holder);
-                layoutTree(holder);
-                holder.setSize(holder.getWidth(), holder.getPreferredSize().height);
-                layoutTree(holder);
-                saveComponent(holder, wide ? "form-wide.png" : "form-sidebar.png");
-            }
+            Settings empty = BuiltInTemplates.defaults();
+            empty.highlights.clear();
+            empty.redactions.clear();
+            saveForm(sampleSettings(), false, "form-sidebar.png");
+            saveForm(sampleSettings(), true, "form-wide.png");
+            saveForm(empty, false, "form-empty.png");
+            saveForm(empty, true, "form-empty-wide.png");
         });
+    }
+
+    private static void saveForm(Settings settings, boolean wide, String name) {
+        Widgets.Stack holder = new Widgets.Stack(0);
+        holder.setOpaque(true);
+        holder.addItem(new SettingsForm(settings, () -> {}, MONO, wide));
+        holder.setSize(wide ? 1100 : 360, 2000);
+        layoutTree(holder);
+        layoutTree(holder);
+        holder.setSize(holder.getWidth(), holder.getPreferredSize().height);
+        layoutTree(holder);
+        saveComponent(holder, name);
     }
 
     private static void saveComponent(JComponent component, String name) {

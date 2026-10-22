@@ -11,11 +11,10 @@ template duplication, keyboard shortcuts, ...) and in UI (tabbed settings, Burp-
 is a reference, not a spec: design new behavior for Burp users and follow Burp's conventions, without trying to
 match Caido.
 
-Two things remain tied to Caido:
-- **The template format.** Templates must still round-trip with Caido's plugin (see Persistence below).
-- **Names in older code.** Some classes and comments still point to their Caido/TypeScript origin (`decorations.ts`,
-  `types.ts`, `useCrop`, "port of ...", "unlike Caido ..."). They are history, not a requirement: don't add new
-  "matches Caido" or "diverges from Caido" remarks, and drop stale ones when you rewrite the code around them.
+It is now an independent project: nothing, the template format included, has to stay compatible with Caido's plugin.
+Some classes and comments still point to their Caido/TypeScript origin (`decorations.ts`, `types.ts`, `useCrop`,
+"port of ...", "unlike Caido ..."). They are history, not a requirement: don't add new "matches Caido" or "diverges
+from Caido" remarks, and drop stale ones when you rewrite the code around them.
 
 ## Commands
 
@@ -46,6 +45,14 @@ every push to `main`, which only accepts pull requests from `dev`. The version l
 version number in `build.gradle.kts` or elsewhere — Gradle reads it from `-PreleaseVersion`, defaulting to
 `0.0.0-SNAPSHOT`. GitHub Actions in workflows are pinned to commit SHAs with the version in a trailing comment.
 
+## UI/UX changes
+
+Before making any UI/UX change, even a small one the user asks for, check it against UI/UX guidelines: Nielsen's
+usability heuristics, the conventions of Swing/FlatLaf and of Burp's own UI (which controls Burp uses for the same job),
+and accessibility (keyboard access, contrast, not relying on color or tooltips alone). If the change violates any of
+them, don't implement it yet: warn the user, explain which guideline it breaks and why, propose an alternative that
+doesn't, and ask which one to implement. Only go ahead directly when nothing is violated.
+
 ## Architecture
 
 Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
@@ -64,20 +71,47 @@ tests construct the full UI and render images without Burp — keep new Burp dep
 
 **Rendering pipeline** (per message half, in `ui.ContentPanel`):
 `MessageText.fromBytes` (UTF-8 with ISO-8859-1 fallback, `\n` line breaks, truncation) →
-`PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`) →
-`HeaderFilter.filter` (hide headers; `!`-prefixed rules force-show) →
+`pretty.PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`; only adds line breaks
+and indentation) →
+`HeaderFilter.filter` (hides the headers `HeaderVisibility` hides in that message) →
 `RuleEngine.apply` (highlights + redactions → `Decorated` text + spans) →
 `HttpSyntax.tokenize` → `MessagePane`/`MessageView` paint it with a `Palette`.
-`RuleEngine` applies `replace` redactions to the text itself, so all other spans are remapped from source to
-display offsets. Regex matching runs against a deadline-checking `CharSequence` to guard the EDT from catastrophic
-backtracking in user patterns. Blur has no Swing equivalent: `MessageView` post-processes the affected rows on an
-offscreen image (`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at 2× and exports PNG to
-file or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF).
+Rules (`model.Rule`, the base of `HighlightRule` and `RedactionRule`) are of two `RuleType`s: a header rule matches
+the value (for highlights, the whole line) of named headers in both messages, found by a linear scan of the header
+lines; a pattern rule matches its regex or literal in each of its `targets`. `Rule.appliesTo` decides which rules run
+on each part, off rules included.
+The URL bar is a `MessageView` too: `RuleEngine.apply` with the rules that apply to the `URL`, no header filter and no
+syntax colors. `RuleEngine.apply` also reports a `RuleStatus` per rule (matches, invalid regex, stopped early), which
+`ContentPanel` collects by rule identity: the screenshot window shows it on each rule's line in `ui.RuleList` and
+asks before exporting when a redaction failed.
+`render.pretty` holds one formatter per body format behind `PrettyPrinter`, its only public class, writing through
+`IndentWriter` (lazy line breaks and indentation, output capped at `MessageText.MAX_CHARS`).
+`RuleEngine` applies `replace` redactions to the text itself, so all other spans are remapped from source to display
+offsets. Regex matching runs against a deadline-checking `CharSequence` to guard the EDT from catastrophic backtracking
+in user patterns. Message bodies come from servers under test and are processed on the EDT, so the pretty printers and
+`HttpSyntax` scan them by hand in linear time, with the helpers in `render.Scan`: don't run `java.util.regex` patterns
+with a repeated group, like `(?:"[^"]*"|[^>])*`, over a body, since they recurse once per character and overflow the
+stack on long input. Blur has no Swing equivalent: `MessageView` post-processes the affected rows on an offscreen image
+(`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at 2× and exports PNG to file or clipboard
+(custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF).
 
 **State model:**
-- `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its stored
+- `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own
   instances, which must be treated as read-only — copy `settings` before editing.
-- Enums implement `model.Labeled`: `id()` is the stable storage id shared with Caido's JSON format, `label()` is UI
+- `TemplateStore.templates()` lists the built-in templates (`Template.builtIn`: Defaults, then Empty) before the
+  user's own. Built-in templates are never stored, updated or deleted; any template, built-in included, can be the
+  default (★), and deleting the default one makes Defaults the default. New templates start from a built-in one
+  ("Based on" in the editor) or duplicate any template.
+- `Settings.basedOn` is that built-in **parent** (only built-in templates are parents; `null` is Empty, which hides
+  nothing). In memory `Settings.headers` always holds the effective headers. `TemplateCodec` stores only
+  `HeaderVisibility.changesFrom` the parent's headers and reads them back `over` the parent's, so the headers a
+  template doesn't change follow its parent when a release changes it. Rules and appearance are copied once and never
+  inherited. Copies and duplicates keep the parent. Each settings tab ends with "Based on …" and a Restore defaults
+  that always takes the parent's settings (never Defaults by name, so a future built-in template works too): Rules
+  adds the missing rules (`Settings.missing`, matched by name, so built-in rules must be named) or replaces them all,
+  Headers drops the header changes, Appearance copies the parent's (`Settings.copyAppearance`). All ask first
+  (`Widgets.confirm`/`choose`: two options, the safe one primary and default).
+- Enums implement `model.Labeled`: `id()` is the stable id written to saved templates and exports, `label()` is UI
   text. Never change an existing `id()`.
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
   template id, split ratio, crop). Edits in the screenshot window affect only that session until the user explicitly
@@ -86,10 +120,31 @@ file or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor`
   screenshot sidebar and the template editor in `TemplatesTab`. `TemplateCodec.sameSettings` (comparison of the
   stored form) drives the "Modified"/"Unsaved" state of both.
 
-**Persistence:** `TemplateStore` saves all templates as one JSON string under the Burp preference key
-`screenshot-mode.templates`. `TemplateCodec` reads/writes Caido's storage format (current `VERSION = 2`) and
-migrates v1 and unversioned v0 payloads; the same codec handles template import/export. Features Caido doesn't have
-are stored as extra, optional settings fields (`theme`, `view`) that Caido ignores and that default sensibly when
-missing; add new ones the same way. Any schema change must stay compatible with Caido's format in both directions and
-keep the migration chain working (covered by `TemplateCodecTest`).
+**Persistence:** `TemplateStore` saves the user's templates (not the built-in ones) as one JSON string under the Burp
+preference key `screenshot-mode.templates`; exports leave the built-in ones out too. If that value can't be read at
+startup, it is copied to `screenshot-mode.templates.unreadable` before the store starts with the built-in templates
+only, and the suite tab offers to export the copy. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
+migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. The built-in templates are
+`storage/built-in-templates.json` in `src/main/resources`, an ordinary template export read by
+`storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules
+there (in Defaults), never change the built-in ids, and update the file whenever `VERSION` changes
+(`BuiltInTemplatesTest` fails otherwise). Optional settings fields
+(`theme`, `view`, `url`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
+none, with the stored headers taken as the template's own. Any schema change must keep loading the templates users already saved
+or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
+`TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced
+by the named rules of the current Defaults (`storage.LegacyDefaults`); rules the user edited are kept as they are.
+
+The Headers tab only shows or hides headers: every redaction and highlight is a rule of the Rules tab. A header row
+says which rules redact or highlight it: the header rules naming it, and the rules that changed its line in the message
+on screen (`ContentPanel.headerHits`). Its actions open that rule, or add a header rule, through `HeadersTab.Links`.
+
+**Header catalog:** `storage/header-catalog.json` (read by `storage.HeaderCatalogFile` into a `model.HeaderCatalog`)
+lists the known headers in groups, with the messages each is used in and where it is defined. It is reference data,
+read at every start and never stored in templates: templates only store `HeaderVisibility`, i.e. hidden groups by id
+and per-header settings by name (changes from a parent also store shown groups), so a release can add headers to a
+group and every template follows. Never change or
+reuse a group `id`. Header settings that repeat their group's are dropped, so equal choices store the same; headers
+the catalog doesn't know are kept even when shown. The v2-to-v3 migration needs the catalog: a group whose headers
+were all hidden becomes a hidden group.
   

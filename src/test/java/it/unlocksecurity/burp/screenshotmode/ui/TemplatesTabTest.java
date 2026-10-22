@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.PreferenceStore;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.Component;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 import javax.swing.AbstractButton;
+import javax.swing.JComboBox;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -28,8 +30,7 @@ class TemplatesTabTest {
     @Test
     void duplicatesTheSelectedTemplateUnderAFreeName() throws Exception {
         TemplateStore store = store();
-        Template original = store.getDefaultTemplate();
-        store.updateTemplate(original.id, null, RenderPreviewTest.sampleSettings());
+        Template original = store.createTemplate("Report", RenderPreviewTest.sampleSettings());
         store.createTemplate(original.name + " (copy)", null);
 
         SwingUtilities.invokeAndWait(() -> {
@@ -45,15 +46,16 @@ class TemplatesTabTest {
         });
 
         List<Template> templates = store.templates();
-        assertEquals(3, templates.size());
+        assertEquals(BuiltInTemplates.all().size() + 3, templates.size());
         Template copy = templates.getLast();
         Template source = store.getTemplateById(original.id).get();
         assertEquals(original.name + " (copy 2)", copy.name);
         assertNotEquals(source.id, copy.id);
-        assertEquals(store.defaultTemplateId(), source.id, "the copy is not the default");
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, store.defaultTemplateId(), "the copy is not the default");
         assertEquals(source.settings.highlights.size(), copy.settings.highlights.size());
         assertEquals(source.settings.redactions.size(), copy.settings.redactions.size());
         assertTrue(copy.settings.highlights.size() > 0);
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, copy.settings.basedOn, "same built-in parent");
 
         copy.settings.disposition = Disposition.VERTICAL;
         copy.settings.highlights.clear();
@@ -70,17 +72,17 @@ class TemplatesTabTest {
             button(tab, "Duplicate").doClick();
             button(tab, "Cancel").doClick();
         });
-        assertEquals(1, store.templates().size());
+        assertEquals(BuiltInTemplates.all().size(), store.templates().size());
     }
 
     @Test
     void everyButtonIsGreyedWhenDisabled() throws Exception {
         TemplateStore store = store();
-        store.updateTemplate(store.defaultTemplateId(), null, RenderPreviewTest.sampleSettings());
+        Template custom = store.createTemplate("Report", RenderPreviewTest.sampleSettings());
         SwingUtilities.invokeAndWait(() -> {
             TemplatesTab tab = new TemplatesTab(store, host());
             assertAllStyled(tab);
-            select(tab, store.getDefaultTemplate());
+            select(tab, custom);
             button(tab, "Edit").doClick();
             assertAllStyled(tab);
         });
@@ -138,7 +140,7 @@ class TemplatesTabTest {
     @Test
     void cancelAsksBeforeDiscardingChanges() throws Exception {
         TemplateStore store = store();
-        Template original = store.getDefaultTemplate();
+        Template original = store.createTemplate("Report", null);
         SwingUtilities.invokeAndWait(() -> {
             TemplatesTab tab = new TemplatesTab(store, host());
             List<String> asked = new java.util.ArrayList<>();
@@ -157,14 +159,74 @@ class TemplatesTabTest {
             JTextField name = find(tab, JTextField.class, f -> f.getText().equals(original.name)).get();
             name.setText("Renamed");
             button(tab, "Cancel").doClick();
-            assertEquals(List.of("\"" + original.name + "\""), asked);
+            assertEquals(List.of("Your changes to \"" + original.name + "\" haven't been saved."), asked);
             button(tab, "Save"); // still editing: throws if the Save button is not showing
 
             discard[0] = true;
             button(tab, "Cancel").doClick();
             assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
         });
-        assertEquals(original.name, store.getDefaultTemplate().name, "nothing was saved");
+        assertEquals(original.name, store.getTemplateById(original.id).orElseThrow().name, "nothing was saved");
+    }
+
+    @Test
+    void builtInTemplatesCanOnlyBeDuplicatedOrMadeDefault() throws Exception {
+        TemplateStore store = store();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            JTable table = find(tab, JTable.class, t -> true).get();
+            for (Template builtIn : BuiltInTemplates.all()) {
+                select(tab, builtIn);
+                assertEquals("Built-in", table.getValueAt(table.getSelectedRow(), 2), "says so in words");
+                assertFalse(button(tab, "Edit").isEnabled());
+                assertFalse(button(tab, "Delete").isEnabled());
+                assertTrue(button(tab, "Duplicate").isEnabled());
+            }
+            assertTrue(button(tab, "Set as default").isEnabled(), "Empty can be the default");
+            assertFalse(button(tab, "Export…").isEnabled(), "nothing of the user's to export");
+        });
+    }
+
+    @Test
+    void newTemplateStartsFromTheChosenBuiltInTemplate() throws Exception {
+        TemplateStore store = store();
+        List<String> asked = new java.util.ArrayList<>();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            tab.setDiscardConfirmation(message -> {
+                asked.add(message);
+                return false;
+            });
+            button(tab, "New template").doClick();
+            JComboBox<?> basedOn = find(tab, JComboBox.class, c -> c.getSelectedItem() instanceof Template).get();
+            assertEquals(BuiltInTemplates.DEFAULTS_ID, ((Template) basedOn.getSelectedItem()).id);
+
+            // Unchanged settings: switching asks nothing and keeps the name typed so far.
+            find(tab, JTextField.class, f -> f.getText().isEmpty() && isShowing(f, tab))
+                .get()
+                .setText("Clean");
+            basedOn.setSelectedIndex(1);
+            assertTrue(asked.isEmpty());
+            JComboBox<?> rebuilt = find(tab, JComboBox.class, c -> c.getSelectedItem() instanceof Template).get();
+            assertEquals(BuiltInTemplates.EMPTY_ID, ((Template) rebuilt.getSelectedItem()).id);
+            assertTrue(find(tab, JTextField.class, f -> f.getText().equals("Clean") && isShowing(f, tab)).isPresent());
+
+            // Changed settings: switching asks first, and keeping them keeps the choice.
+            find(tab, AbstractButton.class, b -> "Stacked".equals(b.getText()))
+                .get()
+                .doClick();
+            rebuilt.setSelectedIndex(0);
+            assertEquals(1, asked.size());
+            assertEquals(BuiltInTemplates.EMPTY_ID, ((Template) rebuilt.getSelectedItem()).id);
+
+            button(tab, "Save").doClick();
+        });
+        Template created = store.templates().getLast();
+        assertEquals("Clean", created.name);
+        assertFalse(created.builtIn);
+        assertTrue(created.settings.redactions.isEmpty(), "started from Empty");
+        assertEquals(null, created.settings.basedOn, "and follows it");
+        assertEquals(Disposition.VERTICAL, created.settings.disposition);
     }
 
     @Test
@@ -176,7 +238,7 @@ class TemplatesTabTest {
         });
     }
 
-    private static TemplateStore store() {
+    static TemplateStore store() {
         Map<String, String> values = new HashMap<>();
         TemplateStore store = new TemplateStore(preferences(values), message -> {});
         store.initialize();
@@ -197,7 +259,7 @@ class TemplatesTabTest {
         };
     }
 
-    private static Host host() {
+    static Host host() {
         Font font = new Font(Font.MONOSPACED, Font.PLAIN, 13);
         return new Host(
             () -> font,

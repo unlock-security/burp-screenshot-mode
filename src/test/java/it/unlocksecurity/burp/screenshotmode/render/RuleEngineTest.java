@@ -1,6 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.render;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
@@ -10,7 +11,9 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import java.awt.Color;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
@@ -28,6 +31,46 @@ class RuleEngineTest {
 
     private static String slice(Decorated decorated, Decorated.Span span) {
         return decorated.text().substring(span.from(), span.to());
+    }
+
+    private static final String MESSAGE = String.join(
+        "\n",
+        "GET /x-api-key: no HTTP/1.1",
+        "Host: example.com",
+        "x-api-key:   k3y",
+        "X-Api-Key:",
+        "Accept: */*",
+        "",
+        "X-Api-Key: body"
+    );
+
+    @Test
+    void redactsTheValueOfNamedHeadersIgnoringCase() {
+        RedactionRule rule = RedactionRule.forHeaders(List.of("X-API-KEY"), RedactionMode.REPLACE);
+        Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
+        Decorated result = RuleEngine.apply(MESSAGE, List.of(), List.of(rule), statuses::put);
+        assertEquals(MESSAGE.replace("x-api-key:   k3y", "x-api-key:   [REDACTED]"), result.text());
+        assertEquals(new RuleStatus(1, null, null), statuses.get(rule), "an empty value is nothing to redact");
+    }
+
+    @Test
+    void highlightsTheWholeLineOfNamedHeaders() {
+        HighlightRule rule = HighlightRule.forHeaders(List.of("host", "Accept"));
+        Decorated result = RuleEngine.apply(MESSAGE, List.of(rule), List.of());
+        assertEquals(
+            List.of("Host: example.com", "Accept: */*"),
+            result
+                .spans()
+                .stream()
+                .map(span -> slice(result, span))
+                .toList()
+        );
+    }
+
+    @Test
+    void headerRulesLeaveTheStartLineAndTheBodyAlone() {
+        RedactionRule rule = RedactionRule.forHeaders(List.of("GET /x-api-key"), RedactionMode.REPLACE);
+        assertEquals(MESSAGE, RuleEngine.apply(MESSAGE, List.of(), List.of(rule)).text());
     }
 
     @Test
@@ -79,12 +122,11 @@ class RuleEngineTest {
     }
 
     @Test
-    void opaqueRedactionKeepsTextAndCarriesColor() {
+    void opaqueRedactionKeepsText() {
         RedactionRule rule = redaction("s3cr3t", RedactionMode.OPAQUE);
-        rule.color = "#00ff00";
         Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(rule));
         assertEquals(TEXT, result.text());
-        assertEquals(Color.GREEN, result.spans().getFirst().color());
+        assertEquals(Decorated.Kind.OPAQUE, result.spans().getFirst().kind());
     }
 
     @Test
@@ -112,12 +154,22 @@ class RuleEngineTest {
     }
 
     @Test
-    void overlappingReplacementsKeepTheEarliest() {
+    void overlappingReplacementsMergeIntoTheEarliest() {
         RedactionRule first = redaction("session=s3cr3t", RedactionMode.REPLACE);
         RedactionRule second = redaction("s3cr3t; theme", RedactionMode.REPLACE);
         second.replacementText = "SECOND";
         Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(second, first));
-        assertTrue(result.text().endsWith("Cookie: [REDACTED]; theme=dark"), result.text());
+        // Nothing of either match is left visible.
+        assertTrue(result.text().endsWith("Cookie: [REDACTED]=dark"), result.text());
+    }
+
+    @Test
+    void aShorterReplacementInsideALongerOneIsAbsorbed() {
+        RedactionRule header = redaction("(?<=Cookie: ).+", RedactionMode.REPLACE);
+        header.replacementText = "[OMITTED]";
+        RedactionRule prefix = redaction("session=s3cr3t", RedactionMode.REPLACE);
+        Decorated result = RuleEngine.apply(TEXT, List.of(), List.of(prefix, header));
+        assertTrue(result.text().endsWith("Cookie: [OMITTED]"), result.text());
     }
 
     @Test
@@ -167,8 +219,56 @@ class RuleEngineTest {
                 .spans()
                 .isEmpty()
         );
-        assertTrue(RuleEngine.validate("(", MatchMode.REGEX).isPresent());
-        assertTrue(RuleEngine.validate("(", MatchMode.STRING).isEmpty());
+        assertTrue(RuleEngine.validate(highlight("(", MatchMode.REGEX)).isPresent());
+        assertTrue(RuleEngine.validate(highlight("(", MatchMode.STRING)).isEmpty());
+    }
+
+    private static List<String> matched(String text, HighlightRule rule) {
+        Decorated result = RuleEngine.apply(text, List.of(rule), List.of());
+        return result
+            .spans()
+            .stream()
+            .map(s -> slice(result, s))
+            .toList();
+    }
+
+    @Test
+    void matchesCaseOnlyWhenAsked() {
+        HighlightRule literal = highlight("token", MatchMode.STRING);
+        assertEquals(List.of("token"), matched("Token token TOKEN", literal), "matches case by default");
+        literal.matchCase = false;
+        assertEquals(List.of("Token", "token", "TOKEN"), matched("Token token TOKEN", literal));
+
+        HighlightRule regex = highlight("città|ÉTÉ", MatchMode.REGEX);
+        regex.matchCase = false;
+        assertEquals(List.of("CITTÀ", "été"), matched("CITTÀ été", regex), "beyond ASCII too");
+    }
+
+    @Test
+    void matchesWholeWordsOnlyWhenAsked() {
+        HighlightRule literal = highlight("id", MatchMode.STRING);
+        literal.wholeWord = true;
+        assertEquals(List.of("id", "id"), matched("id ids _id uid-id città_id", literal));
+
+        HighlightRule edges = highlight("=abc", MatchMode.STRING);
+        edges.wholeWord = true;
+        assertEquals(List.of("=abc"), matched("x=abc x=abcd", edges), "an edge that is not a word character is one");
+
+        HighlightRule accented = highlight("citt", MatchMode.STRING);
+        accented.wholeWord = true;
+        assertEquals(List.of(), matched("città", accented), "accented letters are word characters");
+
+        HighlightRule alternation = highlight("ab|abc", MatchMode.REGEX);
+        alternation.wholeWord = true;
+        assertEquals(List.of("abc"), matched("abc", alternation), "both alternatives must be whole words");
+    }
+
+    @Test
+    void flagsAWholeWordPatternThatCannotBeWrapped() {
+        HighlightRule comment = highlight("(?x)abc # a comment", MatchMode.REGEX);
+        assertTrue(RuleEngine.validate(comment).isEmpty());
+        comment.wholeWord = true;
+        assertTrue(RuleEngine.validate(comment).isPresent());
     }
 
     @Test
@@ -187,14 +287,73 @@ class RuleEngineTest {
         assertEquals(List.of(), RuleEngine.groupLabels("(", MatchMode.REGEX));
     }
 
+    private static Map<Object, RuleStatus> statuses(
+        String text,
+        List<HighlightRule> highlights,
+        List<RedactionRule> redactions
+    ) {
+        Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
+        RuleEngine.apply(text, highlights, redactions, statuses::put);
+        return statuses;
+    }
+
+    @Test
+    void reportsHowManyTimesEachRuleMatched() {
+        HighlightRule twice = highlight("e", MatchMode.STRING);
+        RedactionRule none = redaction("absent", RedactionMode.BLUR);
+        Map<Object, RuleStatus> statuses = statuses(TEXT, List.of(twice), List.of(none));
+        assertEquals(new RuleStatus(7, null, null), statuses.get(twice));
+        assertEquals(new RuleStatus(0, null, null), statuses.get(none));
+        assertFalse(statuses.get(none).failed(), "no match is not a failure");
+    }
+
+    @Test
+    void reportsInvalidPatternsWithTheirError() {
+        RedactionRule invalid = redaction("session=(", RedactionMode.BLUR);
+        RedactionRule empty = redaction("", RedactionMode.BLUR);
+        RedactionRule literal = RedactionRule.create("(", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.STRING);
+        Map<Object, RuleStatus> statuses = statuses(TEXT, List.of(), List.of(invalid, empty, literal));
+        assertEquals(RuleStatus.Problem.INVALID, statuses.get(invalid).problem());
+        assertTrue(statuses.get(invalid).detail().startsWith("Unclosed group"), statuses.get(invalid).detail());
+        assertFalse(statuses.get(empty).failed(), "an empty draft rule is not a failure");
+        assertFalse(statuses.get(literal).failed(), "a literal string is never an invalid regex");
+    }
+
+    @Test
+    @Timeout(5)
+    void reportsRulesThatStoppedEarly() {
+        // The backreference turns off the memoization that keeps (a+)+b fast on Java 21.
+        RedactionRule slow = redaction("(a+)+\\1b", RedactionMode.BLUR);
+        RedactionRule deep = redaction("x(a|b)*y", RedactionMode.BLUR);
+        String text = "a".repeat(40) + "!\nx" + "ab".repeat(50_000) + "y";
+        Map<Object, RuleStatus> statuses = statuses(text, List.of(), List.of(slow, deep));
+        assertEquals(RuleStatus.Problem.STOPPED, statuses.get(slow).problem());
+        assertEquals(RuleStatus.Problem.STOPPED, statuses.get(deep).problem());
+    }
+
     @Test
     @Timeout(5)
     void catastrophicBacktrackingIsCutShort() {
         String text = "a".repeat(40) + "!";
         assertTrue(
-            RuleEngine.apply(text, List.of(highlight("(a+)+b", MatchMode.REGEX)), List.of())
+            RuleEngine.apply(text, List.of(highlight("(a+)+\\1b", MatchMode.REGEX)), List.of())
                 .spans()
                 .isEmpty()
+        );
+    }
+
+    @Test
+    void stackOverflowingPatternsAreSkipped() {
+        // (a|b)* recurses once per character in java.util.regex.
+        String text = "x" + "ab".repeat(50_000) + "y";
+        assertTrue(
+            RuleEngine.apply(
+                text,
+                List.of(highlight("x(a|b)*y", MatchMode.REGEX), highlight("y", MatchMode.STRING)),
+                List.of()
+            )
+                .spans()
+                .size() == 1
         );
     }
 

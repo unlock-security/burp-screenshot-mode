@@ -16,19 +16,33 @@ import java.awt.Insets;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
+import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
 import javax.swing.JButton;
-import javax.swing.JColorChooser;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
@@ -67,10 +81,42 @@ final class Widgets {
         return label;
     }
 
-    /** A {@link #hint} that wraps at {@code width} pixels instead of being cut off in a narrow column. */
-    static JLabel wrappingHint(String text, int width) {
-        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return hint("<html><div style='width:" + width + "px'>" + escaped + "</div></html>");
+    /**
+     * A {@link #hint} that wraps at word boundaries to the width the layout gives it, instead of being cut off in a
+     * narrow column. It asks for at most {@code width} pixels, so it never makes its column wider. A text area rather
+     * than an {@code <html>} label, which Burp shows as markup.
+     */
+    static JTextArea wrappingHint(String text, int width) {
+        JTextArea area = new JTextArea(text) {
+            @Override
+            public Dimension getPreferredSize() {
+                // The height is the one for the current width, once laid out.
+                Dimension size = super.getPreferredSize();
+                return new Dimension(Math.min(size.width, width), size.height);
+            }
+        };
+        JLabel style = hint("");
+        area.setFont(style.getFont());
+        area.setForeground(style.getForeground());
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setHighlighter(null);
+        area.setOpaque(false);
+        area.setBorder(BorderFactory.createEmptyBorder());
+        // A wrapping text area only knows its height once it has a width: lay out again when the line count changes.
+        area.addComponentListener(
+            new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    if (area.getPreferredSize().height != area.getHeight()) {
+                        SwingUtilities.invokeLater(area::revalidate);
+                    }
+                }
+            }
+        );
+        return area;
     }
 
     /** A titled block of the settings form, with an optional hint and an optional button on the right. */
@@ -158,6 +204,76 @@ final class Widgets {
         return button;
     }
 
+    /**
+     * Asks for a line of text, like {@link JOptionPane#showInputDialog(Component, Object, String, int)} but with OK as
+     * the primary, default button.
+     *
+     * @return the text entered, or {@code null} when cancelled
+     */
+    static String askText(Component parent, String label, String title) {
+        JTextField field = new JTextField(20);
+        JButton ok = primary(button("OK"));
+        JButton cancel = button("Cancel");
+        JOptionPane pane = new JOptionPane(
+            new Object[] { label, field },
+            JOptionPane.PLAIN_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { ok, cancel }
+        );
+        // Custom option buttons don't close the pane on their own.
+        ok.addActionListener(event -> pane.setValue(ok));
+        cancel.addActionListener(event -> pane.setValue(cancel));
+        JDialog dialog = pane.createDialog(parent, title);
+        dialog.getRootPane().setDefaultButton(ok);
+        dialog.addWindowListener(
+            new WindowAdapter() {
+                @Override
+                public void windowOpened(WindowEvent event) {
+                    field.requestFocusInWindow();
+                }
+            }
+        );
+        dialog.setVisible(true);
+        dialog.dispose();
+        return pane.getValue() == ok ? field.getText() : null;
+    }
+
+    /**
+     * Asks a two-option question whose safe choice is the primary, default one.
+     *
+     * @return whether the user chose {@code action}
+     */
+    static boolean confirm(Component parent, String title, String message, String action, String safe) {
+        return action.equals(choose(parent, title, message, action, safe));
+    }
+
+    /**
+     * Like {@link #confirm}, for two choices that both do something.
+     *
+     * @return the label of the chosen option, or {@code null} if the dialog was closed
+     */
+    static String choose(Component parent, String title, String message, String action, String safe) {
+        JButton act = button(action);
+        JButton keep = primary(button(safe));
+        JOptionPane pane = new JOptionPane(
+            message,
+            JOptionPane.WARNING_MESSAGE,
+            JOptionPane.DEFAULT_OPTION,
+            null,
+            new Object[] { act, keep },
+            keep
+        );
+        // Custom option buttons don't close the pane on their own.
+        act.addActionListener(event -> pane.setValue(act));
+        keep.addActionListener(event -> pane.setValue(keep));
+        JDialog dialog = pane.createDialog(parent, title);
+        dialog.getRootPane().setDefaultButton(keep);
+        dialog.setVisible(true);
+        dialog.dispose();
+        return pane.getValue() == act ? action : pane.getValue() == keep ? safe : null;
+    }
+
     /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */
     static JButton flatIconButton(Icon icon, String tooltip, Runnable action) {
         JButton button = iconButton(icon, tooltip, action);
@@ -222,20 +338,91 @@ final class Widgets {
         return separator;
     }
 
-    static JButton colorButton(String hex, Consumer<String> onChange) {
-        JButton button = greyedWhenDisabled(new JButton());
-        button.setMargin(new Insets(4, 6, 4, 6));
-        button.setToolTipText("Choose color");
-        button.setIcon(new SwatchIcon(RuleEngine.parseColor(hex, Color.YELLOW)));
-        button.addActionListener(event -> {
-            Color current = ((SwatchIcon) button.getIcon()).color;
-            Color chosen = JColorChooser.showDialog(button, "Choose Color", current);
-            if (chosen != null) {
-                button.setIcon(new SwatchIcon(chosen));
-                onChange.accept(RuleEngine.toHex(chosen));
+    /** A named color of a rule, stored as its hex value. */
+    record ColorChoice(String name, String hex) {
+        static final List<ColorChoice> HIGHLIGHT = List.of(
+            new ColorChoice("Yellow", "#ffff00"),
+            new ColorChoice("Orange", "#ff9800"),
+            new ColorChoice("Red", "#f44336"),
+            new ColorChoice("Green", "#4caf50"),
+            new ColorChoice("Blue", "#2196f3"),
+            new ColorChoice("Purple", "#9c27b0")
+        );
+
+        Color color() {
+            return RuleEngine.parseColor(hex, Color.GRAY);
+        }
+    }
+
+    /**
+     * A choice among a few named colors, each shown by its name and a swatch, like Burp's highlight menu. A color
+     * that is not one of them, from an older template, stays as a "Custom" choice.
+     */
+    static JComboBox<ColorChoice> colorCombo(List<ColorChoice> choices, String hex, Consumer<String> onChange) {
+        List<ColorChoice> items = new ArrayList<>(choices);
+        ColorChoice selected = choices
+            .stream()
+            .filter(choice -> choice.hex().equalsIgnoreCase(hex))
+            .findFirst()
+            .orElseGet(() -> {
+                ColorChoice custom = new ColorChoice("Custom", hex);
+                items.add(custom);
+                return custom;
+            });
+        JComboBox<ColorChoice> combo = new JComboBox<>(items.toArray(ColorChoice[]::new));
+        combo.setSelectedItem(selected);
+        combo.setRenderer(
+            new DefaultListCellRenderer() {
+                @Override
+                public Component getListCellRendererComponent(
+                    JList<?> list,
+                    Object value,
+                    int index,
+                    boolean isSelected,
+                    boolean cellHasFocus
+                ) {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value instanceof ColorChoice choice) {
+                        setText(choice.name());
+                        setIcon(new SwatchIcon(choice.color(), 12));
+                        setIconTextGap(6);
+                    }
+                    return this;
+                }
+            }
+        );
+        combo.getAccessibleContext().setAccessibleName("Color");
+        combo.addActionListener(event -> {
+            if (combo.getSelectedItem() instanceof ColorChoice choice) {
+                onChange.accept(choice.hex());
             }
         });
-        return button;
+        return combo;
+    }
+
+    /**
+     * Makes {@code field} a search field the Burp way: a magnifier at its start and, while it has text, a clear button
+     * at its end (FlatLaf only). Escape clears it too, from the keyboard; when it is empty, Escape goes on to the
+     * window.
+     */
+    static void searchField(JTextField field) {
+        field.putClientProperty("JTextField.leadingIcon", Glyph.SEARCH);
+        field.putClientProperty("JTextField.showClearButton", true);
+        field.getInputMap(JComponent.WHEN_FOCUSED).put(KeyStroke.getKeyStroke("ESCAPE"), "clearSearch");
+        field.getActionMap().put(
+            "clearSearch",
+            new AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    field.setText("");
+                }
+
+                @Override
+                public boolean accept(Object sender) {
+                    return !field.getText().isEmpty();
+                }
+            }
+        );
     }
 
     static void onTextChange(JTextComponent component, Consumer<String> onChange) {
@@ -344,7 +531,12 @@ final class Widgets {
         }
     }
 
-    private record SwatchIcon(Color color) implements Icon {
+    /** A rounded color square. */
+    record SwatchIcon(Color color, int size) implements Icon {
+        SwatchIcon(Color color) {
+            this(color, 16);
+        }
+
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
@@ -358,12 +550,12 @@ final class Widgets {
 
         @Override
         public int getIconWidth() {
-            return 16;
+            return size;
         }
 
         @Override
         public int getIconHeight() {
-            return 16;
+            return size;
         }
     }
 
@@ -371,14 +563,19 @@ final class Widgets {
     enum Glyph implements Icon {
         PLUS,
         /** Neutral, red while the pointer is over its button: destructive, but calm in a long list of rules. */
-        TRASH;
+        TRASH,
+        /** Shows that a closed section opens, like the sections of Burp's Inspector; {@link #CHEVRON_UP} once open. */
+        CHEVRON_DOWN,
+        CHEVRON_UP,
+        /** The magnifier of a search field, muted like FlatLaf's own. */
+        SEARCH;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean hot = c instanceof AbstractButton button && button.getModel().isRollover() && button.isEnabled();
-            g.setColor(this == TRASH && hot ? errorColor() : c.getForeground());
+            g.setColor(this == TRASH && hot ? errorColor() : this == SEARCH ? mutedColor() : c.getForeground());
             g.translate(x, y);
             switch (this) {
                 case PLUS -> {
@@ -403,6 +600,21 @@ final class Widgets {
                     g.draw(can);
                     g.draw(new Line2D.Float(6, 6, 6, 10.5f));
                     g.draw(new Line2D.Float(8, 6, 8, 10.5f));
+                }
+                case SEARCH -> {
+                    g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g.draw(new java.awt.geom.Ellipse2D.Float(2, 2, 7.5f, 7.5f));
+                    g.draw(new Line2D.Float(8.6f, 8.6f, 12, 12));
+                }
+                case CHEVRON_DOWN, CHEVRON_UP -> {
+                    g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    float tip = this == CHEVRON_DOWN ? 9.5f : 4.5f;
+                    float ends = this == CHEVRON_DOWN ? 4.5f : 9.5f;
+                    Path2D chevron = new Path2D.Float();
+                    chevron.moveTo(3, ends);
+                    chevron.lineTo(7, tip);
+                    chevron.lineTo(11, ends);
+                    g.draw(chevron);
                 }
             }
             g.dispose();

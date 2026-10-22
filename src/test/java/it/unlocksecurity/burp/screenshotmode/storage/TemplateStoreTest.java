@@ -39,15 +39,42 @@ class TemplateStoreTest {
     }
 
     @Test
-    void initializesAndPersistsADefaultTemplate() {
-        assertEquals(1, store.templates().size());
-        assertEquals(store.templates().getFirst().id, store.defaultTemplateId());
+    void startsWithTheBuiltInTemplatesOnly() {
+        assertEquals(BuiltInTemplates.all().size(), store.templates().size());
+        assertTrue(
+            store
+                .templates()
+                .stream()
+                .allMatch(template -> template.builtIn)
+        );
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, store.defaultTemplateId());
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, store.getDefaultTemplate().id);
         assertNotNull(backing.get(TemplateStore.STORAGE_KEY));
+        assertTrue(
+            TemplateCodec.decode(backing.get(TemplateStore.STORAGE_KEY)).data().templates().isEmpty(),
+            "built-in templates are not stored"
+        );
+        assertTrue(store.unreadableTemplates().isEmpty(), "a first start is not a failure");
+        assertFalse(backing.containsKey(TemplateStore.UNREADABLE_KEY));
+    }
+
+    @Test
+    void keepsTemplatesItCannotReadInsteadOfOverwritingThem() {
+        for (String stored : new String[] { "garbage", "{}", "{\"version\": 99, \"templates\": []}" }) {
+            backing.clear();
+            backing.put(TemplateStore.STORAGE_KEY, stored);
+            TemplateStore reloaded = new TemplateStore(preferences, message -> {});
+            reloaded.initialize();
+            assertEquals(stored, backing.get(TemplateStore.UNREADABLE_KEY), "the original data is kept");
+            assertEquals(stored, reloaded.unreadableTemplates().orElseThrow(), "and offered for export");
+            assertEquals(BuiltInTemplates.all().size(), reloaded.templates().size(), "work goes on");
+            assertEquals(BuiltInTemplates.DEFAULTS_ID, reloaded.getDefaultTemplate().id);
+        }
     }
 
     @Test
     void reloadsPersistedTemplates() {
-        Template created = store.createTemplate("Report", Settings.defaults());
+        Template created = store.createTemplate("Report", BuiltInTemplates.defaults());
         TemplateStore reloaded = new TemplateStore(preferences, message -> {});
         reloaded.initialize();
         assertEquals("Report", reloaded.getTemplateById(created.id).orElseThrow().name);
@@ -55,7 +82,7 @@ class TemplateStoreTest {
 
     @Test
     void createCopiesSettings() {
-        Settings settings = Settings.defaults();
+        Settings settings = BuiltInTemplates.defaults();
         Template created = store.createTemplate("Copy", settings);
         settings.showTimestamp = true;
         assertFalse(created.settings.showTimestamp);
@@ -67,7 +94,7 @@ class TemplateStoreTest {
         AtomicInteger notifications = new AtomicInteger();
         store.addListener(notifications::incrementAndGet);
         Template created = store.createTemplate("A", null);
-        Settings settings = Settings.defaults();
+        Settings settings = BuiltInTemplates.defaults();
         settings.showTimestamp = true;
         store.updateTemplate(created.id, null, settings);
         store.updateTemplate(created.id, "B", null);
@@ -79,23 +106,46 @@ class TemplateStoreTest {
     }
 
     @Test
-    void cannotDeleteTheDefaultTemplate() {
-        assertFalse(store.deleteTemplate(store.defaultTemplateId()));
+    void neverChangesOrDeletesBuiltInTemplates() {
+        for (Template builtIn : BuiltInTemplates.all()) {
+            assertTrue(store.updateTemplate(builtIn.id, "Renamed", new Settings()).isEmpty());
+            assertFalse(store.deleteTemplate(builtIn.id));
+            assertEquals(builtIn.name, store.getTemplateById(builtIn.id).orElseThrow().name);
+        }
+    }
+
+    @Test
+    void anyTemplateCanBeTheDefault() {
+        assertTrue(store.setDefaultTemplate(BuiltInTemplates.EMPTY_ID));
+        assertEquals(BuiltInTemplates.EMPTY_ID, store.getDefaultTemplate().id);
         Template other = store.createTemplate("Other", null);
         assertTrue(store.setDefaultTemplate(other.id));
         assertEquals(other.id, store.getDefaultTemplate().id);
         assertFalse(store.setDefaultTemplate("missing"));
-        assertTrue(store.deleteTemplate(store.templates().getFirst().id));
-        assertEquals(1, store.templates().size());
+
+        TemplateStore reloaded = new TemplateStore(preferences, message -> {});
+        reloaded.initialize();
+        assertEquals(other.id, reloaded.getDefaultTemplate().id);
+    }
+
+    @Test
+    void deletingTheDefaultTemplateMakesDefaultsTheDefault() {
+        Template other = store.createTemplate("Other", null);
+        store.setDefaultTemplate(other.id);
+        assertTrue(store.deleteTemplate(other.id));
+        assertEquals(BuiltInTemplates.DEFAULTS_ID, store.defaultTemplateId());
+        assertEquals(BuiltInTemplates.all().size(), store.templates().size());
     }
 
     @Test
     void importsExportedTemplatesWithFreshIds() {
+        Template original = store.createTemplate("Report", null);
         String exported = store.exportJson();
-        String originalId = store.templates().getFirst().id;
+        assertEquals(1, TemplateCodec.decode(exported).data().templates().size(), "built-in templates are left out");
         assertEquals(1, store.importTemplates(exported));
-        assertEquals(2, store.templates().size());
-        assertNotEquals(originalId, store.templates().get(1).id);
+        assertEquals(BuiltInTemplates.all().size() + 2, store.templates().size());
+        assertNotEquals(original.id, store.templates().getLast().id);
+        assertEquals("Report", store.templates().getLast().name);
         assertThrows(IllegalArgumentException.class, () -> store.importTemplates("{\"nope\": true}"));
     }
 }

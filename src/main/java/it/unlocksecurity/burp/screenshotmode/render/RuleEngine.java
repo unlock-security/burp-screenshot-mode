@@ -5,12 +5,17 @@ import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -35,6 +40,9 @@ public final class RuleEngine {
 
     record Match(int from, int to, List<Group> groups) {}
 
+    /** The matches of one pattern, and why matching did not complete, if it did not. */
+    record Found(List<Match> matches, RuleStatus.Problem problem) {}
+
     private record Replacement(int from, int to, String text) {}
 
     private record Segment(int sourceFrom, int sourceTo, int displayFrom, int displayTo) {}
@@ -42,15 +50,51 @@ public final class RuleEngine {
     private RuleEngine() {}
 
     public static Decorated apply(String text, List<HighlightRule> highlights, List<RedactionRule> redactions) {
+        return apply(text, highlights, redactions, (rule, status) -> {});
+    }
+
+    /** Receives a range of the source text a rule changed: what a redaction hides, or what a highlight marks. */
+    public interface HitListener {
+        void hit(Rule rule, int from, int to);
+    }
+
+    /** Like {@link #apply(String, List, List)}, also reporting what each rule did. */
+    public static Decorated apply(
+        String text,
+        List<HighlightRule> highlights,
+        List<RedactionRule> redactions,
+        BiConsumer<Object, RuleStatus> statuses
+    ) {
+        return apply(text, highlights, redactions, statuses, (rule, from, to) -> {});
+    }
+
+    /** Like {@link #apply(String, List, List, BiConsumer)}, also reporting where each rule changed the text. */
+    public static Decorated apply(
+        String text,
+        List<HighlightRule> highlights,
+        List<RedactionRule> redactions,
+        BiConsumer<Object, RuleStatus> statuses,
+        HitListener hits
+    ) {
         List<List<Range>> redactionRanges = new ArrayList<>();
         List<Range> redacted = new ArrayList<>();
         for (RedactionRule rule : redactions) {
             List<Range> ranges = new ArrayList<>();
-            for (Match match : findMatches(text, rule.regex, rule.matchMode)) {
-                ranges.addAll(redactionRanges(match, rule.useCaptureGroups, rule.selectedGroups));
+            Found found = find(text, rule, false);
+            statuses.accept(rule, status(found, rule));
+            for (Match match : found.matches()) {
+                ranges.addAll(
+                    rule.type == RuleType.HEADER
+                        ? List.of(new Range(match.from(), match.to()))
+                        : redactionRanges(match, rule.useCaptureGroups, rule.selectedGroups)
+                );
             }
             redactionRanges.add(ranges);
             redacted.addAll(ranges);
+            ranges
+                .stream()
+                .filter(range -> range.to() > range.from())
+                .forEach(range -> hits.hit(rule, range.from(), range.to()));
         }
 
         List<Decorated.Span> sourceSpans = new ArrayList<>();
@@ -58,10 +102,13 @@ public final class RuleEngine {
             Decorated.Kind kind =
                 rule.mode == HighlightMode.RECTANGLE ? Decorated.Kind.RECTANGLE : Decorated.Kind.HIGHLIGHT;
             Color color = parseColor(rule.color, Color.YELLOW);
-            for (Match match : findMatches(text, rule.regex, rule.matchMode)) {
+            Found found = find(text, rule, true);
+            statuses.accept(rule, status(found, rule));
+            for (Match match : found.matches()) {
                 Range range = new Range(match.from(), match.to());
                 if (redacted.stream().noneMatch(range::overlaps)) {
                     sourceSpans.add(new Decorated.Span(match.from(), match.to(), kind, color));
+                    hits.hit(rule, match.from(), match.to());
                 }
             }
         }
@@ -78,12 +125,7 @@ public final class RuleEngine {
                         new Decorated.Span(range.from(), range.to(), Decorated.Kind.BLUR, null)
                     );
                     case OPAQUE -> sourceSpans.add(
-                        new Decorated.Span(
-                            range.from(),
-                            range.to(),
-                            Decorated.Kind.OPAQUE,
-                            parseColor(rule.color, Color.BLACK)
-                        )
+                        new Decorated.Span(range.from(), range.to(), Decorated.Kind.OPAQUE, null)
                     );
                     case REPLACE -> replacements.add(
                         new Replacement(
@@ -98,15 +140,29 @@ public final class RuleEngine {
             }
         }
 
-        // Overlapping replacements cannot both apply: keep the earliest one.
-        replacements.sort(Comparator.comparingInt(Replacement::from).thenComparingInt(Replacement::to));
+        // Overlapping replacements cannot both apply: merge them into one, with the text of the one starting first (the
+        // longest, if they start together), so no part of either match stays visible.
+        replacements.sort(
+            Comparator.comparingInt(Replacement::from).thenComparing(
+                Comparator.comparingInt(Replacement::to).reversed()
+            )
+        );
+        List<Replacement> merged = new ArrayList<>();
+        for (Replacement replacement : replacements) {
+            Replacement last = merged.isEmpty() ? null : merged.getLast();
+            if (last != null && replacement.from() < last.to()) {
+                merged.set(
+                    merged.size() - 1,
+                    new Replacement(last.from(), Math.max(last.to(), replacement.to()), last.text())
+                );
+            } else {
+                merged.add(replacement);
+            }
+        }
         StringBuilder display = new StringBuilder(text.length());
         List<Segment> segments = new ArrayList<>();
         int position = 0;
-        for (Replacement replacement : replacements) {
-            if (replacement.from() < position) {
-                continue;
-            }
+        for (Replacement replacement : merged) {
             display.append(text, position, replacement.from());
             int displayFrom = display.length();
             display.append(replacement.text());
@@ -158,11 +214,64 @@ public final class RuleEngine {
         return ranges;
     }
 
-    static List<Match> findMatches(String text, String pattern, MatchMode matchMode) {
+    private static RuleStatus status(Found found, Rule rule) {
+        return new RuleStatus(
+            found.matches().size(),
+            found.problem(),
+            found.problem() == RuleStatus.Problem.INVALID ? validate(rule).orElse(null) : null
+        );
+    }
+
+    /** @param wholeLine for a header rule, match the whole header line instead of its value */
+    private static Found find(String text, Rule rule, boolean wholeLine) {
+        return rule.type == RuleType.HEADER
+            ? new Found(headerMatches(text, rule.headers, wholeLine), null)
+            : findMatches(text, rule);
+    }
+
+    /**
+     * The values (or whole lines) of the named headers, ignoring case. Scans the header lines by hand, in linear time,
+     * as the message comes from the server under test.
+     */
+    static List<Match> headerMatches(String text, List<String> names, boolean wholeLine) {
+        Set<String> wanted = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        wanted.addAll(names);
         List<Match> matches = new ArrayList<>();
-        Optional<Pattern> compiled = compile(pattern, matchMode);
+        int start = text.indexOf('\n') + 1; // after the start line
+        while (start > 0 && start < text.length()) {
+            int end = text.indexOf('\n', start);
+            if (end < 0) {
+                end = text.length();
+            }
+            if (end == start) {
+                break; // the end of the headers
+            }
+            int colon = start;
+            while (colon < end && text.charAt(colon) != ':') {
+                colon++;
+            }
+            if (colon > start && colon < end && wanted.contains(text.substring(start, colon))) {
+                int from = colon + 1;
+                while (from < end && (text.charAt(from) == ' ' || text.charAt(from) == '\t')) {
+                    from++;
+                }
+                if (wholeLine) {
+                    matches.add(new Match(start, end, List.of()));
+                } else if (from < end) {
+                    matches.add(new Match(from, end, List.of()));
+                }
+            }
+            start = end + 1;
+        }
+        return matches;
+    }
+
+    static Found findMatches(String text, Rule rule) {
+        List<Match> matches = new ArrayList<>();
+        Optional<Pattern> compiled = compile(rule);
         if (compiled.isEmpty()) {
-            return matches;
+            boolean invalid = validate(rule).isPresent();
+            return new Found(matches, invalid ? RuleStatus.Problem.INVALID : null);
         }
 
         Matcher matcher = compiled
@@ -181,33 +290,55 @@ public final class RuleEngine {
                 }
                 matches.add(new Match(matcher.start(), matcher.end(), groups));
             }
-        } catch (DeadlineCharSequence.TimeoutException e) {
-            // Keep whatever matched before the budget ran out.
+        } catch (DeadlineCharSequence.TimeoutException | StackOverflowError e) {
+            // Keep whatever matched before the budget ran out, or before a pattern that recurses once per character,
+            // like (a|b)*, overflowed the stack on a long match, and say so.
+            return new Found(matches, RuleStatus.Problem.STOPPED);
         }
-        return matches;
+        return new Found(matches, null);
     }
 
-    private static Optional<Pattern> compile(String pattern, MatchMode matchMode) {
-        if (pattern == null || pattern.isEmpty()) {
+    /** Where a whole word can start or end: anywhere but between two word characters, Unicode letters included. */
+    private static final String WORD_EDGE = "(?:(?<![\\p{L}\\p{N}_])|(?![\\p{L}\\p{N}_]))";
+
+    /** What a pattern rule matches, with its options applied; empty for no pattern or an invalid one. */
+    private static Optional<Pattern> compile(Rule rule) {
+        if (rule.regex == null || rule.regex.isEmpty()) {
             return Optional.empty();
         }
         try {
-            return Optional.of(Pattern.compile(matchMode == MatchMode.STRING ? Pattern.quote(pattern) : pattern));
+            return Optional.of(compileWithOptions(rule));
         } catch (PatternSyntaxException e) {
             return Optional.empty();
         }
     }
 
-    /** Returns the syntax error of a pattern, if any. */
-    public static Optional<String> validate(String pattern, MatchMode matchMode) {
-        if (matchMode == MatchMode.STRING || pattern == null || pattern.isEmpty()) {
+    private static Pattern compileWithOptions(Rule rule) {
+        String source = rule.matchMode == MatchMode.STRING ? Pattern.quote(rule.regex) : rule.regex;
+        if (rule.wholeWord) {
+            // In a group of its own, so an alternation in the pattern stays between the edges.
+            source = WORD_EDGE + "(?:" + source + ")" + WORD_EDGE;
+        }
+        return Pattern.compile(source, rule.matchCase ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    }
+
+    /** Returns the syntax error of a rule's pattern, if any. */
+    public static Optional<String> validate(Rule rule) {
+        if (rule.matchMode == MatchMode.STRING || rule.regex == null || rule.regex.isEmpty()) {
             return Optional.empty();
         }
         try {
-            Pattern.compile(pattern);
-            return Optional.empty();
+            // On its own first, so the error points into the pattern as typed.
+            Pattern.compile(rule.regex);
         } catch (PatternSyntaxException e) {
             return Optional.of(e.getDescription() + (e.getIndex() >= 0 ? " near index " + e.getIndex() : ""));
+        }
+        try {
+            compileWithOptions(rule);
+            return Optional.empty();
+        } catch (PatternSyntaxException e) {
+            // Such as a comment in (?x) mode, which swallows the end of the whole word group.
+            return Optional.of("Can't match whole words with this pattern");
         }
     }
 
@@ -219,16 +350,21 @@ public final class RuleEngine {
         if (matchMode == MatchMode.STRING) {
             return List.of();
         }
-        return compile(pattern, matchMode)
-            .map(compiled -> {
-                String[] labels = new String[compiled.matcher("").groupCount()];
-                for (int i = 0; i < labels.length; i++) {
-                    labels[i] = String.valueOf(i + 1);
-                }
-                compiled.namedGroups().forEach((name, group) -> labels[group - 1] = name);
-                return List.of(labels);
-            })
-            .orElse(List.of());
+        if (pattern == null || pattern.isEmpty()) {
+            return List.of();
+        }
+        Pattern compiled;
+        try {
+            compiled = Pattern.compile(pattern);
+        } catch (PatternSyntaxException e) {
+            return List.of();
+        }
+        String[] labels = new String[compiled.matcher("").groupCount()];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = String.valueOf(i + 1);
+        }
+        compiled.namedGroups().forEach((name, group) -> labels[group - 1] = name);
+        return List.of(labels);
     }
 
     public static Color parseColor(String hex, Color fallback) {

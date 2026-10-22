@@ -2,9 +2,11 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
+import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
@@ -25,19 +27,26 @@ import javax.swing.SwingUtilities;
 final class MessagePane extends JPanel {
 
     enum SelectionAction {
-        HIGHLIGHT("Highlight"),
-        REDACT("Redact"),
-        HIDE_HEADER("Hide Header");
+        /** On the selected text. */
+        HIGHLIGHT("Highlight", false),
+        REDACT("Redact", false),
+        /** On the header line under the pointer. */
+        HIDE_HEADER("Hide header", true),
+        REDACT_HEADER("Redact header value", true),
+        HIGHLIGHT_HEADER("Highlight header", true);
 
         final String label;
+        final boolean onHeader;
 
-        SelectionAction(String label) {
+        SelectionAction(String label, boolean onHeader) {
             this.label = label;
+            this.onHeader = onHeader;
         }
     }
 
     interface SelectionListener {
-        void onSelectionAction(SelectionAction action, String selectedText, RuleTarget target);
+        /** @param text the selected text, or the header name for the actions on a header */
+        void onSelectionAction(SelectionAction action, String text, RuleTarget target);
     }
 
     private final RuleTarget target;
@@ -95,8 +104,47 @@ final class MessagePane extends JPanel {
         );
         scroll.setBackground(palette.background());
         scroll.getViewport().setBackground(palette.background());
+        styleScrollBar(scroll.getVerticalScrollBar(), palette);
         view.render(decorated, tokens, palette, mono);
         gutter.setPalette(palette);
+    }
+
+    /**
+     * Colors the scrollbar with the screenshot's palette: Burp's theme would paint a light scrollbar over a dark
+     * screenshot, and the other way round.
+     */
+    private static void styleScrollBar(JScrollBar bar, Palette palette) {
+        Color track = palette.background();
+        Color thumb = mix(palette.border(), palette.muted(), 0.3);
+        bar.setBackground(track);
+        bar.setForeground(thumb);
+        bar.putClientProperty(
+            "FlatLaf.style",
+            "track: " +
+                hex(track) +
+                "; thumb: " +
+                hex(thumb) +
+                "; hoverTrackColor: " +
+                hex(track) +
+                "; hoverThumbColor: " +
+                hex(mix(palette.border(), palette.muted(), 0.6)) +
+                "; pressedTrackColor: " +
+                hex(track) +
+                "; pressedThumbColor: " +
+                hex(palette.muted())
+        );
+    }
+
+    private static Color mix(Color from, Color to, double amount) {
+        return new Color(
+            (int) Math.round(from.getRed() + (to.getRed() - from.getRed()) * amount),
+            (int) Math.round(from.getGreen() + (to.getGreen() - from.getGreen()) * amount),
+            (int) Math.round(from.getBlue() + (to.getBlue() - from.getBlue()) * amount)
+        );
+    }
+
+    private static String hex(Color color) {
+        return String.format("#%06x", color.getRGB() & 0xffffff);
     }
 
     /** Hides scrollbars and selection while the screenshot is taken; the layout is left untouched. */
@@ -150,19 +198,47 @@ final class MessagePane extends JPanel {
     }
 
     private void maybeShowMenu(MouseEvent e) {
+        showSelectionMenu(e, view, target, selectionListener);
+    }
+
+    /**
+     * On a popup trigger, offers the actions that create a rule for the selected text and, over a header line, the
+     * actions on that header. The URL bar has no headers.
+     */
+    static void showSelectionMenu(MouseEvent e, MessageView view, RuleTarget target, SelectionListener listener) {
         if (!e.isPopupTrigger()) {
             return;
         }
         String selected = view.getSelectedText();
-        if (selected == null || selected.isEmpty()) {
-            return;
-        }
+        String header = target == RuleTarget.URL ? null : headerAt(view.getText(), view.viewToModel2D(e.getPoint()));
         JPopupMenu menu = new JPopupMenu();
         for (SelectionAction action : SelectionAction.values()) {
+            String text = action.onHeader ? header : selected;
+            if (text == null || text.isEmpty()) {
+                continue;
+            }
+            if (action == SelectionAction.HIDE_HEADER && menu.getComponentCount() > 0) {
+                menu.addSeparator();
+            }
             JMenuItem item = new JMenuItem(action.label);
-            item.addActionListener(event -> selectionListener.onSelectionAction(action, selected, target));
+            item.addActionListener(event -> listener.onSelectionAction(action, text, target));
             menu.add(item);
         }
-        menu.show(view, e.getX(), e.getY());
+        if (menu.getComponentCount() > 0) {
+            menu.show(view, e.getX(), e.getY());
+        }
+    }
+
+    /** The name of the header on the line at {@code offset}, or {@code null} if that line is not a header. */
+    static String headerAt(String text, int offset) {
+        if (offset < 0) {
+            return null;
+        }
+        for (HeaderFilter.Line line : HeaderFilter.lines(text)) {
+            if (offset >= line.from() && offset <= line.to()) {
+                return line.name();
+            }
+        }
+        return null;
     }
 }

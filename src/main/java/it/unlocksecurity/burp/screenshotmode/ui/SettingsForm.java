@@ -1,16 +1,24 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
-import it.unlocksecurity.burp.screenshotmode.model.HeaderHideTarget;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
+import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
+import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
+import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
+import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
+import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -18,8 +26,9 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -30,8 +39,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.UIManager;
 
 /**
  * Editors for every screenshot setting, mutating the given {@link Settings} in place, in three tabs ordered by how
@@ -48,27 +57,116 @@ final class SettingsForm extends JPanel {
     private final Runnable onChange;
     private final Font mono;
     private final JTabbedPane tabs = new JTabbedPane();
-    private final JLabel rulesCount = badge();
-    private final JLabel headersCount = badge();
-    private boolean updatingHeaders;
+    private final Badge rulesCount = new Badge();
+    private final Badge headersCount = new Badge();
+    private final RuleList.Expansion expansion = new RuleList.Expansion();
+    private RuleList<HighlightRule> highlightList;
+    private RuleList<RedactionRule> redactionList;
+    private final HeadersTab headers;
+    /** Above the rules after a jump from the Headers tab, with the way back. */
+    private final JPanel notice = new JPanel(new BorderLayout(8, 0)) {
+        @Override
+        public java.awt.Color getBackground() {
+            // Resolved at paint time, so it follows Burp's theme switches.
+            return Widgets.themeColor("Table.selectionBackground", new java.awt.Color(0xcadaf0));
+        }
+    };
+    private final JLabel noticeText = new JLabel();
+    private int failedRules;
+    /** The built-in template the settings are based on, and what Restore defaults does in the Rules tab. */
+    private final JLabel rulesBasis = Widgets.hint("");
+    private final JButton restoreRules = Widgets.button("Restore defaults…");
+    private final JLabel appearanceBasis = Widgets.hint("");
+    private final JButton restoreAppearance = Widgets.button("Restore defaults");
+    private Chooser chooser = (title, message, action, safe) -> Widgets.choose(this, title, message, action, safe);
+
+    /** Asks a two-option question, as {@link Widgets#choose}; replaced in tests. */
+    interface Chooser {
+        String choose(String title, String message, String action, String safe);
+    }
+
+    private static final String ADD_MISSING = "Add missing defaults";
+    private static final String REPLACE = "Replace with defaults";
 
     SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide) {
+        this(settings, onChange, mono, wide, null);
+    }
+
+    /** @param message the headers of the message on screen, or {@code null} in the template editor */
+    SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide, HeadersTab.InMessage message) {
         super(new BorderLayout());
         this.settings = settings;
         this.mono = mono;
         this.onChange = () -> {
             updateCounts();
+            updateRestore();
             onChange.run();
         };
         setOpaque(false);
 
-        tabs.addTab("Rules", scrollable(rulesTab(wide)));
-        tabs.addTab("Headers", headersTab());
-        tabs.addTab("Appearance", scrollable(appearanceTab()));
+        restoreRules.addActionListener(event -> restoreRules());
+        restoreAppearance.addActionListener(event -> restoreAppearance());
+        tabs.addTab("Rules", withFooter(scrollable(rulesTab(wide)), rulesBasis, restoreRules));
+        headers = new HeadersTab(
+            settings,
+            HeaderCatalogFile.bundled(),
+            message,
+            this.onChange,
+            new HeadersTab.Links() {
+                @Override
+                public void create(Rule rule, String text) {
+                    if (rule instanceof HighlightRule highlight) {
+                        highlightList.addFirst(highlight);
+                    } else {
+                        redactionList.addFirst((RedactionRule) rule);
+                    }
+                    showRule(rule);
+                    showNotice(text);
+                }
+
+                @Override
+                public void open(Rule rule, String text) {
+                    showRule(rule);
+                    showNotice(text);
+                }
+            }
+        );
+        tabs.addTab("Headers", headers);
+        tabs.addTab("Appearance", appearancePanel());
         tabs.setTabComponentAt(RULES, tabTitle("Rules", rulesCount));
         tabs.setTabComponentAt(HEADERS, tabTitle("Headers", headersCount));
         updateCounts();
+        updateRestore();
         add(tabs, BorderLayout.CENTER);
+        // The notice is about the jump that just happened: leaving the Rules tab ends it.
+        tabs.addChangeListener(event -> {
+            if (tabs.getSelectedIndex() != RULES) {
+                notice.setVisible(false);
+            }
+        });
+    }
+
+    HeadersTab headersTab() {
+        return headers;
+    }
+
+    JPanel notice() {
+        return notice;
+    }
+
+    JLabel noticeText() {
+        return noticeText;
+    }
+
+    /** Takes what the rules changed in the header lines of the message on screen. */
+    void showHeaderHits(Map<RuleTarget, Map<String, java.util.Set<Rule>>> hits) {
+        headers.showHits(hits);
+    }
+
+    private void showNotice(String text) {
+        noticeText.setText(text);
+        notice.setVisible(true);
+        notice.revalidate();
     }
 
     JTabbedPane tabs() {
@@ -76,157 +174,361 @@ final class SettingsForm extends JPanel {
     }
 
     private void updateCounts() {
-        rulesCount.setText(String.valueOf(settings.highlights.size() + settings.redactions.size()));
-        int headers =
-            settings.headersToHide.both.size() +
-            settings.headersToHide.request.size() +
-            settings.headersToHide.response.size();
-        headersCount.setText(String.valueOf(headers));
+        // A failed rule turns the count into a warning, so it shows whichever tab is open.
+        rulesCount.warn = failedRules > 0;
+        rulesCount.setText(
+            failedRules > 0
+                ? "⚠ " + failedRules
+                : String.valueOf(settings.highlights.size() + settings.redactions.size())
+        );
+        rulesCount.repaint();
+        headersCount.setText(headers.hiddenCount() + " hidden");
     }
 
     private JComponent rulesTab(boolean wide) {
-        JPanel highlights = RuleCards.section(
+        HeaderCatalog catalog = HeaderCatalogFile.bundled();
+        highlightList = new RuleList<>(
             "Highlights",
-            null,
             "No highlights yet. Add one with + or right-click selected text in the preview.",
             settings.highlights,
-            () -> HighlightRule.create("", RuleTarget.REQUEST, MatchMode.REGEX),
-            (rule, change, delete) -> RuleCards.highlightCard(rule, change, delete, mono),
-            onChange
+            type ->
+                type == RuleType.HEADER
+                    ? HighlightRule.forHeaders(List.of())
+                    : HighlightRule.create("", RuleTarget.REQUEST, MatchMode.REGEX),
+            (rule, fields) -> RuleList.highlightEditor(rule, fields, catalog),
+            expansion,
+            onChange,
+            mono
         );
-        JPanel redactions = RuleCards.section(
+        redactionList = new RuleList<>(
             "Redactions",
-            null,
             "No redactions yet. Add one with + or right-click selected text in the preview.",
             settings.redactions,
-            () -> RedactionRule.create("", RuleTarget.REQUEST, RedactionMode.BLUR, MatchMode.REGEX),
-            (rule, change, delete) -> RuleCards.redactionCard(rule, change, delete, mono),
-            onChange
+            // Replace, like right-click › Redact: blur and opaque only hide the text on screen.
+            type ->
+                type == RuleType.HEADER
+                    ? RedactionRule.forHeaders(List.of(), RedactionMode.REPLACE)
+                    : RedactionRule.create("", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX),
+            (rule, fields) -> RuleList.redactionEditor(rule, fields, catalog),
+            expansion,
+            onChange,
+            mono
         );
+        buildNotice();
         if (wide) {
             JPanel columns = new JPanel(new GridLayout(1, 2, 24, 0));
             columns.setOpaque(false);
-            columns.add(highlights);
-            columns.add(redactions);
-            return columns;
+            columns.add(highlightList);
+            columns.add(redactionList);
+            JPanel wideTab = new JPanel(new BorderLayout(0, 16));
+            wideTab.setOpaque(false);
+            wideTab.add(notice, BorderLayout.NORTH);
+            wideTab.add(columns, BorderLayout.CENTER);
+            return wideTab;
         }
         Widgets.Stack stack = new Widgets.Stack(20, false);
-        stack.addItem(highlights);
-        stack.addItem(redactions);
+        stack.addItem(notice());
+        stack.addItem(highlightList);
+        stack.addItem(redactionList);
         return stack;
     }
 
-    /** One list per target, picked with "Hide in"; each option shows how many headers its list hides. */
-    private JComponent headersTab() {
-        JTextArea text = new JTextArea(12, 20);
-        text.setFont(mono);
-        HeaderHideTarget[] target = { HeaderHideTarget.BOTH };
-        Runnable load = () -> {
-            updatingHeaders = true;
-            text.setText(String.join("\n", settings.headersToHide.get(target[0])));
-            text.setCaretPosition(0);
-            updatingHeaders = false;
-        };
-        SegmentedControl<HeaderHideTarget> picker = new SegmentedControl<>(
-            HeaderHideTarget.values(),
-            target[0],
-            this::headerListLabel,
-            value -> {
-                target[0] = value;
-                load.run();
-            }
-        );
-        picker.setToolTipText("Which list to edit: headers hidden in both messages, or only in one of them");
-        Runnable relabelPicker = () -> {
-            for (HeaderHideTarget value : HeaderHideTarget.values()) {
-                picker.setLabel(value, headerListLabel(value));
-            }
-        };
-        load.run();
-        Widgets.onTextChange(text, value -> {
-            if (updatingHeaders) {
-                return;
-            }
-            List<String> headers = Arrays.stream(value.split("\n"))
-                .map(String::trim)
-                .filter(header -> !header.isEmpty())
-                .toList();
-            settings.headersToHide.set(target[0], headers);
-            relabelPicker.run();
-            onChange.run();
+    /** "‹ Back to Headers" returns to the header the user came from, still selected there. */
+    private void buildNotice() {
+        JButton back = Widgets.button("‹ Back to Headers");
+        back.putClientProperty("JButton.buttonType", "borderless");
+        back.addActionListener(event -> {
+            tabs.setSelectedIndex(HEADERS);
+            headers.table().requestFocusInWindow();
         });
+        notice.setOpaque(true);
+        notice.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 6));
+        // The link moves under the text when the sidebar is too narrow for both.
+        notice.add(Widgets.row(noticeText, back), BorderLayout.CENTER);
+        notice.setVisible(false);
+    }
 
-        JButton restore = Widgets.button("Restore defaults");
+    RuleList<HighlightRule> highlightList() {
+        return highlightList;
+    }
+
+    RuleList<RedactionRule> redactionList() {
+        return redactionList;
+    }
+
+    /** Opens a rule in its list, closing the open one. */
+    void expand(Rule rule) {
+        expansion.open(rule);
+    }
+
+    /** Switches to the Rules tab and opens a rule, with the focus in what it matches. */
+    void showRule(Rule rule) {
+        tabs.setSelectedIndex(RULES);
+        for (RuleList<?> list : List.of(highlightList, redactionList)) {
+            if (list.contains(rule)) {
+                list.reveal(rule);
+            }
+        }
+    }
+
+    /**
+     * Shows on each rule what it did in the screenshot: its matches, or why it did not fully apply. Rules without a
+     * status (as in the template editor, which renders no message) show none.
+     */
+    void showRuleStatuses(Map<Object, RuleStatus> statuses) {
+        highlightList.showStatuses(statuses);
+        redactionList.showStatuses(statuses);
+        failedRules = (int) Stream.concat(settings.highlights.stream(), settings.redactions.stream())
+            .filter(rule -> rule.enabled)
+            .map(statuses::get)
+            .filter(status -> status != null && status.failed())
+            .count();
+        updateCounts();
+        revalidate();
+        repaint();
+    }
+
+    static String describe(RuleStatus status) {
+        if (status.problem() == RuleStatus.Problem.INVALID) {
+            return "⚠ Not applied: invalid regex" + (status.detail() == null ? "" : " (" + status.detail() + ")");
+        }
+        if (status.problem() == RuleStatus.Problem.STOPPED) {
+            return "⚠ Partly applied: matching stopped early, the pattern is too slow for this message";
+        }
+        return switch (status.matches()) {
+            case 0 -> "No matches";
+            case 1 -> "1 match";
+            default -> status.matches() + " matches";
+        };
+    }
+
+    /** The built-in template the settings are based on: a new copy, free to edit. */
+    private Template parent() {
+        return BuiltInTemplates.byId(settings.basedOn);
+    }
+
+    /** A tab's content with, pinned below it, which built-in template it follows and its Restore defaults. */
+    private static JComponent withFooter(JComponent content, JLabel basis, JButton restore) {
         restore.putClientProperty("JButton.buttonType", "borderless");
-        restore.setToolTipText("Replace all three lists with the default list of noisy headers");
-        restore.addActionListener(event -> {
-            settings.headersToHide = Settings.defaults().headersToHide;
-            load.run();
-            relabelPicker.run();
-            onChange.run();
-        });
-
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        top.setOpaque(false);
-        top.add(Widgets.title("Hide in"));
-        top.add(picker);
-
-        // Wraps the button under the hint when the sidebar is narrow, instead of cutting the hint.
-        JPanel bottom = Widgets.row(Widgets.hint("One header per line. Prefix with ! to always show it."), restore);
-
-        JPanel panel = new JPanel(new BorderLayout(0, 10));
+        JPanel footer = new JPanel(new BorderLayout(8, 0));
+        footer.setOpaque(false);
+        footer.setBorder(BorderFactory.createEmptyBorder(6, 14, 8, 8));
+        footer.add(basis, BorderLayout.CENTER);
+        footer.add(restore, BorderLayout.EAST);
+        JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
-        panel.setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
-        panel.add(top, BorderLayout.NORTH);
-        panel.add(new JScrollPane(text), BorderLayout.CENTER);
-        panel.add(bottom, BorderLayout.SOUTH);
+        panel.add(content, BorderLayout.CENTER);
+        panel.add(footer, BorderLayout.SOUTH);
         return panel;
     }
 
-    private String headerListLabel(HeaderHideTarget target) {
-        return target.label() + " " + settings.headersToHide.get(target).size();
+    private JComponent appearancePanel() {
+        return withFooter(scrollable(appearanceTab()), appearanceBasis, restoreAppearance);
+    }
+
+    /** Says what Restore defaults would change in the Rules and Appearance tabs, and enables it only if anything. */
+    private void updateRestore() {
+        Template parent = parent();
+        int total = parent.settings.highlights.size() + parent.settings.redactions.size();
+        int missing = missingRules(parent.settings);
+        rulesBasis.setText(
+            "Based on " +
+                parent.name +
+                " · " +
+                (total == 0
+                    ? "no rules"
+                    : missing == 0
+                      ? "no rules missing"
+                      : missing == 1
+                        ? "1 rule missing"
+                        : missing + " rules missing")
+        );
+        Settings same = settings.copy();
+        same.highlights = parent.settings.highlights;
+        same.redactions = parent.settings.redactions;
+        restoreRules.setEnabled(!TemplateCodec.sameSettings(settings, same));
+        restoreRules.setToolTipText("Add back the rules of " + parent.name + ", or replace yours with them");
+
+        int changes = settings.appearanceChanges(parent.settings);
+        appearanceBasis.setText(
+            "Based on " +
+                parent.name +
+                " · " +
+                (changes == 0 ? "no changes" : changes == 1 ? "1 change" : changes + " changes")
+        );
+        restoreAppearance.setEnabled(changes > 0);
+        restoreAppearance.setToolTipText("Use the appearance of " + parent.name + " again");
+    }
+
+    private int missingRules(Settings parent) {
+        return (
+            Settings.missing(settings.highlights, parent.highlights).size() +
+            Settings.missing(settings.redactions, parent.redactions).size()
+        );
+    }
+
+    /**
+     * Adds back the built-in template's rules that are missing, or replaces all the rules with its own, as the user
+     * chooses. Adding deletes nothing, so it is the default when anything is missing.
+     */
+    private void restoreRules() {
+        Template parent = parent();
+        List<HighlightRule> highlights = Settings.missing(settings.highlights, parent.settings.highlights);
+        List<RedactionRule> redactions = Settings.missing(settings.redactions, parent.settings.redactions);
+        int missing = highlights.size() + redactions.size();
+        int total = parent.settings.highlights.size() + parent.settings.redactions.size();
+        String name = "\"" + parent.name + "\"";
+        String choice;
+        if (missing > 0) {
+            choice = chooser.choose(
+                "Restore Defaults",
+                (missing == 1 ? "1 rule of " + name + " is" : missing + " rules of " + name + " are") +
+                    " missing from this template.\nAdd " +
+                    (missing == 1 ? "it" : "them") +
+                    " back, or replace all your rules with the " +
+                    (total == 1 ? "rule" : total + " rules") +
+                    " of " +
+                    name +
+                    "?",
+                REPLACE,
+                ADD_MISSING
+            );
+        } else {
+            choice = chooser.choose(
+                "Restore Defaults",
+                total == 0
+                    ? name + " has no rules: replacing removes all your rules."
+                    : "Replace your rules with the " +
+                          (total == 1 ? "rule" : total + " rules") +
+                          " of " +
+                          name +
+                          "?\nYour own rules and your changes to the default ones will be lost.",
+                REPLACE,
+                "Cancel"
+            );
+        }
+        if (ADD_MISSING.equals(choice)) {
+            settings.highlights.addAll(highlights);
+            settings.redactions.addAll(redactions);
+        } else if (REPLACE.equals(choice)) {
+            settings.highlights.clear();
+            settings.highlights.addAll(parent.settings.highlights);
+            settings.redactions.clear();
+            settings.redactions.addAll(parent.settings.redactions);
+        } else {
+            return;
+        }
+        highlightList.reload();
+        redactionList.reload();
+        onChange.run();
+    }
+
+    /** Takes the built-in template's appearance again, after asking. */
+    private void restoreAppearance() {
+        Template parent = parent();
+        int changes = settings.appearanceChanges(parent.settings);
+        String question =
+            "Use the appearance of \"" +
+            parent.name +
+            "\" again?\nYour " +
+            (changes == 1 ? "change" : changes + " changes") +
+            " to width, layout, theme, URL bar, body and footer will be lost.";
+        if (!"Restore".equals(chooser.choose("Restore Defaults", question, "Restore", "Cancel"))) {
+            return;
+        }
+        settings.copyAppearance(parent.settings);
+        // The controls show the settings they were built with: build them again.
+        int selected = tabs.getSelectedIndex();
+        tabs.setComponentAt(APPEARANCE, appearancePanel());
+        tabs.setSelectedIndex(selected);
+        onChange.run();
+    }
+
+    /** Replaces the Restore defaults dialogs, for tests. */
+    void setChooser(Chooser chooser) {
+        this.chooser = chooser;
+    }
+
+    JButton restoreRulesButton() {
+        return restoreRules;
+    }
+
+    JButton restoreAppearanceButton() {
+        return restoreAppearance;
+    }
+
+    JLabel rulesBasis() {
+        return rulesBasis;
+    }
+
+    JLabel appearanceBasis() {
+        return appearanceBasis;
     }
 
     /** Settings that change how the screenshot looks, as a label / control grid. */
+    /**
+     * Two groups in one grid, so their labels share a column: how the image looks, then what it shows, in the order
+     * it appears in the screenshot.
+     */
     private JComponent appearanceTab() {
         JPanel grid = new JPanel(new GridBagLayout());
         grid.setOpaque(false);
         int row = 0;
 
+        addHeading(grid, row++, "Image");
+        addRow(grid, row++, "Width", widthControl(), "Width of the captured image", true);
+
         SegmentedControl<Disposition> layout = Widgets.segmented(Disposition.values(), settings.disposition, value -> {
             settings.disposition = value;
             onChange.run();
         });
-        addRow(grid, row++, "Layout", layout, "Request and response side by side, or one above the other");
-
-        SegmentedControl<ViewMode> view = Widgets.segmented(ViewMode.values(), settings.view, value -> {
-            settings.view = value;
-            onChange.run();
-        });
-        addRow(grid, row++, "Body", view, "Pretty prints JSON, XML and HTML bodies");
-
-        addRow(grid, row++, "Width", widthControl(), "Width of the captured image");
+        addRow(grid, row++, "Layout", layout, "Request and response side by side, or one above the other", false);
 
         SegmentedControl<ThemeMode> theme = Widgets.segmented(ThemeMode.values(), settings.theme, value -> {
             settings.theme = value;
             onChange.run();
         });
-        addRow(grid, row++, "Theme", theme, "Colors of the screenshot");
+        addRow(grid, row++, "Theme", theme, "Colors of the screenshot", false);
 
-        addRow(grid, row, "Footer", footerControl(), "Metadata shown below the messages");
+        addHeading(grid, row++, "Content");
+        SegmentedControl<UrlMode> url = Widgets.segmented(UrlMode.values(), settings.url, value -> {
+            settings.url = value;
+            onChange.run();
+        });
+        addRow(grid, row++, "URL bar", url, null, true);
+
+        SegmentedControl<ViewMode> view = Widgets.segmented(ViewMode.values(), settings.view, value -> {
+            settings.view = value;
+            onChange.run();
+        });
+        addRow(grid, row++, "Body", view, "Pretty prints JSON, XML and HTML bodies", false);
+
+        addRow(grid, row, "Footer", footerControl(), "Metadata shown below the messages", false);
 
         Widgets.Stack stack = new Widgets.Stack(0, false);
         stack.addItem(grid);
         return stack;
     }
 
-    private static void addRow(JPanel grid, int row, String label, JComponent control, String tooltip) {
+    /** A group title across both columns, like the section titles of the Rules tab. */
+    private static void addHeading(JPanel grid, int row, String text) {
+        GridBagConstraints at = new GridBagConstraints();
+        at.gridx = 0;
+        at.gridy = row;
+        at.gridwidth = 2;
+        at.anchor = GridBagConstraints.LINE_START;
+        at.insets = new Insets(row == 0 ? 0 : 20, 0, 0, 0);
+        grid.add(Widgets.title(text), at);
+    }
+
+    private static void addRow(JPanel grid, int row, String label, JComponent control, String tooltip, boolean first) {
+        int top = first ? 8 : 12;
         GridBagConstraints labelAt = new GridBagConstraints();
         labelAt.gridx = 0;
         labelAt.gridy = row;
         labelAt.anchor = GridBagConstraints.LINE_START;
-        labelAt.insets = new Insets(row == 0 ? 0 : 12, 0, 0, 16);
-        JLabel title = Widgets.title(label);
+        labelAt.insets = new Insets(top, 0, 0, 16);
+        JLabel title = new JLabel(label);
         title.setToolTipText(tooltip);
         title.setLabelFor(control);
         grid.add(title, labelAt);
@@ -236,7 +538,7 @@ final class SettingsForm extends JPanel {
         controlAt.gridy = row;
         controlAt.weightx = 1;
         controlAt.anchor = GridBagConstraints.LINE_START;
-        controlAt.insets = new Insets(row == 0 ? 0 : 12, 0, 0, 0);
+        controlAt.insets = new Insets(top, 0, 0, 0);
         control.setToolTipText(tooltip);
         grid.add(control, controlAt);
     }
@@ -315,24 +617,33 @@ final class SettingsForm extends JPanel {
         return panel;
     }
 
-    /** A neutral count pill for tab titles. */
-    private static JLabel badge() {
-        JLabel label = new JLabel() {
-            @Override
-            protected void paintComponent(java.awt.Graphics graphics) {
-                java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
-                g.setRenderingHint(
-                    java.awt.RenderingHints.KEY_ANTIALIASING,
-                    java.awt.RenderingHints.VALUE_ANTIALIAS_ON
-                );
-                g.setColor(Widgets.themeColor("Colors.palette.mono.3", new java.awt.Color(0xe6e6e6)));
-                g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
-                g.dispose();
-                super.paintComponent(graphics);
-            }
-        };
-        label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 2));
-        label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
-        return label;
+    /** A count pill for tab titles: neutral, or in the theme's warning tones (like the "Modified" chip). */
+    private static final class Badge extends JLabel {
+
+        boolean warn;
+
+        Badge() {
+            setFont(getFont().deriveFont(Font.BOLD, getFont().getSize2D() - 2));
+            setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+        }
+
+        @Override
+        protected void paintComponent(java.awt.Graphics graphics) {
+            java.awt.Graphics2D g = (java.awt.Graphics2D) graphics.create();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(
+                warn
+                    ? Widgets.themeColor("Colors.palette.warning.7", new java.awt.Color(0xf3e2c9))
+                    : Widgets.themeColor("Colors.palette.mono.3", new java.awt.Color(0xe6e6e6))
+            );
+            g.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            g.dispose();
+            setForeground(
+                warn
+                    ? Widgets.themeColor("Colors.palette.warning.2", new java.awt.Color(0x976a14))
+                    : UIManager.getColor("Label.foreground")
+            );
+            super.paintComponent(graphics);
+        }
     }
 }

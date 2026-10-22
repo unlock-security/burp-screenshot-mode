@@ -1,0 +1,241 @@
+{
+  "version": 3,
+  "templates": [
+    {
+      "id": "built-in-defaults",
+      "name": "Defaults",
+      "settings": {
+        "headers": {
+          "groups": {
+            "caching": "hide",
+            "client-hints": "hide",
+            "fetch": "hide",
+            "general": "hide",
+            "infrastructure": "hide",
+            "negotiation": "hide",
+            "privacy": "hide",
+            "reporting": "hide"
+          },
+          "headers": {}
+        },
+        "disposition": "horizontal",
+        "width": {
+          "mode": "full"
+        },
+        "highlights": [],
+        "redactions": [
+          {
+            "id": "default-redaction-1",
+            "name": "Authorization credentials",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request"
+              ],
+              "regex": "(?<=\\n)(?i:(?:Proxy-)?Authorization): (?:(?<AuthScheme>\\S+) )?(?<AuthParameters>.+)",
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
+              "groups": [
+                2
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-2",
+            "name": "Cookie values",
+            "enabled": true,
+            "match": {
+              "type": "header",
+              "headers": [
+                "Cookie"
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[OMITTED]"
+          },
+          {
+            "id": "default-redaction-3",
+            "name": "Set-Cookie values",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "response"
+              ],
+              "regex": "(?<=\\n)(?i:Set-Cookie): [^=;\\n]+=(?<Value>[^;\\n]*)",
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
+              "groups": [
+                1
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-4",
+            "name": "User-Agent",
+            "enabled": true,
+            "match": {
+              "type": "header",
+              "headers": [
+                "User-Agent"
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[OMITTED]"
+          },
+          {
+            "id": "default-redaction-5",
+            "name": "API key headers",
+            "enabled": true,
+            "match": {
+              "type": "header",
+              "headers": [
+                "X-Api-Key",
+                "Api-Key",
+                "X-Auth-Token",
+                "X-Access-Token",
+                "X-Amz-Security-Token"
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-6",
+            "name": "Secrets in query string",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request",
+                "url"
+              ],
+              "regex": "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
+              "groups": [
+                1
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-7",
+            "name": "Passwords and secrets in JSON requests",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request"
+              ],
+              "regex": "\"(?i:password|passwd|pwd|secret|client_secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
+              "groups": [
+                1
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-8",
+            "name": "Passwords in form data",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request"
+              ],
+              "regex": "(?<=[&\\n])(?i:password|passwd|pwd|client_secret)=(?<Value>[^&\\n]*)",
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
+              "groups": [
+                1
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-9",
+            "name": "Tokens in JSON responses",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "response"
+              ],
+              "regex": "\"(?i:access_token|refresh_token|id_token|token|session_?id|api_?key|secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false,
+              "groups": [
+                1
+              ]
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          },
+          {
+            "id": "default-redaction-10",
+            "name": "JSON Web Tokens",
+            "enabled": true,
+            "match": {
+              "type": "pattern",
+              "targets": [
+                "request",
+                "response",
+                "url"
+              ],
+              "regex": "eyJ[\\w-]+\\.eyJ[\\w-]+\\.[\\w-]*",
+              "matchMode": "regex",
+              "matchCase": true,
+              "wholeWord": false
+            },
+            "mode": "replace",
+            "replacementText": "[REDACTED]"
+          }
+        ],
+        "showTimestamp": false,
+        "showResponseInfo": true,
+        "theme": "auto",
+        "view": "raw",
+        "url": "full"
+      }
+    },
+    {
+      "id": "built-in-empty",
+      "name": "Empty",
+      "settings": {
+        "headers": {
+          "groups": {},
+          "headers": {}
+        },
+        "disposition": "horizontal",
+        "width": {
+          "mode": "full"
+        },
+        "highlights": [],
+        "redactions": [],
+        "showTimestamp": false,
+        "showResponseInfo": true,
+        "theme": "auto",
+        "view": "raw",
+        "url": "full"
+      }
+    }
+  ],
+  "defaultTemplateId": "built-in-defaults"
+}

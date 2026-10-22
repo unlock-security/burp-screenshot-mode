@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
 
-/** Port of the Caido plugin's headers.spec.ts. */
 class HeaderFilterTest {
 
     private static final String RAW_REQUEST = String.join(
@@ -21,82 +23,49 @@ class HeaderFilterTest {
         "body content"
     );
 
-    @Test
-    void returnsRawUnchangedWhenNoRules() {
-        assertEquals(RAW_REQUEST, HeaderFilter.filter(RAW_REQUEST, List.of()));
+    private static Predicate<String> hiding(String... names) {
+        Set<String> hidden = Set.of(names);
+        return name -> hidden.contains(name.toLowerCase(Locale.ROOT));
     }
 
     @Test
-    void hidesASingleHeader() {
-        String result = HeaderFilter.filter(RAW_REQUEST, List.of("Accept"));
+    void returnsTheTextUnchangedWhenNothingIsHidden() {
+        assertEquals(RAW_REQUEST, HeaderFilter.filter(RAW_REQUEST, name -> false));
+    }
+
+    @Test
+    void hidesTheHeadersThePredicateAccepts() {
+        String result = HeaderFilter.filter(RAW_REQUEST, hiding("accept", "x-custom"));
+        assertFalse(result.contains("Accept:"));
+        assertFalse(result.contains("X-Custom:"));
         assertTrue(result.contains("Host: example.com"));
-        assertFalse(result.contains("Accept: text/html"));
         assertTrue(result.contains("Content-Type: application/json"));
     }
 
     @Test
-    void hidesMultipleHeaders() {
-        String result = HeaderFilter.filter(RAW_REQUEST, List.of("Accept", "X-Custom"));
-        assertFalse(result.contains("Accept: text/html"));
-        assertFalse(result.contains("X-Custom: value"));
-        assertTrue(result.contains("Host: example.com"));
+    void neverHidesTheStartLineOrTheBody() {
+        String text = "GET / HTTP/1.1\nAccept: */*\n\nAccept: not a header";
+        assertEquals(
+            "GET / HTTP/1.1\n\nAccept: not a header",
+            HeaderFilter.filter(text, hiding("accept", "get / http/1.1"))
+        );
     }
 
     @Test
-    void isCaseInsensitive() {
-        String result = HeaderFilter.filter(RAW_REQUEST, List.of("accept", "HOST"));
-        assertFalse(result.contains("Accept: text/html"));
-        assertFalse(result.contains("Host: example.com"));
-        assertTrue(result.contains("Content-Type: application/json"));
+    void keepsLinesWithoutAName() {
+        assertEquals("GET / HTTP/1.1\n: odd", HeaderFilter.filter("GET / HTTP/1.1\n: odd", name -> true));
     }
 
     @Test
-    void preservesTheRequestLine() {
-        assertTrue(HeaderFilter.filter(RAW_REQUEST, List.of("Host", "Accept")).contains("GET / HTTP/1.1"));
+    void listsHeaderNamesOnceInOrder() {
+        String text = "HTTP/2 200\nset-cookie: a=1\ncontent-type: text/html\nSet-Cookie: b=2\n\nx: body";
+        assertEquals(List.of("set-cookie", "content-type"), HeaderFilter.names(text));
     }
 
     @Test
-    void preservesTheBody() {
-        assertTrue(HeaderFilter.filter(RAW_REQUEST, List.of("Host", "Accept")).contains("body content"));
-    }
-
-    @Test
-    void showsAHeaderWithBangPrefixEvenWithoutHideRules() {
-        String result = HeaderFilter.filter(RAW_REQUEST, List.of("!Accept"));
-        assertTrue(result.contains("Accept: text/html"));
-        assertTrue(result.contains("Host: example.com"));
-    }
-
-    @Test
-    void bangPrefixOverridesAHideRuleForTheSameHeader() {
-        assertTrue(HeaderFilter.filter(RAW_REQUEST, List.of("Accept", "!Accept")).contains("Accept: text/html"));
-    }
-
-    @Test
-    void hidesSomeAndShowsOthersWithMixedRules() {
-        String result = HeaderFilter.filter(RAW_REQUEST, List.of("Accept", "Content-Type", "!Content-Type"));
-        assertFalse(result.contains("Accept: text/html"));
-        assertTrue(result.contains("Content-Type: application/json"));
-        assertTrue(result.contains("Host: example.com"));
-    }
-
-    @Test
-    void doesNotAffectBodyContentEvenIfItLooksLikeAHeader() {
-        String raw = String.join("\n", "GET / HTTP/1.1", "Host: example.com", "", "Accept: should-stay");
-        String result = HeaderFilter.filter(raw, List.of("Accept"));
-        assertTrue(result.contains("Accept: should-stay"));
-    }
-
-    @Test
-    void keepsLineStructureExactly() {
-        String result = HeaderFilter.filter(RAW_REQUEST, List.of("Accept", "X-Custom"));
-        assertEquals("GET / HTTP/1.1\nHost: example.com\nContent-Type: application/json\n\nbody content", result);
-    }
-
-    @Test
-    void normalizesCrlfFromBurpMessages() {
-        byte[] raw = "GET / HTTP/1.1\r\nAccept: */*\r\n\r\nline1\r\nline2".getBytes();
-        String text = MessageText.fromBytes(raw);
-        assertEquals("GET / HTTP/1.1\n\nline1\nline2", HeaderFilter.filter(text, List.of("Accept")));
+    void listsNoNamesWithoutHeaders() {
+        assertEquals(List.of(), HeaderFilter.names(""));
+        assertEquals(List.of(), HeaderFilter.names("GET / HTTP/1.1"));
+        assertEquals(List.of(), HeaderFilter.names("GET / HTTP/1.1\n\nbody: x"));
     }
 }

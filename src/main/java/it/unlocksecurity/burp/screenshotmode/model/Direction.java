@@ -1,6 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.model;
 
-public enum HeaderHideTarget implements Labeled {
+/** Which messages a header is used in. */
+public enum Direction implements Labeled {
     BOTH("both", "Both"),
     REQUEST("request", "Request"),
     RESPONSE("response", "Response");
@@ -8,7 +9,7 @@ public enum HeaderHideTarget implements Labeled {
     private final String id;
     private final String label;
 
-    HeaderHideTarget(String id, String label) {
+    Direction(String id, String label) {
         this.id = id;
         this.label = label;
     }

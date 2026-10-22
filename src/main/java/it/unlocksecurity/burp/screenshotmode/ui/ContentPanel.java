@@ -1,16 +1,21 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
+import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
-import it.unlocksecurity.burp.screenshotmode.render.PrettyPrinter;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
+import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
+import it.unlocksecurity.burp.screenshotmode.render.pretty.PrettyPrinter;
+import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
@@ -19,12 +24,22 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.EnumMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 import javax.swing.BorderFactory;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
@@ -38,7 +53,8 @@ final class ContentPanel extends JPanel {
     private final JPanel urlHeader = new JPanel(new BorderLayout(10, 0));
     private final JLabel urlLabel = new JLabel("URL");
     private final RoundedPanel urlBox = new RoundedPanel(new BorderLayout());
-    private final JTextArea url = new JTextArea();
+    /** No extra line spacing, like the single-line bar it replaces. */
+    private final MessageView url = new MessageView(0);
     private final MessagePane requestPane = new MessagePane("Request", RuleTarget.REQUEST);
     private final MessagePane responsePane = new MessagePane("Response", RuleTarget.RESPONSE);
     private final PlainSplitPane split = new PlainSplitPane(requestPane, responsePane);
@@ -49,16 +65,33 @@ final class ContentPanel extends JPanel {
     private double splitRatio = 0.5;
     private boolean applyingRatio;
     private DoubleConsumer splitRatioListener = ratio -> {};
+    private Consumer<String> errorListener = message -> {};
+    private MessagePane.SelectionListener selectionListener = (action, text, target) -> {};
+    /** What each rule did in the last render, keyed by the rule object itself. */
+    private final Map<Object, RuleStatus> ruleStatuses = new IdentityHashMap<>();
+    /** The rules that changed each header line, by message and header name (ignoring case). */
+    private final Map<RuleTarget, Map<String, Set<Rule>>> headerHits = new EnumMap<>(RuleTarget.class);
 
     ContentPanel() {
         super(new BorderLayout());
 
-        url.setEditable(false);
-        url.setLineWrap(true);
-        url.setWrapStyleWord(false);
-        url.setOpaque(false);
-        url.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        // The view is opaque (blur paints it offscreen), so it sits inside the rounded box rather than covering it.
+        url.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        urlBox.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
         urlBox.add(url, BorderLayout.CENTER);
+        url.addMouseListener(
+            new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    MessagePane.showSelectionMenu(e, url, RuleTarget.URL, selectionListener);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    MessagePane.showSelectionMenu(e, url, RuleTarget.URL, selectionListener);
+                }
+            }
+        );
         JPanel labelHolder = new JPanel(new BorderLayout());
         labelHolder.setOpaque(false);
         labelHolder.add(urlLabel, BorderLayout.NORTH);
@@ -82,7 +115,9 @@ final class ContentPanel extends JPanel {
 
         split.setResizeWeight(splitRatio);
         split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, event -> {
-            if (!applyingRatio && split.getDividerLocation() > 0) {
+            // The split pane moves the divider itself while sharing out a change of size, rounding as it goes:
+            // only a move by the user changes the ratio, or "Fit to content" would leave a pane 1px short.
+            if (!applyingRatio && !split.layingOut && split.getDividerLocation() > 0) {
                 int total = splitTotal();
                 if (total > 0) {
                     splitRatio = Math.max(0.1, Math.min(0.9, split.getDividerLocation() / (double) total));
@@ -106,12 +141,18 @@ final class ContentPanel extends JPanel {
     }
 
     void setSelectionListener(MessagePane.SelectionListener listener) {
+        selectionListener = listener;
         requestPane.setSelectionListener(listener);
         responsePane.setSelectionListener(listener);
     }
 
     void setSplitRatioListener(DoubleConsumer listener) {
         this.splitRatioListener = listener;
+    }
+
+    /** Receives errors that did not stop the rendering, such as a body the pretty printer failed on. */
+    void setErrorListener(Consumer<String> listener) {
+        this.errorListener = listener;
     }
 
     void setSplitRatio(double ratio) {
@@ -135,6 +176,8 @@ final class ContentPanel extends JPanel {
     ) {
         setBorder(BorderFactory.createLineBorder(palette.border()));
         setBackground(palette.background());
+        ruleStatuses.clear();
+        headerHits.clear();
 
         urlHeader.setBackground(palette.headerBackground());
         urlHeader.setBorder(
@@ -146,9 +189,20 @@ final class ContentPanel extends JPanel {
         urlLabel.setFont(ui.deriveFont(Font.BOLD, ui.getSize2D() - 2));
         urlLabel.setForeground(palette.muted());
         urlBox.setBackground(palette.codeBackground());
-        url.setFont(mono);
-        url.setForeground(palette.text());
-        url.setText(data.url());
+        urlHeader.setVisible(settings.url != UrlMode.HIDDEN);
+        urlLabel.setText(settings.url == UrlMode.PATH ? "Path" : "URL");
+        Decorated decoratedUrl = decorate(
+            data.url() == null ? "" : data.url(),
+            RuleTarget.URL,
+            settings,
+            (rule, from, to) -> {}
+        );
+        if (settings.url == UrlMode.PATH) {
+            // Cut after the rules ran, so only already redacted text can show: rules match the same in both modes.
+            decoratedUrl = decoratedUrl.from(pathStart(decoratedUrl.text()));
+        }
+        url.render(decoratedUrl, List.of(), palette, mono);
+        url.setBackground(palette.codeBackground());
 
         renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
         renderPane(responsePane, data.responseText(), RuleTarget.RESPONSE, settings, palette, mono, ui);
@@ -182,7 +236,7 @@ final class ContentPanel extends JPanel {
         repaint();
     }
 
-    private static void renderPane(
+    private void renderPane(
         MessagePane pane,
         String raw,
         RuleTarget target,
@@ -194,30 +248,102 @@ final class ContentPanel extends JPanel {
         String text = raw == null ? "" : raw;
         // Before the header filter, which may hide the Content-Type the pretty printer relies on.
         if (settings.view == ViewMode.PRETTY) {
-            text = PrettyPrinter.format(text);
+            try {
+                text = PrettyPrinter.format(text);
+            } catch (RuntimeException | StackOverflowError e) {
+                // The pretty printers accept any input, so this is a bug: show the raw message rather than nothing.
+                errorListener.accept("Could not pretty print the " + target.id() + ", showing it raw: " + e);
+            }
         }
-        String filtered = HeaderFilter.filter(text, settings.headersToHide.rulesFor(target));
-        Decorated decorated = RuleEngine.apply(
-            filtered,
-            settings.highlights
-                .stream()
-                .filter(rule -> rule.target == target)
-                .toList(),
-            settings.redactions
-                .stream()
-                .filter(rule -> rule.target == target)
-                .toList()
+        HeaderCatalog catalog = HeaderCatalogFile.bundled();
+        String filtered = HeaderFilter.filter(text, name -> settings.headers.hides(name, target, catalog));
+        List<HeaderFilter.Line> lines = HeaderFilter.lines(filtered);
+        Map<String, Set<Rule>> hits = headerHits.computeIfAbsent(target, side ->
+            new TreeMap<>(String.CASE_INSENSITIVE_ORDER)
         );
+        Decorated decorated = decorate(filtered, target, settings, (rule, from, to) -> {
+            for (HeaderFilter.Line line : lines) {
+                if (from < line.to() && line.from() < to) {
+                    hits.computeIfAbsent(line.name(), name -> new HashSet<>()).add(rule);
+                }
+            }
+        });
         pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
     }
 
+    /** Where the path starts in a URL: after the scheme, host and port, at the first "/", "?" or "#". */
+    static int pathStart(String url) {
+        int scheme = url.indexOf("://");
+        if (scheme < 0) {
+            return 0;
+        }
+        for (int i = scheme + 3; i < url.length(); i++) {
+            char c = url.charAt(i);
+            if (c == '/' || c == '?' || c == '#') {
+                return i;
+            }
+        }
+        return url.length();
+    }
+
+    /** Applies the highlight and redaction rules meant for {@code target}, recording what each one did. */
+    private Decorated decorate(String text, RuleTarget target, Settings settings, RuleEngine.HitListener hits) {
+        return RuleEngine.apply(
+            text,
+            settings.highlights
+                .stream()
+                .filter(rule -> rule.appliesTo(target))
+                .toList(),
+            settings.redactions
+                .stream()
+                .filter(rule -> rule.appliesTo(target))
+                .toList(),
+            // A rule can apply to several parts (a header rule to both messages): add up what it did in each.
+            (rule, status) -> ruleStatuses.merge(rule, status, ContentPanel::combine),
+            hits
+        );
+    }
+
+    private static RuleStatus combine(RuleStatus a, RuleStatus b) {
+        return new RuleStatus(
+            a.matches() + b.matches(),
+            a.problem() != null ? a.problem() : b.problem(),
+            a.detail() != null ? a.detail() : b.detail()
+        );
+    }
+
+    /** What each highlight and redaction rule did in the last {@link #render}, keyed by the rule itself. */
+    Map<Object, RuleStatus> ruleStatuses() {
+        return ruleStatuses;
+    }
+
+    /** The rules that changed each header line in the last {@link #render}, by message and header name. */
+    Map<RuleTarget, Map<String, Set<Rule>>> headerHits() {
+        return headerHits;
+    }
+
     void setCaptureMode(boolean capturing) {
+        if (capturing) {
+            url.select(0, 0);
+        }
         requestPane.setCaptureMode(capturing);
         responsePane.setCaptureMode(capturing);
     }
 
     boolean isSideBySide() {
         return split.getOrientation() == JSplitPane.HORIZONTAL_SPLIT;
+    }
+
+    MessageView urlView() {
+        return url;
+    }
+
+    JComponent urlBar() {
+        return urlHeader;
+    }
+
+    JLabel urlLabel() {
+        return urlLabel;
     }
 
     MessagePane requestPane() {
@@ -250,6 +376,7 @@ final class ContentPanel extends JPanel {
     private static final class PlainSplitPane extends JSplitPane {
 
         private Color dividerColor = Color.GRAY;
+        private boolean layingOut;
 
         PlainSplitPane(MessagePane left, MessagePane right) {
             super(JSplitPane.HORIZONTAL_SPLIT, left, right);
@@ -261,6 +388,16 @@ final class ContentPanel extends JPanel {
         void setDividerColor(Color color) {
             dividerColor = color;
             repaint();
+        }
+
+        @Override
+        public void doLayout() {
+            layingOut = true;
+            try {
+                super.doLayout();
+            } finally {
+                layingOut = false;
+            }
         }
 
         @Override
