@@ -145,7 +145,7 @@ migrates v2, v1 and unversioned v0 payloads; the same codec handles template imp
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules
 there (in Defaults), never change the built-in ids, and update the file whenever `VERSION` changes
 (`BuiltInTemplatesTest` fails otherwise). Optional settings fields
-(`theme`, `view`, `url`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
+(`theme`, `view`, `url`, `height`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
 none, with the stored headers taken as the template's own. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced
