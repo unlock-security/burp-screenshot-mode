@@ -668,24 +668,7 @@ final class ScreenshotDialog extends JDialog {
         chooser.setDialogTitle("Save Screenshot");
         chooser.setFileFilter(new FileNameExtensionFilter("PNG images", "png"));
         chooser.setSelectedFile(new File(chooser.getCurrentDirectory(), FILE_NAME.format(LocalDateTime.now())));
-        while (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File file = chooser.getSelectedFile();
-            if (!file.getName().toLowerCase().endsWith(".png")) {
-                file = new File(file.getParentFile(), file.getName() + ".png");
-            }
-            if (
-                !file.exists() ||
-                JOptionPane.showConfirmDialog(
-                    this,
-                    file.getName() + " already exists. Replace it?",
-                    "Save Screenshot",
-                    JOptionPane.YES_NO_OPTION
-                ) == JOptionPane.YES_OPTION
-            ) {
-                return file;
-            }
-        }
-        return null;
+        return Widgets.chooseSaveFile(this, chooser, "png");
     }
 
     /** Shows the outcome of an action. A success clears after a few seconds; an error stays until the next status. */

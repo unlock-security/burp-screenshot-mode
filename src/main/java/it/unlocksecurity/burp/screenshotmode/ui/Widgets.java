@@ -27,6 +27,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -40,6 +41,7 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -375,6 +377,40 @@ final class Widgets {
         dialog.setVisible(true);
         dialog.dispose();
         return pane.getValue() == act ? action : pane.getValue() == keep ? safe : null;
+    }
+
+    /**
+     * Asks where to save a file, adding {@code extension} when the name lacks it. Before replacing a file that exists it
+     * asks, with Cancel as the safe choice, which goes back to the chooser to pick another name.
+     *
+     * @return the file to write, or {@code null} if the user cancelled
+     */
+    static File chooseSaveFile(Component parent, JFileChooser chooser, String extension) {
+        while (chooser.showSaveDialog(parent) == JFileChooser.APPROVE_OPTION) {
+            File file = chooser.getSelectedFile();
+            if (
+                !file
+                    .getName()
+                    .toLowerCase()
+                    .endsWith("." + extension)
+            ) {
+                file = new File(file.getParentFile(), file.getName() + "." + extension);
+            }
+            if (
+                !file.exists() ||
+                confirm(
+                    parent,
+                    chooser.getDialogTitle(),
+                    "\"" + file.getName() + "\" already exists. Replace it?",
+                    "Replace",
+                    "Cancel"
+                )
+            ) {
+                return file;
+            }
+            chooser.setSelectedFile(file);
+        }
+        return null;
     }
 
     /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */

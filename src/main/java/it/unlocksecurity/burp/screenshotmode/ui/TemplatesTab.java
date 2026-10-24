@@ -638,12 +638,9 @@ public final class TemplatesTab extends JPanel {
         chooser.setDialogTitle(title);
         chooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
         chooser.setSelectedFile(new File(defaultName));
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+        File file = Widgets.chooseSaveFile(this, chooser, "json");
+        if (file == null) {
             return null;
-        }
-        File file = chooser.getSelectedFile();
-        if (!file.getName().toLowerCase().endsWith(".json")) {
-            file = new File(file.getParentFile(), file.getName() + ".json");
         }
         try {
             Files.writeString(file.toPath(), json, StandardCharsets.UTF_8);
