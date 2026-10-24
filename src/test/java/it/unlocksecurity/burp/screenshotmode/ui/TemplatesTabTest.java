@@ -202,6 +202,27 @@ class TemplatesTabTest {
     }
 
     @Test
+    void wrapsTheToolbarRatherThanHidingButtons() throws Exception {
+        TemplateStore store = store();
+        for (int width : new int[] { 1024, 800 }) {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            tab.setSize(width, 500);
+            WrapLayoutTest.layOut(tab);
+            for (String name : List.of(
+                "Edit",
+                "Duplicate",
+                "Set as default",
+                "Delete",
+                "Import…",
+                "Export…",
+                "New template"
+            )) {
+                assertTrue(WrapLayoutTest.inView(button(tab, name), tab), name + " in view at " + width + " px");
+            }
+        }
+    }
+
+    @Test
     void builtInTemplatesCanOnlyBeDuplicatedOrMadeDefault() throws Exception {
         TemplateStore store = store();
         SwingUtilities.invokeAndWait(() -> {

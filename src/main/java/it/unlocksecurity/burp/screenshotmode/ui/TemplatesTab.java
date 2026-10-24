@@ -25,6 +25,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -128,15 +129,12 @@ public final class TemplatesTab extends JPanel {
 
         // Actions on the selected template together, Delete set apart from them, file actions and the primary
         // action on the right.
-        JPanel selection = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        // They wrap to a second row in a narrow tab instead of disappearing; the right-hand group never moves.
+        JPanel selection = new JPanel(new WrapLayout(6, 4));
         selection.add(search);
-        selection.add(Widgets.separator());
-        selection.add(edit);
-        selection.add(duplicate);
-        selection.add(setDefault);
-        selection.add(Widgets.separator());
-        selection.add(delete);
-        JPanel global = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        selection.add(group(Widgets.separator(), edit, duplicate, setDefault));
+        selection.add(group(Widgets.separator(), delete));
+        JPanel global = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         global.add(importButton);
         global.add(exportButton);
         global.add(create);
@@ -171,9 +169,9 @@ public final class TemplatesTab extends JPanel {
             }
         );
 
-        JPanel top = new JPanel(new BorderLayout(0, 10));
+        JPanel top = new JPanel(new BorderLayout(0, 6));
         top.add(header, BorderLayout.NORTH);
-        JPanel actions = new JPanel(new BorderLayout(0, 6));
+        JPanel actions = new JPanel(new BorderLayout(0, 2));
         actions.add(toolbar, BorderLayout.NORTH);
         actions.add(builtInHint, BorderLayout.CENTER);
         top.add(actions, BorderLayout.CENTER);
@@ -190,6 +188,19 @@ public final class TemplatesTab extends JPanel {
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
         panel.add(status, BorderLayout.SOUTH);
         return panel;
+    }
+
+    /** Buttons that wrap to the next row together, so a group is never split. */
+    private static JPanel group(JComponent... components) {
+        // No gaps at the ends: the toolbar's already sit around the group.
+        JPanel group = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        for (JComponent component : components) {
+            if (group.getComponentCount() > 0) {
+                group.add(Box.createHorizontalStrut(6));
+            }
+            group.add(component);
+        }
+        return group;
     }
 
     /** What the editor does with the template it is opened on. */
@@ -287,7 +298,8 @@ public final class TemplatesTab extends JPanel {
         back.setToolTipText("Back to the templates list");
         back.getAccessibleContext().setAccessibleName("Back to templates");
         back.addActionListener(event -> leave.run());
-        JPanel heading = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        // Wraps rather than hiding the Unsaved chip behind a long name.
+        JPanel heading = new JPanel(new WrapLayout(4, 0));
         heading.add(back);
         heading.add(Widgets.hint("›"));
         heading.add(title);

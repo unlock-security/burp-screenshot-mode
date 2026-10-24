@@ -23,11 +23,15 @@ import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.LayoutManager;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -707,10 +711,44 @@ final class SettingsForm extends JPanel {
         controlAt.gridx = 1;
         controlAt.gridy = row;
         controlAt.weightx = 1;
+        controlAt.fill = GridBagConstraints.HORIZONTAL;
         controlAt.anchor = GridBagConstraints.LINE_START;
         controlAt.insets = new Insets(top, 0, 0, 0);
         control.setToolTipText(tooltip);
-        grid.add(control, controlAt);
+        JPanel cell = new JPanel(new FitWidth());
+        cell.setOpaque(false);
+        cell.add(control);
+        grid.add(cell, controlAt);
+    }
+
+    /**
+     * Lays out one component at the left, as wide as it prefers or as the cell, whichever is less. A grid too narrow for
+     * its controls (large fonts) gives each one its minimum width; in a cell that fills the column, a control that wraps
+     * (a segmented control, a row of checkboxes) wraps only as much as it must.
+     */
+    private static final class FitWidth implements LayoutManager {
+
+        @Override
+        public void addLayoutComponent(String name, Component component) {}
+
+        @Override
+        public void removeLayoutComponent(Component component) {}
+
+        @Override
+        public Dimension preferredLayoutSize(Container parent) {
+            return parent.getComponent(0).getPreferredSize();
+        }
+
+        @Override
+        public Dimension minimumLayoutSize(Container parent) {
+            return parent.getComponent(0).getMinimumSize();
+        }
+
+        @Override
+        public void layoutContainer(Container parent) {
+            Component child = parent.getComponent(0);
+            child.setBounds(0, 0, Math.min(child.getPreferredSize().width, parent.getWidth()), parent.getHeight());
+        }
     }
 
     private JComponent widthControl() {
@@ -807,9 +845,12 @@ final class SettingsForm extends JPanel {
         return flush(timestamp, responseInfo);
     }
 
-    /** A row whose first component starts exactly at the left edge, aligned with the rest of the grid. */
+    /**
+     * A row whose first component starts exactly at the left edge, aligned with the rest of the grid. It wraps when the
+     * sidebar is too narrow (large fonts), rather than hiding what doesn't fit.
+     */
     private static JPanel flush(JComponent... components) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel row = new JPanel(new WrapLayout(0, 0, true));
         row.setOpaque(false);
         for (JComponent component : components) {
             if (row.getComponentCount() > 0) {

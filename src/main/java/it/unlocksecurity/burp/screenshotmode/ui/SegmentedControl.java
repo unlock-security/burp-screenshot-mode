@@ -3,7 +3,6 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.FlowLayout;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
@@ -43,7 +42,8 @@ final class SegmentedControl<E> extends JPanel {
     }
 
     SegmentedControl(E[] values, E selected, Function<E, String> label, Consumer<E> onChange) {
-        super(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // Wraps an option that doesn't fit to a second row, inside the outline, rather than hiding it (large fonts).
+        super(new WrapLayout(0, 0, true));
         this.values = List.of(values);
         this.onChange = onChange;
         this.selected = Math.max(0, this.values.indexOf(selected));

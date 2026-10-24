@@ -115,6 +115,14 @@ final class ScreenshotDialog extends JDialog {
         JPanel root = new JPanel(new BorderLayout());
         root.add(buildTopBar(), BorderLayout.NORTH);
         root.add(main, BorderLayout.CENTER);
+        // The outcome of the last action, in a strip of its own: in the top bar, a long message pushed buttons out.
+        status.setBorder(
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, Widgets.borderColor()),
+                BorderFactory.createEmptyBorder(4, 12, 4, 12)
+            )
+        );
+        root.add(status, BorderLayout.SOUTH);
         setContentPane(root);
         getRootPane().registerKeyboardAction(
             event -> dispose(),
@@ -249,7 +257,8 @@ final class ScreenshotDialog extends JDialog {
 
         JLabel templateLabel = new JLabel("Template");
         templateLabel.setLabelFor(templateCombo);
-        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        // The template actions wrap to a second row when the window is narrow, instead of disappearing.
+        JPanel left = new JPanel(new WrapLayout(6, 4));
         left.add(templateLabel);
         left.add(templateCombo);
         left.add(modified);
@@ -257,8 +266,8 @@ final class ScreenshotDialog extends JDialog {
         left.add(update);
         left.add(saveAs);
 
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        right.add(status);
+        // Always on the first row, whatever the width.
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         right.add(save);
         right.add(copy);
 
@@ -268,7 +277,8 @@ final class ScreenshotDialog extends JDialog {
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
-                BorderFactory.createEmptyBorder(8, 8, 8, 8)
+                // With the layouts' 4 px gaps above and below the buttons, 8 px as before.
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)
             )
         );
         return bar;
