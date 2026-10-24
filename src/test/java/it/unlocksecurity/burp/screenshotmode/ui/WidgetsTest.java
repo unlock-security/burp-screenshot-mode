@@ -130,17 +130,20 @@ class WidgetsTest {
     }
 
     @Test
-    void wrapsHintsToTheWidthTheyAreGiven() {
-        String text = "No highlights yet. Add one with + or right-click selected text in the preview.";
-        JTextArea hint = Widgets.wrappingHint(text, 260);
-        assertEquals(text, hint.getText());
-        assertTrue(hint.getPreferredSize().width <= 260, "never widens its column");
+    void wrapsHintsToTheWidthTheyAreGiven() throws Exception {
+        // On the event thread: the hint measures itself there too when resized, and the two would race.
+        SwingUtilities.invokeAndWait(() -> {
+            String text = "No highlights yet. Add one with + or right-click selected text in the preview.";
+            JTextArea hint = Widgets.wrappingHint(text, 260);
+            assertEquals(text, hint.getText());
+            assertTrue(hint.getPreferredSize().width <= 260, "never widens its column");
 
-        int lineHeight = hint.getFontMetrics(hint.getFont()).getHeight();
-        hint.setSize(2000, 500);
-        assertEquals(1, hint.getPreferredSize().height / lineHeight, "one line when there is room");
-        hint.setSize(150, 500);
-        assertTrue(hint.getPreferredSize().height / lineHeight > 1, "wraps when narrow");
+            int lineHeight = hint.getFontMetrics(hint.getFont()).getHeight();
+            hint.setSize(2000, 500);
+            assertEquals(1, hint.getPreferredSize().height / lineHeight, "one line when there is room");
+            hint.setSize(150, 500);
+            assertTrue(hint.getPreferredSize().height / lineHeight > 1, "wraps when narrow");
+        });
     }
 
     /** Burp shows the markup of {@code <html>} labels instead of rendering it. */
