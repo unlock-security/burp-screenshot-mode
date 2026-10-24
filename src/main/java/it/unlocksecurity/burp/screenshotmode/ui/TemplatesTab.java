@@ -163,18 +163,21 @@ public final class TemplatesTab extends JPanel {
 
         // Actions on the selected template together, Delete set apart from them, file actions and the primary
         // action on the right.
-        // They wrap to a second row in a narrow tab instead of disappearing; the right-hand group never moves.
-        JPanel selection = new JPanel(new WrapLayout(6, 4));
+        // In a narrow tab the right-hand group moves to a row of its own, and every group wraps rather than lose a
+        // button.
+        JPanel selection = new JPanel(new WrapLayout(6, 4, true));
         selection.add(search);
         selection.add(group(Widgets.separator(), edit, duplicate, setDefault));
         selection.add(group(Widgets.separator(), delete));
-        JPanel global = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
+        WrapLayout globalLayout = new WrapLayout(6, 4, true);
+        globalLayout.setAlignment(FlowLayout.RIGHT);
+        JPanel global = new JPanel(globalLayout);
         global.add(importButton);
         global.add(exportButton);
         global.add(create);
-        JPanel toolbar = new JPanel(new BorderLayout(12, 0));
-        toolbar.add(selection, BorderLayout.CENTER);
-        toolbar.add(global, BorderLayout.EAST);
+        JPanel toolbar = new JPanel(new ToolbarLayout(selection, global));
+        toolbar.add(selection);
+        toolbar.add(global);
 
         table.setRowSorter(sorter);
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
@@ -231,8 +234,8 @@ public final class TemplatesTab extends JPanel {
 
     /** Buttons that wrap to the next row together, so a group is never split. */
     private static JPanel group(JComponent... components) {
-        // No gaps at the ends: the toolbar's already sit around the group.
-        JPanel group = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // No gaps at the ends: the toolbar's already sit around the group. Wraps only when the tab is too narrow for it.
+        JPanel group = new JPanel(new WrapLayout(0, 0, true));
         for (JComponent component : components) {
             if (group.getComponentCount() > 0) {
                 group.add(Box.createHorizontalStrut(6));

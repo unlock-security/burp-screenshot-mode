@@ -28,6 +28,21 @@ class WrapLayoutTest {
     }
 
     @Test
+    void fitsAGroupWiderThanTheRowToItSoTheGroupWrapsInside() throws Exception {
+        JPanel row = new JPanel(new WrapLayout(0, 0, true));
+        JPanel group = panel(new WrapLayout(0, 0, true));
+        row.add(group);
+        JPanel column = new JPanel(new java.awt.BorderLayout());
+        column.add(row, java.awt.BorderLayout.NORTH);
+        column.setSize(250, 200);
+        layOut(column);
+        assertEquals(250, group.getWidth(), "the row's width, not its own 300");
+        for (java.awt.Component box : group.getComponents()) {
+            assertEquals(true, inView(box, column), "wrapped inside the group");
+        }
+    }
+
+    @Test
     void asksForANewLayoutWhenItsRowsNeedAnotherHeight() throws Exception {
         JPanel parent = new JPanel(null);
         JPanel panel = panel(new WrapLayout(0, 0));

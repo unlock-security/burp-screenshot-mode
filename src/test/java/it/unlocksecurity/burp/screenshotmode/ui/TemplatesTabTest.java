@@ -204,10 +204,14 @@ class TemplatesTabTest {
     @Test
     void wrapsTheToolbarRatherThanHidingButtons() throws Exception {
         TemplateStore store = store();
-        for (int width : new int[] { 1024, 800 }) {
+        for (int width : new int[] { 1024, 800, 640, 400 }) {
             TemplatesTab tab = new TemplatesTab(store, host());
             tab.setSize(width, 500);
             WrapLayoutTest.layOut(tab);
+            JTextField search = find(tab, JTextField.class, field ->
+                "Search templates...".equals(placeholder(field))
+            ).get();
+            assertTrue(WrapLayoutTest.inView(search, tab), "search in view at " + width + " px");
             for (String name : List.of(
                 "Edit",
                 "Duplicate",

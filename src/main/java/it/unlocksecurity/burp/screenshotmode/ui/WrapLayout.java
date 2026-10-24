@@ -37,6 +37,15 @@ final class WrapLayout extends FlowLayout {
     @Override
     public void layoutContainer(Container target) {
         super.layoutContainer(target);
+        // A component wider than a row would be cut off: give it the row's width instead, so one that wraps, such as
+        // a group of buttons, wraps inside it. It already sits on a row of its own.
+        Insets insets = target.getInsets();
+        int rowWidth = target.getWidth() - insets.left - insets.right - getHgap() * 2;
+        for (Component component : target.getComponents()) {
+            if (component.isVisible() && rowWidth > 0 && component.getWidth() > rowWidth) {
+                component.setBounds(insets.left + getHgap(), component.getY(), rowWidth, component.getHeight());
+            }
+        }
         int height = preferredLayoutSize(target).height;
         if (height == target.getHeight()) {
             requestedHeight = -1;
