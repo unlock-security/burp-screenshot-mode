@@ -3,10 +3,14 @@ package it.unlocksecurity.burp.screenshotmode.storage;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * The built-in templates followed by the user's own, which are the only ones stored. Templates handed out are the
@@ -73,6 +77,11 @@ public final class TemplateStore {
         return List.copyOf(all);
     }
 
+    /** The user's own templates, in the order they were created: the ones an export can hold. */
+    public List<Template> userTemplates() {
+        return List.copyOf(templates);
+    }
+
     public String defaultTemplateId() {
         return defaultTemplateId;
     }
@@ -91,8 +100,12 @@ public final class TemplateStore {
 
     /** The first of "name (word)", "name (word 2)", ... that no template has. */
     public String freeName(String name, String word) {
+        return freeName(name, word, candidate -> templateNamed(candidate).isPresent());
+    }
+
+    private static String freeName(String name, String word, Predicate<String> taken) {
         String candidate = name.strip() + " (" + word + ")";
-        for (int i = 2; templateNamed(candidate).isPresent(); i++) {
+        for (int i = 2; taken.test(candidate); i++) {
             candidate = name.strip() + " (" + word + " " + i + ")";
         }
         return candidate;
@@ -181,22 +194,35 @@ public final class TemplateStore {
     public record Imported(int count, List<Rename> renamed) {}
 
     /**
-     * Appends the templates from an exported file (any supported version). One whose name is taken, also by another
-     * template of the same file, is renamed "name (imported)": nothing is overwritten.
-     *
-     * @throws IllegalArgumentException if the content is not a supported template export.
+     * The names {@link #importTemplates} would give these templates: a name that is taken, also by an earlier one of
+     * them, becomes "name (imported)", so nothing is overwritten.
      */
-    public Imported importTemplates(String json) {
-        List<Template> imported = TemplateCodec.decode(json).data().templates();
-        List<Rename> renamed = new ArrayList<>();
+    public List<String> importNames(List<Template> imported) {
+        Set<String> taken = new HashSet<>();
+        Predicate<String> isTaken = name -> templateNamed(name).isPresent() || taken.contains(key(name));
+        List<String> names = new ArrayList<>();
         for (Template template : imported) {
-            Template copy = TemplateCodec.withNewId(template);
-            if (templateNamed(copy.name).isPresent()) {
-                String name = freeName(copy.name, "imported");
-                renamed.add(new Rename(copy.name, name));
-                copy = new Template(copy.id, name, copy.settings);
+            String name = isTaken.test(template.name) ? freeName(template.name, "imported", isTaken) : template.name;
+            taken.add(key(name));
+            names.add(name);
+        }
+        return names;
+    }
+
+    private static String key(String name) {
+        return name.strip().toLowerCase(Locale.ROOT);
+    }
+
+    /** Adds copies of templates read from an export, named as {@link #importNames} says. */
+    public Imported importTemplates(List<Template> imported) {
+        List<String> names = importNames(imported);
+        List<Rename> renamed = new ArrayList<>();
+        for (int i = 0; i < imported.size(); i++) {
+            Template copy = TemplateCodec.withNewId(imported.get(i));
+            if (!names.get(i).equals(copy.name)) {
+                renamed.add(new Rename(copy.name, names.get(i)));
             }
-            templates.add(copy);
+            templates.add(new Template(copy.id, names.get(i), copy.settings));
         }
         if (!imported.isEmpty()) {
             persistAndNotify();
@@ -204,9 +230,18 @@ public final class TemplateStore {
         return new Imported(imported.size(), List.copyOf(renamed));
     }
 
-    /** The user's templates, as an export: the built-in ones ship with every installation. */
-    public String exportJson() {
-        return TemplateCodec.encode(new StoredData(templates, defaultTemplateId));
+    /**
+     * The templates of an exported file (any supported version).
+     *
+     * @throws IllegalArgumentException if the content is not a supported template export.
+     */
+    public static List<Template> readExport(String json) {
+        return TemplateCodec.decode(json).data().templates();
+    }
+
+    /** These templates as an export. The built-in ones ship with every installation: leave them out. */
+    public String exportJson(List<Template> exported) {
+        return TemplateCodec.encode(new StoredData(exported, defaultTemplateId));
     }
 
     public void addListener(Runnable listener) {

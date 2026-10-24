@@ -18,6 +18,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
@@ -39,6 +41,7 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.OverlayLayout;
 import javax.swing.RowFilter;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -72,6 +75,7 @@ public final class TemplatesTab extends JPanel {
     private final JButton delete = Widgets.button("Delete");
     /** Why Edit and Delete are off when a built-in template is selected; a space keeps its line. */
     private final JLabel builtInHint = Widgets.hint(" ");
+    private final JLabel noMatch = Widgets.hint("");
     private final JButton exportButton = Widgets.button("Export…");
     /** The editor's "Based on" choice, while a new template is being edited. */
     private JComboBox<Template> basedOn;
@@ -103,13 +107,15 @@ public final class TemplatesTab extends JPanel {
         Widgets.placeholder(search, "Search templates...");
         Widgets.searchField(search);
         search.getAccessibleContext().setAccessibleName("Search templates");
-        Widgets.onTextChange(search, query ->
+        Widgets.onTextChange(search, query -> {
             sorter.setRowFilter(
                 query.isBlank()
                     ? null
                     : RowFilter.regexFilter("(?i)" + Pattern.quote(query.trim()), TemplateTableModel.NAME)
-            )
-        );
+            );
+            noMatch.setText("No templates match \"" + query.trim() + "\"");
+            noMatch.setVisible(table.getRowCount() == 0);
+        });
 
         JButton create = Widgets.primary(Widgets.button("New template"));
         create.setToolTipText("Create a template starting from a built-in one");
@@ -127,7 +133,9 @@ public final class TemplatesTab extends JPanel {
         importButton.setToolTipText("Add templates from a JSON export");
         importButton.addActionListener(event -> importTemplates());
         exportButton.addActionListener(event -> exportTemplates());
-        exportButton.setToolTipText("Save your templates to a JSON file (built-in ones are not included)");
+        exportButton.setToolTipText(
+            "Save some or all of your templates to a JSON file (built-in ones are not included)"
+        );
 
         // Actions on the selected template together, Delete set apart from them, file actions and the primary
         // action on the right.
@@ -187,7 +195,7 @@ public final class TemplatesTab extends JPanel {
         JPanel panel = new JPanel(new BorderLayout(0, 10));
         panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 12, 16));
         panel.add(top, BorderLayout.NORTH);
-        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        panel.add(tableArea(), BorderLayout.CENTER);
         panel.add(status, BorderLayout.SOUTH);
         return panel;
     }
@@ -485,6 +493,27 @@ public final class TemplatesTab extends JPanel {
         cards.show(this, EDITOR);
     }
 
+    /** The table, with "No templates match" over it when the search hides every row. */
+    private JComponent tableArea() {
+        JPanel area = new JPanel() {
+            @Override
+            public boolean isOptimizedDrawingEnabled() {
+                // The message overlaps the table: paint both whenever either repaints.
+                return false;
+            }
+        };
+        area.setLayout(new OverlayLayout(area));
+        JScrollPane scroll = new JScrollPane(table);
+        noMatch.setVisible(false);
+        noMatch.setAlignmentX(0.5f);
+        noMatch.setAlignmentY(0.5f);
+        scroll.setAlignmentX(0.5f);
+        scroll.setAlignmentY(0.5f);
+        area.add(noMatch);
+        area.add(scroll);
+        return area;
+    }
+
     private void showList() {
         cards.show(this, LIST);
         editorHolder.removeAll();
@@ -495,7 +524,8 @@ public final class TemplatesTab extends JPanel {
             .map(template -> template.id)
             .orElse(null);
         model.setTemplates(store.templates(), store.defaultTemplateId());
-        exportButton.setEnabled(customTemplates() > 0);
+        exportButton.setEnabled(!store.userTemplates().isEmpty());
+        noMatch.setVisible(table.getRowCount() == 0);
         if (selectedId != null) {
             for (int row = 0; row < model.getRowCount(); row++) {
                 if (model.template(row).id.equals(selectedId)) {
@@ -535,14 +565,6 @@ public final class TemplatesTab extends JPanel {
         delete.setToolTipText(builtInReason);
     }
 
-    private long customTemplates() {
-        return store
-            .templates()
-            .stream()
-            .filter(template -> !template.builtIn)
-            .count();
-    }
-
     private void makeDefault(Template template) {
         if (store.setDefaultTemplate(template.id)) {
             showStatus("\"" + template.name + "\" is now the default template", false);
@@ -569,11 +591,10 @@ public final class TemplatesTab extends JPanel {
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
             return;
         }
+        File file = chooser.getSelectedFile();
+        List<Template> templates;
         try {
-            TemplateStore.Imported imported = store.importTemplates(
-                Files.readString(chooser.getSelectedFile().toPath(), StandardCharsets.UTF_8)
-            );
-            showStatus(importStatus(imported), false);
+            templates = TemplateStore.readExport(Files.readString(file.toPath(), StandardCharsets.UTF_8));
         } catch (IOException | IllegalArgumentException e) {
             JOptionPane.showMessageDialog(
                 this,
@@ -581,7 +602,35 @@ public final class TemplatesTab extends JPanel {
                 "Import Templates",
                 JOptionPane.ERROR_MESSAGE
             );
+            return;
         }
+        if (templates.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "\"" + file.getName() + "\" has no templates.",
+                "Import Templates",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+        TemplatePicker picker = new TemplatePicker(
+            "Choose the templates to add from \"" + file.getName() + "\".",
+            templates,
+            chosen -> importNotes(chosen, store.importNames(chosen))
+        );
+        TemplatePicker.show(this, "Import Templates", "Import", picker).ifPresent(chosen ->
+            showStatus(importStatus(store.importTemplates(chosen)), false)
+        );
+    }
+
+    /** For each template to import, the name it is added as when its own is taken, or {@code null}. */
+    static List<String> importNotes(List<Template> templates, List<String> names) {
+        List<String> notes = new ArrayList<>();
+        for (int i = 0; i < templates.size(); i++) {
+            String name = names.get(i);
+            notes.add(name.equals(templates.get(i).name) ? null : "Name taken: added as \"" + name + "\"");
+        }
+        return notes;
     }
 
     /** How many templates were imported, and which were renamed because their name was taken. */
@@ -600,11 +649,20 @@ public final class TemplatesTab extends JPanel {
     }
 
     private void exportTemplates() {
-        File file = writeJson("Export Templates", "screenshot-mode-templates.json", store.exportJson());
-        if (file != null) {
-            long count = customTemplates();
-            showStatus("Exported " + count + " template" + (count == 1 ? "" : "s") + " to " + file.getName(), false);
-        }
+        List<Template> templates = store.userTemplates();
+        TemplatePicker picker = new TemplatePicker("Choose the templates to export.", templates, chosen ->
+            Collections.nCopies(chosen.size(), null)
+        );
+        TemplatePicker.show(this, "Export Templates", "Export…", picker).ifPresent(chosen -> {
+            File file = writeJson("Export Templates", "screenshot-mode-templates.json", store.exportJson(chosen));
+            if (file != null) {
+                int count = chosen.size();
+                showStatus(
+                    "Exported " + count + " template" + (count == 1 ? "" : "s") + " to " + file.getName(),
+                    false
+                );
+            }
+        });
     }
 
     /**

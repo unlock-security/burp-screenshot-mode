@@ -395,6 +395,36 @@ class TemplatesTabTest {
     }
 
     @Test
+    void notesTheNameEachImportedTemplateIsAddedAs() {
+        Template report = Template.create("Report", BuiltInTemplates.defaults());
+        Template other = Template.create("Other", BuiltInTemplates.defaults());
+        assertEquals(
+            java.util.Arrays.asList("Name taken: added as \"Report (imported)\"", null),
+            TemplatesTab.importNotes(List.of(report, other), List.of("Report (imported)", "Other"))
+        );
+    }
+
+    @Test
+    void saysWhenTheSearchMatchesNoTemplate() throws Exception {
+        TemplateStore store = store();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            JTextField search = find(tab, JTextField.class, field ->
+                "Search templates...".equals(placeholder(field))
+            ).get();
+            assertTrue(
+                find(tab, JLabel.class, label -> label.isVisible() && label.getText().startsWith("No ")).isEmpty()
+            );
+            search.setText("zzz");
+            JLabel noMatch = find(tab, JLabel.class, label -> label.getText().startsWith("No templates match")).get();
+            assertTrue(noMatch.isVisible());
+            assertEquals("No templates match \"zzz\"", noMatch.getText());
+            search.setText("def");
+            assertFalse(noMatch.isVisible());
+        });
+    }
+
+    @Test
     void searchIsAStandardSearchField() throws Exception {
         TemplateStore store = store();
         store.createTemplate("Report", null);

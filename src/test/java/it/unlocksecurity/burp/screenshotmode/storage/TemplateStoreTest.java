@@ -141,12 +141,12 @@ class TemplateStoreTest {
     @Test
     void importsExportedTemplatesWithFreshIds() {
         Template original = store.createTemplate("Report", null);
-        String exported = store.exportJson();
-        assertEquals(1, TemplateCodec.decode(exported).data().templates().size(), "built-in templates are left out");
-        assertEquals(1, store.importTemplates(exported).count());
+        assertEquals(List.of(original), store.userTemplates(), "built-in templates are left out");
+        String exported = store.exportJson(store.userTemplates());
+        assertEquals(1, store.importTemplates(TemplateStore.readExport(exported)).count());
         assertEquals(BuiltInTemplates.all().size() + 2, store.templates().size());
         assertNotEquals(original.id, store.templates().getLast().id);
-        assertThrows(IllegalArgumentException.class, () -> store.importTemplates("{\"nope\": true}"));
+        assertThrows(IllegalArgumentException.class, () -> TemplateStore.readExport("{\"nope\": true}"));
     }
 
     @Test
@@ -178,11 +178,17 @@ class TemplateStoreTest {
         store.createTemplate("Other", null);
         store.createTemplate("Mine", null);
         // A file with the same name twice ("Report", "report") and a built-in one's ("defaults").
-        String file = store.exportJson().replace("\"Other\"", "\"report\"").replace("\"Mine\"", "\"defaults\"");
+        String file = store
+            .exportJson(store.userTemplates())
+            .replace("\"Other\"", "\"report\"")
+            .replace("\"Mine\"", "\"defaults\"");
 
         TemplateStore fresh = new TemplateStore(new InMemory(), message -> {});
         fresh.initialize();
-        TemplateStore.Imported imported = fresh.importTemplates(file);
+        List<Template> read = TemplateStore.readExport(file);
+        assertEquals(List.of("Report", "report (imported)", "defaults (imported)"), fresh.importNames(read));
+        assertEquals(List.of("report"), fresh.importNames(read.subList(1, 2)), "free without the first one");
+        TemplateStore.Imported imported = fresh.importTemplates(read);
         assertEquals(3, imported.count());
         assertEquals(
             List.of(
@@ -193,7 +199,7 @@ class TemplateStoreTest {
         );
         assertEquals("Report", fresh.templates().get(BuiltInTemplates.all().size()).name, "a free name is kept");
 
-        imported = fresh.importTemplates(file);
+        imported = fresh.importTemplates(read);
         assertEquals("Report (imported 2)", imported.renamed().getFirst().to());
         assertEquals(3, imported.renamed().size());
         long distinct = fresh

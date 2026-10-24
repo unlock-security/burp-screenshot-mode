@@ -104,7 +104,9 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   default (★), and deleting the default one makes Defaults the default. Names are unique ignoring case and surrounding
   spaces, built-in names included (`TemplateStore.templateNamed`): create and rename refuse a taken name, the editor
   and Save as new… say so and disable saving (`TemplatesTab.nameProblem`), and import renames a clash to
-  "name (imported)" (`freeName`, also used for Duplicate's "name (copy)"). New templates start from a built-in one
+  "name (imported)" (`freeName`, also used for Duplicate's "name (copy)"). Import and export go through
+  `ui.TemplatePicker`, a checkbox list of the file's or the user's templates; for import it shows the names
+  `TemplateStore.importNames` would give the ticked ones, the same names `importTemplates` then uses. New templates start from a built-in one
   ("Based on" in the editor) or duplicate any template.
 - `Settings.basedOn` is that built-in **parent** (only built-in templates are parents; `null` is Empty, which hides
   nothing). In memory `Settings.headers` always holds the effective headers. `TemplateCodec` stores only
