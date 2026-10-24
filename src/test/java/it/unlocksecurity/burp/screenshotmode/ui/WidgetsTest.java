@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Font;
@@ -16,9 +18,41 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import org.junit.jupiter.api.Test;
 
 class WidgetsTest {
+
+    @Test
+    void keepsTextColorsReadableAndFollowsThemeSwitches() {
+        // Burp Dark: its disabled grey is too faint for hints (3.25:1).
+        String[] keys = { "Panel.background", "Label.foreground", "Label.disabledForeground", "Colors.ui.text.error" };
+        try {
+            UIManager.put("Panel.background", new Color(0x323334));
+            UIManager.put("Label.foreground", new Color(0xc5c7c8));
+            UIManager.put("Label.disabledForeground", new Color(0x818181));
+            UIManager.put("Colors.ui.text.error", new Color(0xee95a1));
+            Color background = new Color(0x323334);
+            assertTrue(Palette.contrast(Widgets.mutedColor(), background) >= 4.5);
+            assertEquals(
+                0xee95a1,
+                Widgets.errorColor().getRGB() & 0xffffff,
+                "the theme's own color when it is readable"
+            );
+
+            // Burp Light: the same color objects, as components keep them across a theme switch.
+            UIManager.put("Panel.background", new Color(0xfbfbfb));
+            UIManager.put("Label.foreground", new Color(0x2b2b2b));
+            UIManager.put("Label.disabledForeground", new Color(0x4b4b4b));
+            UIManager.put("Colors.ui.text.error", new Color(0xd6213f));
+            assertEquals(0x4b4b4b, Widgets.mutedColor().getRGB() & 0xffffff);
+            assertEquals(0xd6213f, Widgets.errorColor().getRGB() & 0xffffff);
+        } finally {
+            for (String key : keys) {
+                UIManager.put(key, null);
+            }
+        }
+    }
 
     @Test
     void clearsASearchFieldWithEscapeAndLetsEscapeThroughWhenEmpty() {

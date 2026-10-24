@@ -8,7 +8,6 @@ import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -55,7 +54,6 @@ public final class TemplatesTab extends JPanel {
 
     private static final String LIST = "list";
     private static final String EDITOR = "editor";
-    private static final Color SUCCESS = new Color(0x3fa45b);
 
     private final TemplateStore store;
     private final Host host;
@@ -618,10 +616,15 @@ public final class TemplatesTab extends JPanel {
         }
     }
 
+    /** Shows the outcome of an action. A success clears after a few seconds; an error stays until the next status. */
     private void showStatus(String message, boolean error) {
-        status.setForeground(error ? Widgets.errorColor() : SUCCESS);
+        status.setForeground(error ? Widgets.errorColor() : Widgets.successColor());
         status.setText(message);
-        statusTimer.restart();
+        if (error) {
+            statusTimer.stop();
+        } else {
+            statusTimer.restart();
+        }
     }
 
     /** A status that is neither a success nor an error. */

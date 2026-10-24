@@ -41,7 +41,7 @@ public record Palette(
         new Color(0x2b2e35),
         new Color(0x3d414b),
         new Color(0xe6e8ec),
-        new Color(0x8b909c),
+        new Color(0x9297a2),
         new Color(0x373b45),
         new Color(0xfbbf24),
         new Color(0x3f5a8a),
@@ -56,8 +56,8 @@ public record Palette(
         new Color(0xc792ea),
         new Color(0x82aaff),
         new Color(0xf2c55c),
-        new Color(0x7a8090),
-        new Color(0x6b7280),
+        new Color(0x888e9c),
+        new Color(0x888e9c),
         new Color(0x7fd1a0),
         new Color(0x82aaff),
         new Color(0xf2c55c),
@@ -72,7 +72,7 @@ public record Palette(
         new Color(0xf4f5f7),
         new Color(0xd7dae0),
         new Color(0x1f2328),
-        new Color(0x6e7781),
+        new Color(0x676f79),
         new Color(0xeaecef),
         new Color(0xb45309),
         new Color(0xb6d3ff),
@@ -87,8 +87,8 @@ public record Palette(
         new Color(0xcf222e),
         new Color(0x116329),
         new Color(0x953800),
-        new Color(0x6e7781),
-        new Color(0x6e7781),
+        new Color(0x676f79),
+        new Color(0x676f79),
         new Color(0x1a7f37),
         new Color(0x0550ae),
         new Color(0x9a6700),
@@ -97,6 +97,24 @@ public record Palette(
         new Color(0x000000),
         new Color(0xffffff)
     );
+
+    /** The WCAG 2 contrast ratio of two colors, from 1 to 21: text needs 4.5 (AA), graphics 3. */
+    public static double contrast(Color a, Color b) {
+        double la = luminance(a);
+        double lb = luminance(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    }
+
+    private static double luminance(Color color) {
+        return (
+            0.2126 * channel(color.getRed()) + 0.7152 * channel(color.getGreen()) + 0.0722 * channel(color.getBlue())
+        );
+    }
+
+    private static double channel(int value) {
+        double c = value / 255.0;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
 
     public Color forToken(HttpSyntax.TokenType type, String tokenText) {
         return switch (type) {

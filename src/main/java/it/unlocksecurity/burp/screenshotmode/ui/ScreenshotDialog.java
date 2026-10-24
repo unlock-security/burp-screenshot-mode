@@ -12,7 +12,6 @@ import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -57,7 +56,6 @@ final class ScreenshotDialog extends JDialog {
     private static final DateTimeFormatter FILE_NAME = DateTimeFormatter.ofPattern(
         "'screenshot-'yyyyMMdd-HHmmss'.png'"
     );
-    private static final Color SUCCESS = new Color(0x3fa45b);
     private static final int MENU_SHORTCUT = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
 
     private final Host host;
@@ -640,9 +638,14 @@ final class ScreenshotDialog extends JDialog {
         return null;
     }
 
+    /** Shows the outcome of an action. A success clears after a few seconds; an error stays until the next status. */
     private void showStatus(String message, boolean error) {
-        status.setForeground(error ? Widgets.errorColor() : SUCCESS);
+        status.setForeground(error ? Widgets.errorColor() : Widgets.successColor());
         status.setText(message);
-        statusTimer.restart();
+        if (error) {
+            statusTimer.stop();
+        } else {
+            statusTimer.restart();
+        }
     }
 }

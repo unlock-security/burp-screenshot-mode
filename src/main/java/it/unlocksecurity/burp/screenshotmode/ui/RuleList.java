@@ -299,6 +299,7 @@ final class RuleList<R extends Rule> extends JPanel {
         private final JTextArea problem = Widgets.wrappingHint("", 400);
         private JComponent editorPanel;
         private JComponent firstField;
+        private JButton deleteButton;
 
         Row(R rule, boolean first) {
             super(new BorderLayout());
@@ -390,6 +391,12 @@ final class RuleList<R extends Rule> extends JPanel {
             swatch.setVisible(rule instanceof HighlightRule);
             updateStatus();
             header.getAccessibleContext().setAccessibleName(title.getText() + ", " + summary.getText());
+            if (deleteButton != null) {
+                // Says which rule, as a screen reader may reach the button away from the rule's line.
+                deleteButton
+                    .getAccessibleContext()
+                    .setAccessibleName(empty ? "Delete rule" : "Delete " + title.getText() + " rule");
+            }
         }
 
         void updateStatus() {
@@ -431,18 +438,20 @@ final class RuleList<R extends Rule> extends JPanel {
                 }
                 // At the bottom right of the card, set apart from the fields; ⌘Z brings the rule back.
                 // Never disabled: no greyed-out style, which would replace its own.
-                JButton delete = new DeleteButton();
-                delete.addActionListener(event -> delete());
+                deleteButton = new DeleteButton();
+                deleteButton.addActionListener(event -> delete());
                 JPanel footer = new JPanel(new BorderLayout());
                 footer.setOpaque(false);
-                footer.add(delete, BorderLayout.EAST);
+                footer.add(deleteButton, BorderLayout.EAST);
                 fields.addFull(footer, 16);
                 editorPanel = fields.panel;
                 add(editorPanel, BorderLayout.CENTER);
+                refresh();
             } else {
                 remove(editorPanel);
                 editorPanel = null;
                 firstField = null;
+                deleteButton = null;
             }
             chevron.setIcon(open ? Widgets.Glyph.CHEVRON_UP : Widgets.Glyph.CHEVRON_DOWN);
             header.repaint();

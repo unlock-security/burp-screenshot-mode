@@ -259,6 +259,7 @@ class RuleListTest {
         RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
         row.header().toggle();
         javax.swing.AbstractButton delete = button(row.editorPanel(), "Delete rule");
+        assertEquals("Delete Cookie values rule", delete.getAccessibleContext().getAccessibleName(), "names its rule");
         assertEquals(java.awt.Font.PLAIN, delete.getFont().getStyle(), "not bold: it shouldn't invite a click");
         assertEquals(
             java.awt.BorderLayout.EAST,

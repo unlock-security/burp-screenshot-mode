@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
@@ -64,9 +65,13 @@ final class Widgets {
 
     private Widgets() {}
 
+    private static final Color MUTED = new ThemeColor("Label.disabledForeground", Color.GRAY);
+    private static final Color ERROR = new ThemeColor("Colors.ui.text.error", new Color(0xc4314b));
+    private static final Color SUCCESS = new ThemeColor("Colors.ui.icon.success", new Color(0x387723));
+
+    /** Secondary text, such as hints. */
     static Color mutedColor() {
-        Color color = UIManager.getColor("Label.disabledForeground");
-        return color != null ? color : Color.GRAY;
+        return MUTED;
     }
 
     static Color borderColor() {
@@ -75,7 +80,49 @@ final class Widgets {
     }
 
     static Color errorColor() {
-        return new Color(0xd9534f);
+        return ERROR;
+    }
+
+    static Color successColor() {
+        return SUCCESS;
+    }
+
+    /**
+     * A text color of Burp's theme, looked up each time it is painted. Components keep a color set with
+     * {@code setForeground} across Burp's theme switches, so a fixed color would stay the old theme's. Where the theme's
+     * color is too faint for text on the panel background (Burp Dark's disabled grey), it is mixed with the label
+     * color until it reaches 4.5:1 (WCAG AA).
+     */
+    private static final class ThemeColor extends Color {
+
+        private final String key;
+        private final Color fallback;
+
+        ThemeColor(String key, Color fallback) {
+            super(fallback.getRGB());
+            this.key = key;
+            this.fallback = fallback;
+        }
+
+        @Override
+        public int getRGB() {
+            Color color = themeColor(key, fallback);
+            Color background = themeColor("Panel.background", Color.WHITE);
+            Color text = themeColor("Label.foreground", Color.BLACK);
+            Color readable = color;
+            for (int step = 1; step <= 10 && Palette.contrast(readable, background) < 4.5; step++) {
+                readable = mix(color, text, step / 10.0);
+            }
+            return readable.getRGB();
+        }
+
+        private static Color mix(Color from, Color to, double amount) {
+            return new Color(
+                (int) Math.round(from.getRed() + (to.getRed() - from.getRed()) * amount),
+                (int) Math.round(from.getGreen() + (to.getGreen() - from.getGreen()) * amount),
+                (int) Math.round(from.getBlue() + (to.getBlue() - from.getBlue()) * amount)
+            );
+        }
     }
 
     static JLabel title(String text) {
