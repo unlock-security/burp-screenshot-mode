@@ -47,6 +47,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
@@ -157,7 +158,7 @@ final class HeadersTab extends JPanel {
     private final JTable table = new Table(model);
     private final JPanel details = Widgets.card(new BorderLayout());
     /** The built-in template the headers follow, and how many of them the template changes. */
-    private final JLabel basis = Widgets.hint("");
+    private final JTextArea basis = Widgets.wrappingHint("", Integer.MAX_VALUE);
     private final JButton restore = Widgets.button("Restore defaults");
     private Predicate<String> confirmRestore = message ->
         Widgets.confirm(this, "Restore Defaults", message, "Restore", "Cancel");
@@ -232,10 +233,7 @@ final class HeadersTab extends JPanel {
                 changed();
             }
         });
-        JPanel footer = new JPanel(new BorderLayout(8, 0));
-        footer.setOpaque(false);
-        footer.add(basis, BorderLayout.CENTER);
-        footer.add(restore, BorderLayout.EAST);
+        JPanel footer = Widgets.footer(basis, restore);
 
         JPanel bottom = new JPanel(new BorderLayout(0, 8));
         bottom.setOpaque(false);

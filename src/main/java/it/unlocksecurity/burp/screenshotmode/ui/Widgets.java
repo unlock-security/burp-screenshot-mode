@@ -6,6 +6,7 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -61,6 +62,7 @@ import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
 import javax.swing.text.JTextComponent;
+import javax.swing.text.View;
 
 /** Small Swing building blocks shared by the screenshot window and the template editor. */
 final class Widgets {
@@ -182,6 +184,113 @@ final class Widgets {
             }
         );
         return area;
+    }
+
+    /**
+     * A tab's footer: a {@link #wrappingHint} with a button on its right while both fit on one line. Otherwise the
+     * button goes below, still on the right, and the text wraps if a line of its own is too narrow: nothing is cut off.
+     */
+    static JPanel footer(JTextArea text, JButton button) {
+        JPanel footer = new JPanel(new FooterLayout(text, button));
+        footer.setOpaque(false);
+        footer.add(text);
+        footer.add(button);
+        return footer;
+    }
+
+    static final class FooterLayout implements LayoutManager {
+
+        private static final int GAP = 8;
+        private final JTextArea text;
+        private final JComponent button;
+        /** The height last asked of the footer, so it is asked once per change and never in a loop. */
+        private int requestedHeight = -1;
+
+        FooterLayout(JTextArea text, JComponent button) {
+            this.text = text;
+            this.button = button;
+        }
+
+        /** The width of the text on one line. */
+        private int lineWidth() {
+            Insets insets = text.getInsets();
+            return text.getFontMetrics(text.getFont()).stringWidth(text.getText()) + insets.left + insets.right;
+        }
+
+        /** Whether the text, on one line, and the button fit side by side in {@code width}. */
+        private boolean oneRow(int width) {
+            return width <= 0 || lineWidth() + GAP + button.getPreferredSize().width <= width;
+        }
+
+        /** The height of the text wrapped to {@code width}. */
+        private int textHeight(int width) {
+            Insets insets = text.getInsets();
+            View view = text.getUI().getRootView(text);
+            view.setSize(Math.max(1, width - insets.left - insets.right), Integer.MAX_VALUE);
+            return (int) Math.ceil(view.getPreferredSpan(View.Y_AXIS)) + insets.top + insets.bottom;
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container footer) {
+            Insets insets = footer.getInsets();
+            int width = footer.getWidth() - insets.left - insets.right;
+            Dimension b = button.getPreferredSize();
+            int height = oneRow(width)
+                ? Math.max(textHeight(Integer.MAX_VALUE), b.height)
+                : textHeight(width) + b.height;
+            return new Dimension(
+                insets.left + lineWidth() + GAP + b.width + insets.right,
+                insets.top + height + insets.bottom
+            );
+        }
+
+        /** As narrow as the button: the text wraps. */
+        @Override
+        public Dimension minimumLayoutSize(Container footer) {
+            Insets insets = footer.getInsets();
+            return new Dimension(
+                insets.left + button.getPreferredSize().width + insets.right,
+                preferredLayoutSize(footer).height
+            );
+        }
+
+        @Override
+        public void layoutContainer(Container footer) {
+            Insets insets = footer.getInsets();
+            int width = footer.getWidth() - insets.left - insets.right;
+            Dimension b = button.getPreferredSize();
+            int buttonWidth = Math.min(b.width, width);
+            if (oneRow(width)) {
+                int textWidth = width - GAP - b.width;
+                int textHeight = textHeight(textWidth);
+                int height = Math.max(textHeight, b.height);
+                text.setBounds(insets.left, insets.top + (height - textHeight) / 2, textWidth, textHeight);
+                button.setBounds(
+                    insets.left + width - b.width,
+                    insets.top + (height - b.height) / 2,
+                    b.width,
+                    b.height
+                );
+            } else {
+                int textHeight = textHeight(width);
+                text.setBounds(insets.left, insets.top, width, textHeight);
+                button.setBounds(insets.left + width - buttonWidth, insets.top + textHeight, buttonWidth, b.height);
+            }
+            // The height depends on the width, which the footer only knows now: ask for another layout if it changed.
+            int height = preferredLayoutSize(footer).height;
+            if (height == footer.getHeight()) {
+                requestedHeight = -1;
+            } else if (height != requestedHeight && footer instanceof JComponent component) {
+                requestedHeight = height;
+                SwingUtilities.invokeLater(component::revalidate);
+            }
+        }
+
+        @Override
+        public void addLayoutComponent(String name, Component component) {}
+
+        @Override
+        public void removeLayoutComponent(Component component) {}
     }
 
     /** A titled block of the settings form, with an optional hint and an optional button on the right. */

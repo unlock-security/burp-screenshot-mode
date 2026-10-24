@@ -48,6 +48,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -89,9 +90,9 @@ final class SettingsForm extends JPanel {
     private Runnable undo;
     private int failedRules;
     /** The built-in template the settings are based on, and what Restore defaults does in the Rules tab. */
-    private final JLabel rulesBasis = Widgets.hint("");
+    private final JTextArea rulesBasis = Widgets.wrappingHint("", Integer.MAX_VALUE);
     private final JButton restoreRules = Widgets.button("Restore defaults…");
-    private final JLabel appearanceBasis = Widgets.hint("");
+    private final JTextArea appearanceBasis = Widgets.wrappingHint("", Integer.MAX_VALUE);
     /** The Width and Height rows' controls, built again with the Appearance tab. */
     private JComboBox<WidthMode> widthMode;
     private JSpinner widthPixels;
@@ -467,13 +468,10 @@ final class SettingsForm extends JPanel {
     }
 
     /** A tab's content with, pinned below it, which built-in template it follows and its Restore defaults. */
-    private static JComponent withFooter(JComponent content, JLabel basis, JButton restore) {
+    private static JComponent withFooter(JComponent content, JTextArea basis, JButton restore) {
         restore.putClientProperty("JButton.buttonType", "borderless");
-        JPanel footer = new JPanel(new BorderLayout(8, 0));
-        footer.setOpaque(false);
+        JPanel footer = Widgets.footer(basis, restore);
         footer.setBorder(BorderFactory.createEmptyBorder(6, 14, 8, 8));
-        footer.add(basis, BorderLayout.CENTER);
-        footer.add(restore, BorderLayout.EAST);
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
         panel.add(content, BorderLayout.CENTER);
@@ -616,11 +614,11 @@ final class SettingsForm extends JPanel {
         return restoreAppearance;
     }
 
-    JLabel rulesBasis() {
+    JTextArea rulesBasis() {
         return rulesBasis;
     }
 
-    JLabel appearanceBasis() {
+    JTextArea appearanceBasis() {
         return appearanceBasis;
     }
 
