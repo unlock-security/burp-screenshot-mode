@@ -906,7 +906,9 @@ final class Widgets {
         CHEVRON_DOWN,
         CHEVRON_UP,
         /** The magnifier of a search field, muted like FlatLaf's own. */
-        SEARCH;
+        SEARCH,
+        /** Read-only: marks the built-in templates, which can't be edited or deleted. */
+        LOCK;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
@@ -943,6 +945,16 @@ final class Widgets {
                     g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     g.draw(new java.awt.geom.Ellipse2D.Float(2, 2, 7.5f, 7.5f));
                     g.draw(new Line2D.Float(8.6f, 8.6f, 12, 12));
+                }
+                case LOCK -> {
+                    g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    Path2D shackle = new Path2D.Float();
+                    shackle.moveTo(4.5f, 6.5f);
+                    shackle.lineTo(4.5f, 4.5f);
+                    shackle.curveTo(4.5f, 1.2f, 9.5f, 1.2f, 9.5f, 4.5f);
+                    shackle.lineTo(9.5f, 6.5f);
+                    g.draw(shackle);
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2.5f, 6.5f, 9, 6.5f, 2, 2));
                 }
                 case CHEVRON_DOWN, CHEVRON_UP -> {
                     g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));

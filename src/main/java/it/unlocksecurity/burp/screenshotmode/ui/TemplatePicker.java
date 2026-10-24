@@ -21,7 +21,7 @@ import javax.swing.JScrollPane;
 import javax.swing.UIManager;
 
 /**
- * The templates to import from a file or to export to one, as checkboxes, all ticked at first. A note under a ticked
+ * The templates to import from a file or to export to one, as checkboxes. A note under a ticked
  * template can say what happens to it, such as the name an import gives it.
  */
 final class TemplatePicker extends JPanel {
@@ -37,9 +37,15 @@ final class TemplatePicker extends JPanel {
     private Runnable onChange = () -> {};
 
     /**
-     * @param notes for the ticked templates, in order, a note for each, or {@code null} for none
+     * @param ticked the templates ticked at first
+     * @param notes  for the ticked templates, in order, a note for each, or {@code null} for none
      */
-    TemplatePicker(String intro, List<Template> templates, Function<List<Template>, List<String>> notes) {
+    TemplatePicker(
+        String intro,
+        List<Template> templates,
+        List<Template> ticked,
+        Function<List<Template>, List<String>> notes
+    ) {
         super(new BorderLayout(0, 8));
         this.templates = List.copyOf(templates);
         this.notes = notes;
@@ -47,7 +53,7 @@ final class TemplatePicker extends JPanel {
 
         Widgets.Stack list = new Widgets.Stack(2, false);
         for (Template template : templates) {
-            JCheckBox box = new JCheckBox(template.name, true);
+            JCheckBox box = new JCheckBox(template.name, ticked.contains(template));
             box.addActionListener(event -> changed());
             JLabel note = Widgets.hint("");
             // Under the name, past the checkbox.
@@ -79,7 +85,7 @@ final class TemplatePicker extends JPanel {
         scroll.setBorder(BorderFactory.createLineBorder(Widgets.borderColor()));
         scroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        all = new JCheckBox("All (" + templates.size() + ")", true);
+        all = new JCheckBox("All (" + templates.size() + ")", ticked.containsAll(templates));
         all.addActionListener(event -> {
             boxes.forEach(box -> box.setSelected(all.isSelected()));
             changed();

@@ -16,15 +16,20 @@ class TemplatePickerTest {
     private final Template other = Template.create("Other", BuiltInTemplates.defaults());
 
     /** Notes like an import's into a store that has no templates: the second of two "report"s is renamed. */
-    private final TemplatePicker picker = new TemplatePicker("Choose.", List.of(report, copy, other), chosen -> {
-        List<String> names = chosen
-            .stream()
-            .map(template -> template.name.toLowerCase())
-            .toList();
-        return java.util.stream.IntStream.range(0, chosen.size())
-            .mapToObj(i -> names.subList(0, i).contains(names.get(i)) ? "renamed" : null)
-            .toList();
-    });
+    private final TemplatePicker picker = new TemplatePicker(
+        "Choose.",
+        List.of(report, copy, other),
+        List.of(report, copy, other),
+        chosen -> {
+            List<String> names = chosen
+                .stream()
+                .map(template -> template.name.toLowerCase())
+                .toList();
+            return java.util.stream.IntStream.range(0, chosen.size())
+                .mapToObj(i -> names.subList(0, i).contains(names.get(i)) ? "renamed" : null)
+                .toList();
+        }
+    );
 
     @Test
     void startsWithEveryTemplateTicked() {

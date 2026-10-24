@@ -11,7 +11,10 @@ import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
 import java.awt.Insets;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -19,15 +22,19 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.InputMap;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -40,6 +47,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.OverlayLayout;
 import javax.swing.RowFilter;
@@ -65,7 +73,23 @@ public final class TemplatesTab extends JPanel {
     private final CardLayout cards = new CardLayout();
     private final JPanel editorHolder = new JPanel(new BorderLayout());
     private final TemplateTableModel model = new TemplateTableModel();
-    private final JTable table = new JTable(model);
+    private final JTable table = new JTable(model) {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            // Burp's theme paints the shaded alternate rows and the selection over the column lines: draw them again,
+            // on top, so every row shows them.
+            if (getShowVerticalLines() && getRowCount() > 0) {
+                g.setColor(getGridColor());
+                int bottom = Math.min(getHeight(), getCellRect(getRowCount() - 1, 0, true).y + getRowHeight());
+                int x = 0;
+                for (int column = 0; column < getColumnCount() - 1; column++) {
+                    x += getColumnModel().getColumn(column).getWidth();
+                    g.drawLine(x - 1, 0, x - 1, bottom - 1);
+                }
+            }
+        }
+    };
     private final TableRowSorter<TemplateTableModel> sorter = new TableRowSorter<>(model);
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
@@ -128,7 +152,7 @@ public final class TemplatesTab extends JPanel {
             selected().ifPresent(template -> openEditor(template, Mode.DUPLICATE, null))
         );
         setDefault.addActionListener(event -> selected().ifPresent(this::makeDefault));
-        delete.addActionListener(event -> selected().ifPresent(this::delete));
+        delete.addActionListener(event -> delete(selection()));
         JButton importButton = Widgets.button("Import…");
         importButton.setToolTipText("Add templates from a JSON export");
         importButton.addActionListener(event -> importTemplates());
@@ -153,7 +177,11 @@ public final class TemplatesTab extends JPanel {
         toolbar.add(global, BorderLayout.EAST);
 
         table.setRowSorter(sorter);
-        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        // Select all with Ctrl+A on every platform, besides the look and feel's own (⌘A on macOS).
+        InputMap keys = table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+        keys.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK), "selectAll");
+        keys.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, Widgets.menuShortcutMask()), "selectAll");
         table.setFillsViewportHeight(true);
         table.getTableHeader().setReorderingAllowed(false);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
@@ -162,7 +190,8 @@ public final class TemplatesTab extends JPanel {
         // header is aligned like its values.
         for (int column = 0; column < model.getColumnCount(); column++) {
             int alignment = column == TemplateTableModel.NAME ? SwingConstants.LEADING : SwingConstants.CENTER;
-            DefaultTableCellRenderer cells = new DefaultTableCellRenderer();
+            DefaultTableCellRenderer cells =
+                column == TemplateTableModel.NAME ? new LockedNames() : new DefaultTableCellRenderer();
             cells.setHorizontalAlignment(alignment);
             TableColumn tableColumn = table.getColumnModel().getColumn(column);
             tableColumn.setCellRenderer(cells);
@@ -460,6 +489,27 @@ public final class TemplatesTab extends JPanel {
             .orElse(null);
     }
 
+    /** Marks the names of built-in templates with a lock after them; the Type column says "Built-in" in words. */
+    private final class LockedNames extends DefaultTableCellRenderer {
+
+        @Override
+        public Component getTableCellRendererComponent(
+            JTable table,
+            Object value,
+            boolean isSelected,
+            boolean hasFocus,
+            int row,
+            int column
+        ) {
+            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            boolean builtIn = model.template(table.convertRowIndexToModel(row)).builtIn;
+            // After the name, so every name starts at the same place.
+            setIcon(builtIn ? Widgets.Glyph.LOCK : null);
+            setHorizontalTextPosition(SwingConstants.LEADING);
+            return this;
+        }
+    }
+
     /**
      * Wraps the header's current default renderer, looked up on every call so it stays the look and feel's (and
      * follows Burp's theme switches), only changing the alignment of its label.
@@ -520,34 +570,43 @@ public final class TemplatesTab extends JPanel {
     }
 
     private void refresh() {
-        String selectedId = selected()
+        Set<String> selectedIds = selection()
+            .stream()
             .map(template -> template.id)
-            .orElse(null);
+            .collect(Collectors.toSet());
         model.setTemplates(store.templates(), store.defaultTemplateId());
         exportButton.setEnabled(!store.userTemplates().isEmpty());
         noMatch.setVisible(table.getRowCount() == 0);
-        if (selectedId != null) {
-            for (int row = 0; row < model.getRowCount(); row++) {
-                if (model.template(row).id.equals(selectedId)) {
-                    int viewRow = table.convertRowIndexToView(row);
-                    if (viewRow >= 0) {
-                        table.setRowSelectionInterval(viewRow, viewRow);
-                    }
+        for (int row = 0; row < model.getRowCount(); row++) {
+            if (selectedIds.contains(model.template(row).id)) {
+                int viewRow = table.convertRowIndexToView(row);
+                if (viewRow >= 0) {
+                    table.addRowSelectionInterval(viewRow, viewRow);
                 }
             }
         }
         updateButtons();
     }
 
+    /** The selected templates, in table order. */
+    private List<Template> selection() {
+        return Arrays.stream(table.getSelectedRows())
+            .mapToObj(row -> model.template(table.convertRowIndexToModel(row)))
+            .toList();
+    }
+
+    /** The selected template, when exactly one is. */
     private Optional<Template> selected() {
-        int row = table.getSelectedRow();
-        return row < 0 ? Optional.empty() : Optional.of(model.template(table.convertRowIndexToModel(row)));
+        List<Template> selection = selection();
+        return selection.size() == 1 ? Optional.of(selection.getFirst()) : Optional.empty();
     }
 
     private void updateButtons() {
+        List<Template> selection = selection();
         Optional<Template> selected = selected();
         boolean isDefault = selected.map(template -> template.id.equals(store.defaultTemplateId())).orElse(false);
         boolean builtIn = selected.map(template -> template.builtIn).orElse(false);
+        boolean anyBuiltIn = selection.stream().anyMatch(template -> template.builtIn);
         String builtInReason = builtIn ? "Built-in templates can't be changed: duplicate it to make your own" : null;
         builtInHint.setText(
             builtIn
@@ -555,13 +614,15 @@ public final class TemplatesTab extends JPanel {
                       selected.get().name +
                       "\" is built in, so it can't be edited or deleted. Duplicate it to make " +
                       "your own."
-                : " "
+                : anyBuiltIn
+                  ? "Built-in templates can't be edited, deleted or exported."
+                  : " "
         );
         edit.setEnabled(selected.isPresent() && !builtIn);
         edit.setToolTipText(builtInReason);
         duplicate.setEnabled(selected.isPresent());
         setDefault.setEnabled(selected.isPresent() && !isDefault);
-        delete.setEnabled(selected.isPresent() && !builtIn);
+        delete.setEnabled(selection.stream().anyMatch(template -> !template.builtIn));
         delete.setToolTipText(builtInReason);
     }
 
@@ -571,16 +632,54 @@ public final class TemplatesTab extends JPanel {
         }
     }
 
-    private void delete(Template template) {
-        String message = "Are you sure you want to delete \"" + template.name + "\"?";
-        if (template.id.equals(store.defaultTemplateId())) {
+    /** Deletes the selected templates of the user's, after asking; built-in ones are kept. */
+    private void delete(List<Template> selection) {
+        List<Template> doomed = selection
+            .stream()
+            .filter(template -> !template.builtIn)
+            .toList();
+        if (doomed.isEmpty()) {
+            return;
+        }
+        String message =
+            doomed.size() == 1
+                ? "Are you sure you want to delete \"" + doomed.getFirst().name + "\"?"
+                : "Are you sure you want to delete " + doomed.size() + " templates?";
+        if (doomed.size() < selection.size()) {
+            message += "\nThe built-in templates you selected are kept.";
+        }
+        Optional<Template> defaultOne = doomed
+            .stream()
+            .filter(template -> template.id.equals(store.defaultTemplateId()))
+            .findFirst();
+        if (defaultOne.isPresent()) {
             Template defaults = store.getTemplateById(BuiltInTemplates.DEFAULTS_ID).orElseThrow();
-            message += "\nIt is the default template: \"" + defaults.name + "\" will become the default.";
+            message +=
+                doomed.size() == 1
+                    ? "\nIt is the default template: \"" + defaults.name + "\" will become the default."
+                    : "\n\"" +
+                      defaultOne.get().name +
+                      "\" is the default template: \"" +
+                      defaults.name +
+                      "\" will become the default.";
         }
         if (
-            Widgets.confirm(this, "Delete Template", message, "Delete", "Cancel") && store.deleteTemplate(template.id)
+            !Widgets.confirm(
+                this,
+                doomed.size() == 1 ? "Delete Template" : "Delete Templates",
+                message,
+                "Delete",
+                "Cancel"
+            )
         ) {
-            showStatus("Template deleted", false);
+            return;
+        }
+        long deleted = doomed
+            .stream()
+            .filter(template -> store.deleteTemplate(template.id))
+            .count();
+        if (deleted > 0) {
+            showStatus(deleted == 1 ? "Template deleted" : deleted + " templates deleted", false);
         }
     }
 
@@ -616,10 +715,26 @@ public final class TemplatesTab extends JPanel {
         TemplatePicker picker = new TemplatePicker(
             "Choose the templates to add from \"" + file.getName() + "\".",
             templates,
+            templates,
             chosen -> importNotes(chosen, store.importNames(chosen))
         );
         TemplatePicker.show(this, "Import Templates", "Import", picker).ifPresent(chosen ->
             showStatus(importStatus(store.importTemplates(chosen)), false)
+        );
+    }
+
+    /** The user's templates to export, with the selected ones ticked if any can be exported, otherwise all. */
+    TemplatePicker exportPicker() {
+        List<Template> templates = store.userTemplates();
+        List<Template> selected = selection()
+            .stream()
+            .filter(template -> !template.builtIn)
+            .toList();
+        return new TemplatePicker(
+            "Choose the templates to export.",
+            templates,
+            selected.isEmpty() ? templates : selected,
+            chosen -> Collections.nCopies(chosen.size(), null)
         );
     }
 
@@ -649,10 +764,7 @@ public final class TemplatesTab extends JPanel {
     }
 
     private void exportTemplates() {
-        List<Template> templates = store.userTemplates();
-        TemplatePicker picker = new TemplatePicker("Choose the templates to export.", templates, chosen ->
-            Collections.nCopies(chosen.size(), null)
-        );
+        TemplatePicker picker = exportPicker();
         TemplatePicker.show(this, "Export Templates", "Export…", picker).ifPresent(chosen -> {
             File file = writeJson("Export Templates", "screenshot-mode-templates.json", store.exportJson(chosen));
             if (file != null) {

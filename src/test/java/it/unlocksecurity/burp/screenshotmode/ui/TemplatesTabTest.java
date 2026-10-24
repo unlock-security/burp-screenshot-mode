@@ -246,6 +246,91 @@ class TemplatesTabTest {
     }
 
     @Test
+    void selectsSeveralTemplatesOrAllWithCtrlA() throws Exception {
+        TemplateStore store = store();
+        store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            JTable table = find(tab, JTable.class, t -> true).get();
+            for (KeyStroke key : List.of(
+                KeyStroke.getKeyStroke(KeyEvent.VK_A, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+                KeyStroke.getKeyStroke(KeyEvent.VK_A, Widgets.menuShortcutMask())
+            )) {
+                table.clearSelection();
+                Object action = table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key);
+                table
+                    .getActionMap()
+                    .get(action)
+                    .actionPerformed(new java.awt.event.ActionEvent(table, 0, "selectAll"));
+                assertEquals(store.templates().size(), table.getSelectedRowCount(), key + " selects all");
+            }
+            assertFalse(button(tab, "Edit").isEnabled(), "one at a time");
+            assertFalse(button(tab, "Duplicate").isEnabled());
+            assertFalse(button(tab, "Set as default").isEnabled());
+            assertTrue(button(tab, "Delete").isEnabled(), "deletes the user's templates, keeps the built-in ones");
+            assertTrue(
+                find(tab, JLabel.class, label ->
+                    label.getText().equals("Built-in templates can't be edited, deleted or exported.")
+                ).isPresent()
+            );
+        });
+    }
+
+    @Test
+    void exportTicksTheSelectedTemplatesOrAllWhenNoneIs() throws Exception {
+        TemplateStore store = store();
+        Template report = store.createTemplate("Report", null);
+        Template other = store.createTemplate("Other", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            assertEquals(List.of(report, other), tab.exportPicker().chosen(), "nothing selected: all");
+            select(tab, other);
+            TemplatePicker picker = tab.exportPicker();
+            assertEquals(2, picker.boxes().size(), "lists them all");
+            assertEquals(List.of(other), picker.chosen(), "ticks the selected one");
+            select(tab, BuiltInTemplates.all().get(0));
+            assertEquals(List.of(report, other), tab.exportPicker().chosen(), "built-in ones can't be exported");
+        });
+    }
+
+    @Test
+    void marksBuiltInTemplatesWithALockAndShowsEveryColumnLine() throws Exception {
+        TemplateStore store = store();
+        store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = find(new TemplatesTab(store, host()), JTable.class, t -> true).get();
+            JLabel builtIn = (JLabel) table.prepareRenderer(table.getCellRenderer(0, 1), 0, 1);
+            assertEquals(Widgets.Glyph.LOCK, builtIn.getIcon(), "a lock on the built-in template");
+            assertEquals(table.getForeground(), builtIn.getForeground(), "in normal text: it isn't disabled");
+            JLabel custom = (JLabel) table.prepareRenderer(table.getCellRenderer(2, 1), 2, 1);
+            assertEquals(null, custom.getIcon());
+            assertEquals(
+                null,
+                ((JLabel) table.prepareRenderer(table.getCellRenderer(0, 2), 0, 2)).getIcon(),
+                "on the name only"
+            );
+            // As in Burp's theme: no gap between cells, and a shaded (here, selected) row painted over the lines.
+            table.setIntercellSpacing(new java.awt.Dimension(0, 0));
+            table.setShowVerticalLines(true);
+            table.setGridColor(java.awt.Color.RED);
+            table.setRowSelectionInterval(1, 1);
+            table.setSize(700, table.getRowHeight() * table.getRowCount());
+            table.doLayout();
+            java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(
+                700,
+                table.getHeight(),
+                java.awt.image.BufferedImage.TYPE_INT_RGB
+            );
+            java.awt.Graphics2D g = image.createGraphics();
+            table.paint(g);
+            g.dispose();
+            int x = table.getColumnModel().getColumn(0).getWidth() - 1;
+            int y = table.getRowHeight() + table.getRowHeight() / 2;
+            assertEquals(0xff0000, image.getRGB(x, y) & 0xffffff, "the column line shows on the selected row");
+        });
+    }
+
+    @Test
     void saysWhyOnlyForBuiltInTemplates() throws Exception {
         TemplateStore store = store();
         Template custom = store.createTemplate("Report", null);
