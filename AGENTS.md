@@ -139,7 +139,9 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 **Persistence:** `TemplateStore` saves the user's templates (not the built-in ones) as one JSON string under the Burp
 preference key `screenshot-mode.templates`; exports leave the built-in ones out too. If that value can't be read at
 startup, it is copied to `screenshot-mode.templates.unreadable` before the store starts with the built-in templates
-only, and the suite tab offers to export the copy. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
+only, and the suite tab offers to export the copy. Window state is not part of templates: the screenshot window keeps
+its bounds and sidebar width under `screenshot-mode.window` and `screenshot-mode.sidebarWidth`, saved when it closes
+and ignored if the bounds no longer fit on a screen. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
 migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. The built-in templates are
 `storage/built-in-templates.json` in `src/main/resources`, an ordinary template export read by
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules

@@ -11,6 +11,7 @@ import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -68,6 +69,8 @@ public final class TemplatesTab extends JPanel {
     private final JButton duplicate = Widgets.button("Duplicate");
     private final JButton setDefault = Widgets.button("Set as default");
     private final JButton delete = Widgets.button("Delete");
+    /** Why Edit and Delete are off when a built-in template is selected; a space keeps its line. */
+    private final JLabel builtInHint = Widgets.hint(" ");
     private final JButton exportButton = Widgets.button("Export…");
     /** The editor's "Based on" choice, while a new template is being edited. */
     private JComboBox<Template> basedOn;
@@ -170,7 +173,10 @@ public final class TemplatesTab extends JPanel {
 
         JPanel top = new JPanel(new BorderLayout(0, 10));
         top.add(header, BorderLayout.NORTH);
-        top.add(toolbar, BorderLayout.CENTER);
+        JPanel actions = new JPanel(new BorderLayout(0, 6));
+        actions.add(toolbar, BorderLayout.NORTH);
+        actions.add(builtInHint, BorderLayout.CENTER);
+        top.add(actions, BorderLayout.CENTER);
         store.unreadableTemplates().ifPresent(json -> {
             JPanel intro = new JPanel(new BorderLayout(0, 10));
             intro.add(unreadableNotice(json), BorderLayout.NORTH);
@@ -248,13 +254,14 @@ public final class TemplatesTab extends JPanel {
         });
         JButton cancel = Widgets.button("Cancel");
         String displayName = originalName.isBlank() ? "this template" : "\"" + originalName + "\"";
-        cancel.addActionListener(event -> {
+        Runnable leave = () -> {
             if (
                 !dirty.getAsBoolean() || confirmDiscard.test("Your changes to " + displayName + " haven't been saved.")
             ) {
                 showList();
             }
-        });
+        };
+        cancel.addActionListener(event -> leave.run());
 
         JLabel title = new JLabel(
             switch (mode) {
@@ -264,8 +271,25 @@ public final class TemplatesTab extends JPanel {
             }
         );
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 3));
-        JPanel heading = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        heading.add(Widgets.hint("Templates ›"));
+        // The way back to the list, like Cancel: it asks before discarding the changes.
+        JButton back = new JButton("Templates") {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                // Burp's theme switch calls this again, making the text bold: a link in a breadcrumb is regular text.
+                setFont(getFont().deriveFont(Font.PLAIN));
+            }
+        };
+        back.putClientProperty("JButton.buttonType", "borderless");
+        // Little padding, so it reads as part of the breadcrumb; the hover background still shows it is a button.
+        back.setMargin(new Insets(2, 4, 2, 4));
+        back.setForeground(Widgets.linkColor());
+        back.setToolTipText("Back to the templates list");
+        back.getAccessibleContext().setAccessibleName("Back to templates");
+        back.addActionListener(event -> leave.run());
+        JPanel heading = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        heading.add(back);
+        heading.add(Widgets.hint("›"));
         heading.add(title);
         heading.add(unsaved);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
@@ -481,6 +505,14 @@ public final class TemplatesTab extends JPanel {
         boolean isDefault = selected.map(template -> template.id.equals(store.defaultTemplateId())).orElse(false);
         boolean builtIn = selected.map(template -> template.builtIn).orElse(false);
         String builtInReason = builtIn ? "Built-in templates can't be changed: duplicate it to make your own" : null;
+        builtInHint.setText(
+            builtIn
+                ? "\"" +
+                      selected.get().name +
+                      "\" is built in, so it can't be edited or deleted. Duplicate it to make " +
+                      "your own."
+                : " "
+        );
         edit.setEnabled(selected.isPresent() && !builtIn);
         edit.setToolTipText(builtInReason);
         duplicate.setEnabled(selected.isPresent());

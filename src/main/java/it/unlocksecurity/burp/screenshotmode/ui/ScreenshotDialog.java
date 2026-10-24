@@ -15,6 +15,7 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
@@ -28,6 +29,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -53,6 +55,11 @@ import javax.swing.text.JTextComponent;
 final class ScreenshotDialog extends JDialog {
 
     private static final String LAST_DIRECTORY_KEY = "screenshot-mode.lastDirectory";
+    /** Where the window was and how wide its sidebar, when it was last closed: "x,y,width,height" and pixels. */
+    private static final String BOUNDS_KEY = "screenshot-mode.window";
+    private static final String SIDEBAR_KEY = "screenshot-mode.sidebarWidth";
+    private static final int SIDEBAR_WIDTH = 400;
+    private static final int SIDEBAR_MIN_WIDTH = 300;
     private static final DateTimeFormatter FILE_NAME = DateTimeFormatter.ofPattern(
         "'screenshot-'yyyyMMdd-HHmmss'.png'"
     );
@@ -68,6 +75,7 @@ final class ScreenshotDialog extends JDialog {
     private final PreviewArea preview = new PreviewArea(content);
     private final JScrollPane previewScroll = new JScrollPane(preview);
     private final JPanel formHolder = new JPanel(new BorderLayout());
+    private JSplitPane main;
     private final JComboBox<Template> templateCombo = new JComboBox<>();
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
@@ -99,9 +107,9 @@ final class ScreenshotDialog extends JDialog {
         statusTimer.setRepeats(false);
         renderTimer.setRepeats(false);
 
-        formHolder.setMinimumSize(new Dimension(300, 0));
-        JSplitPane main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, formHolder, buildPreview());
-        main.setDividerLocation(400);
+        formHolder.setMinimumSize(new Dimension(SIDEBAR_MIN_WIDTH, 0));
+        main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, formHolder, buildPreview());
+        main.setDividerLocation(savedSidebarWidth());
         main.setBorder(null);
 
         JPanel root = new JPanel(new BorderLayout());
@@ -150,16 +158,48 @@ final class ScreenshotDialog extends JDialog {
         rebuildForm();
         render();
 
-        Rectangle area =
-            owner != null && owner.isShowing()
-                ? owner.getBounds()
-                : GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-        setSize(new Dimension((int) (area.width * 0.95), (int) (area.height * 0.9)));
-        setLocationRelativeTo(owner);
+        Rectangle saved = savedBounds();
+        if (saved != null) {
+            setBounds(saved);
+        } else {
+            Rectangle area =
+                owner != null && owner.isShowing()
+                    ? owner.getBounds()
+                    : GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            setSize(new Dimension((int) (area.width * 0.95), (int) (area.height * 0.9)));
+            setLocationRelativeTo(owner);
+        }
+    }
+
+    /** The bounds the window was closed with, or {@code null} if none or no longer on a screen (a monitor was unplugged). */
+    private Rectangle savedBounds() {
+        String value = host.preferences().get(BOUNDS_KEY);
+        if (value == null || GraphicsEnvironment.isHeadless()) {
+            return null;
+        }
+        List<Rectangle> screens = new ArrayList<>();
+        for (GraphicsDevice screen : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
+            screens.add(screen.getDefaultConfiguration().getBounds());
+        }
+        return Widgets.boundsOnScreen(value, screens);
+    }
+
+    private int savedSidebarWidth() {
+        try {
+            String value = host.preferences().get(SIDEBAR_KEY);
+            return value == null ? SIDEBAR_WIDTH : Math.max(SIDEBAR_MIN_WIDTH, Integer.parseInt(value));
+        } catch (NumberFormatException e) {
+            return SIDEBAR_WIDTH;
+        }
     }
 
     @Override
     public void dispose() {
+        if (isShowing()) {
+            Rectangle bounds = getBounds();
+            host.preferences().set(BOUNDS_KEY, bounds.x + "," + bounds.y + "," + bounds.width + "," + bounds.height);
+            host.preferences().set(SIDEBAR_KEY, String.valueOf(main.getDividerLocation()));
+        }
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(copyShortcut);
         store.removeListener(templatesListener);
         renderTimer.stop();

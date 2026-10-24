@@ -68,6 +68,7 @@ final class Widgets {
     private static final Color MUTED = new ThemeColor("Label.disabledForeground", Color.GRAY);
     private static final Color ERROR = new ThemeColor("Colors.ui.text.error", new Color(0xc4314b));
     private static final Color SUCCESS = new ThemeColor("Colors.ui.icon.success", new Color(0x387723));
+    private static final Color LINK = new ThemeColor("Colors.ui.text.link", new Color(0xad5b28));
 
     /** Secondary text, such as hints. */
     static Color mutedColor() {
@@ -85,6 +86,11 @@ final class Widgets {
 
     static Color successColor() {
         return SUCCESS;
+    }
+
+    /** Burp's color for text that takes you somewhere, such as a link back to a list. */
+    static Color linkColor() {
+        return LINK;
     }
 
     /**
@@ -489,6 +495,27 @@ final class Widgets {
         label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 1));
         label.setBorder(BorderFactory.createEmptyBorder(2, 9, 2, 9));
         return label;
+    }
+
+    /** {@code value} ("x,y,width,height") if it lies whole on one of {@code screens}, else {@code null}. */
+    static Rectangle boundsOnScreen(String value, List<Rectangle> screens) {
+        try {
+            String[] parts = value.split(",");
+            Rectangle bounds = new Rectangle(
+                Integer.parseInt(parts[0]),
+                Integer.parseInt(parts[1]),
+                Integer.parseInt(parts[2]),
+                Integer.parseInt(parts[3])
+            );
+            for (Rectangle screen : screens) {
+                if (!bounds.isEmpty() && screen.contains(bounds)) {
+                    return bounds;
+                }
+            }
+        } catch (RuntimeException e) {
+            // Not written by this version: use the default bounds.
+        }
+        return null;
     }
 
     /** A color of Burp's palette (theme JSON), resolved at paint time so it follows theme switches. */

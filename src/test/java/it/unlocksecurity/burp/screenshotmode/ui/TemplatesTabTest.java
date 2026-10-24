@@ -174,6 +174,34 @@ class TemplatesTabTest {
     }
 
     @Test
+    void templatesInTheHeadingLeadBackToTheListLikeCancel() throws Exception {
+        TemplateStore store = store();
+        Template original = store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            List<String> asked = new java.util.ArrayList<>();
+            tab.setDiscardConfirmation(name -> {
+                asked.add(name);
+                return false;
+            });
+            select(tab, original);
+            button(tab, "Edit").doClick();
+            AbstractButton back = button(tab, "Templates");
+            assertEquals("Back to templates", back.getAccessibleContext().getAccessibleName());
+            back.doClick();
+            assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
+
+            button(tab, "Edit").doClick();
+            find(tab, JTextField.class, f -> f.getText().equals(original.name))
+                .get()
+                .setText("Renamed");
+            button(tab, "Templates").doClick();
+            assertEquals(1, asked.size(), "asks before discarding the changes");
+            button(tab, "Save"); // still editing
+        });
+    }
+
+    @Test
     void builtInTemplatesCanOnlyBeDuplicatedOrMadeDefault() throws Exception {
         TemplateStore store = store();
         SwingUtilities.invokeAndWait(() -> {
@@ -185,9 +213,29 @@ class TemplatesTabTest {
                 assertFalse(button(tab, "Edit").isEnabled());
                 assertFalse(button(tab, "Delete").isEnabled());
                 assertTrue(button(tab, "Duplicate").isEnabled());
+                String why = "\"" + builtIn.name + "\" is built in, so it can't be edited or deleted.";
+                assertTrue(
+                    find(tab, JLabel.class, label -> label.getText().startsWith(why)).isPresent(),
+                    "says why on screen, not only in tooltips"
+                );
             }
             assertTrue(button(tab, "Set as default").isEnabled(), "Empty can be the default");
             assertFalse(button(tab, "Export…").isEnabled(), "nothing of the user's to export");
+        });
+    }
+
+    @Test
+    void saysWhyOnlyForBuiltInTemplates() throws Exception {
+        TemplateStore store = store();
+        Template custom = store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            select(tab, BuiltInTemplates.all().get(0));
+            JLabel hint = find(tab, JLabel.class, label -> label.getText().contains("is built in")).get();
+            int height = hint.getPreferredSize().height;
+            select(tab, custom);
+            assertEquals(" ", hint.getText());
+            assertEquals(height, hint.getPreferredSize().height, "keeps its line, so the table doesn't move");
         });
     }
 

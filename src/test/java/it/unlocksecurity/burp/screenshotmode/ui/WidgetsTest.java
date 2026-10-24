@@ -1,6 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
@@ -10,6 +11,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Font;
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -22,6 +24,30 @@ import javax.swing.UIManager;
 import org.junit.jupiter.api.Test;
 
 class WidgetsTest {
+
+    private static final List<Rectangle> SCREENS = List.of(
+        new Rectangle(0, 0, 1920, 1080),
+        new Rectangle(1920, 0, 1280, 800)
+    );
+
+    @Test
+    void reopensWhereTheWindowWasClosed() {
+        assertEquals(new Rectangle(100, 50, 1200, 900), Widgets.boundsOnScreen("100,50,1200,900", SCREENS));
+        assertEquals(
+            new Rectangle(2000, 10, 1000, 700),
+            Widgets.boundsOnScreen("2000,10,1000,700", SCREENS),
+            "on the second screen"
+        );
+    }
+
+    @Test
+    void usesTheDefaultBoundsWhenTheSavedOnesDontFit() {
+        assertNull(Widgets.boundsOnScreen("3500,0,1000,700", SCREENS), "its screen was unplugged");
+        assertNull(Widgets.boundsOnScreen("1500,0,1000,700", SCREENS), "across two screens");
+        assertNull(Widgets.boundsOnScreen("0,0,0,0", SCREENS));
+        assertNull(Widgets.boundsOnScreen("100,50", SCREENS));
+        assertNull(Widgets.boundsOnScreen("left,top,wide,tall", SCREENS));
+    }
 
     @Test
     void keepsTextColorsReadableAndFollowsThemeSwitches() {
