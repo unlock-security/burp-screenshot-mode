@@ -43,8 +43,8 @@ No external tools, no manual cropping and blurring.
   or too slow pattern, or set to redact only some capture groups with none chosen, is flagged on the *Rules* tab and
   above the preview, and **Copy** and **Save** ask before exporting a screenshot it may not fully cover.
 - **Pretty view** for JSON, HTML, XML (SVG, RSS, SOAP, …), CSS and JavaScript bodies, like Burp's Pretty tab.
-  Only line breaks and indentation change, so your rules still match and broken or malicious markup shows exactly as
-  sent.
+  Only line breaks and indentation change, so broken or malicious markup shows exactly as sent. Rules run on the pretty
+  text: a pattern that relies on the original line breaks or spacing may match differently.
 - **Right-click** in the preview to highlight or redact the selected text, or to hide, redact or highlight the header
   under the pointer, in one click.
 - **Width**: as wide as the preview (*Full Width*), **Fit to content** so no line wraps (up to 2,000 px), A4 (595px),
@@ -56,7 +56,8 @@ No external tools, no manual cropping and blurring.
   the screenshot. Saved in templates like the width. With A4 or Letter, the preview warns when the screenshot is taller
   than one page, and an image over 50 megapixels (about 2,400 × 21,000 px) can't be exported, as building it could run
   Burp out of memory.
-- **Metadata footer**: request timestamp and response size/round-trip time.
+- **Metadata footer**: request timestamp and response size/round-trip time. The timestamp shows only when Burp knows
+  when the request was sent (not for an unsent Repeater edit), and a message with no response says so.
 - **URL bar**: the full URL, only the path and query (the label reads *Path*), or no URL bar at all. Path only leaves
   out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
   redact those too if it must not show.
@@ -110,7 +111,7 @@ What ends up in your report:
    by `[REDACTED]`.
 
 From a message editor, the screenshot shows what the editor currently holds, including unsent edits in Repeater.\
-When several rows are selected in a table, the first one is used.
+In a table, select one row: with several selected, **Screenshot** isn't offered and the shortcut does nothing.
 
 Settings changed in the screenshot window apply to that message only, and are remembered if you screenshot the
 same message again; a **Modified** label shows when they differ from the template. Use **Update template** or

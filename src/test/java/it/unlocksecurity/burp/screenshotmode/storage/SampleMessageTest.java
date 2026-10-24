@@ -18,6 +18,7 @@ class SampleMessageTest {
         assertTrue(SAMPLE.request().startsWith("POST /api/v1/login?"));
         assertTrue(SAMPLE.response().startsWith("HTTP/2 200 OK\n"));
         assertFalse(SAMPLE.request().contains("\r"));
+        assertTrue(SAMPLE.requestTime() != null, "so the editor preview shows a timestamp");
     }
 
     @Test

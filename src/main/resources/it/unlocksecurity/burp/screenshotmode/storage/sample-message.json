@@ -2,6 +2,7 @@
   "format": "screenshot-mode/sample-message",
   "version": 1,
   "comment": "Shown by the template editor's preview. Made up, on example.com, so that each rule of Defaults has something to match.",
+  "requestTime": "2026-03-12T10:42:07Z",
   "url": "https://shop.example.com/api/v1/login?redirect=%2Fcart&api_key=sk_test_4f9a2c",
   "request": [
     "POST /api/v1/login?redirect=%2Fcart&api_key=sk_test_4f9a2c HTTP/2",

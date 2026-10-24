@@ -12,7 +12,8 @@ import javax.swing.JMenuItem;
 
 /**
  * "Screenshot" context menu item, available in message editors (Repeater, Proxy, ...) and in tables of requests
- * (Proxy history, site map, Logger, ...). With several rows selected, the first one is used, as in Caido.
+ * (Proxy history, site map, Logger, ...), for one selected row: the window shows one message, and picking one of
+ * several silently would screenshot a message the user may not expect.
  */
 final class ScreenshotContextMenu implements ContextMenuItemsProvider {
 
@@ -36,6 +37,7 @@ final class ScreenshotContextMenu implements ContextMenuItemsProvider {
         return List.of(item);
     }
 
+    /** The message in the editor, or the one selected row; none with several rows selected. */
     static Optional<HttpRequestResponse> target(
         Optional<MessageEditorHttpRequestResponse> editor,
         List<HttpRequestResponse> selected
@@ -43,9 +45,10 @@ final class ScreenshotContextMenu implements ContextMenuItemsProvider {
         if (editor.isPresent()) {
             return Optional.ofNullable(editor.get().requestResponse());
         }
-        return selected
+        List<HttpRequestResponse> rows = selected
             .stream()
             .filter(item -> item != null && item.request() != null)
-            .findFirst();
+            .toList();
+        return rows.size() == 1 ? Optional.of(rows.get(0)) : Optional.empty();
     }
 }

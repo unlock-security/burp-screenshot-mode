@@ -84,7 +84,7 @@ final class TemplatePreview extends JPanel {
                 response,
                 response.getBytes(StandardCharsets.UTF_8).length,
                 null,
-                null
+                SampleMessage.bundled().requestTime()
             );
         }
     }

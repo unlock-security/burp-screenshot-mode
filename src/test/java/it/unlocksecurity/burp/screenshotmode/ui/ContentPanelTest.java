@@ -10,12 +10,15 @@ import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
+import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
+import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import java.awt.Font;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.EnumSet;
 import java.util.List;
 import javax.swing.SwingUtilities;
@@ -121,6 +124,64 @@ class ContentPanelTest {
 
     private static String renderedUrl(String url, Settings settings) throws Throwable {
         return rendered(url, settings).urlView().text();
+    }
+
+    @Test
+    void leavesTheTimestampOutWhenBurpDoesNotKnowWhenTheRequestWasSent() {
+        MessageData unsent = new MessageData("key", "https://x/", "GET / HTTP/1.1\n", null, null, null, null);
+        assertEquals(null, ContentPanel.timestamp(unsent), "not the current time, which would pass for the request's");
+        MessageData sent = new MessageData(
+            "key",
+            "https://x/",
+            "GET / HTTP/1.1\n",
+            null,
+            null,
+            null,
+            java.time.ZonedDateTime.parse("2026-03-12T10:42:07Z")
+        );
+        assertTrue(ContentPanel.timestamp(sent).contains("2026"));
+    }
+
+    @Test
+    void recordsWhichPartsWereTooLongToShowWhole() throws Throwable {
+        String body = "{\"a\": \"" + "x".repeat(MessageText.MAX_CHARS) + "\"}";
+        String response = MessageText.fromBytes(
+            ("HTTP/1.1 200 OK\nContent-Type: application/json\n\n" + body).getBytes(StandardCharsets.UTF_8)
+        );
+        for (ViewMode view : ViewMode.values()) {
+            Settings settings = new Settings();
+            settings.view = view;
+            ContentPanel[] content = new ContentPanel[1];
+            onEdt(() -> {
+                content[0] = new ContentPanel();
+                MessageData data = new MessageData("key", "https://x/", "GET / HTTP/1.1\n", response, 1, null, null);
+                content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
+            });
+            assertEquals(EnumSet.of(RuleTarget.RESPONSE), content[0].truncated(), view.label());
+        }
+    }
+
+    @Test
+    void saysSoWhenThereIsNoResponse() throws Throwable {
+        ContentPanel[] content = new ContentPanel[1];
+        onEdt(() -> {
+            content[0] = new ContentPanel();
+            MessageData data = new MessageData("key", "https://x/", "GET / HTTP/1.1\n", null, null, null, null);
+            content[0].render(data, new Settings(), Palette.LIGHT, FONT, FONT, null, null);
+        });
+        java.util.List<String> texts = new java.util.ArrayList<>();
+        java.util.ArrayDeque<java.awt.Component> queue = new java.util.ArrayDeque<>(List.of(content[0]));
+        while (!queue.isEmpty()) {
+            java.awt.Component component = queue.poll();
+            if (component instanceof javax.swing.JLabel label && label.getParent().getParent() != null) {
+                texts.add(label.getText());
+            }
+            if (component instanceof java.awt.Container container) {
+                queue.addAll(List.of(container.getComponents()));
+            }
+        }
+        assertTrue(texts.contains("No response"), "not an empty pane, which reads as an empty response: " + texts);
+        assertFalse(content[0].prettyFailed());
     }
 
     @Test

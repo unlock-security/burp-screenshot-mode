@@ -15,6 +15,7 @@ import it.unlocksecurity.burp.screenshotmode.ui.Host;
 import it.unlocksecurity.burp.screenshotmode.ui.ScreenshotLauncher;
 import it.unlocksecurity.burp.screenshotmode.ui.TemplatesTab;
 import java.awt.Font;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
@@ -80,7 +81,7 @@ public final class ScreenshotModeExtension implements BurpExtension {
         try {
             data = BurpMessages.toMessageData(requestResponse);
         } catch (RuntimeException e) {
-            api.logging().logToError("Could not open " + NAME + ": " + e);
+            reportOpenError(api, e);
             return;
         }
         // Hotkey handlers may run outside the Swing thread: open the window there, still reporting failures.
@@ -88,13 +89,36 @@ public final class ScreenshotModeExtension implements BurpExtension {
             try {
                 launcher.open(data);
             } catch (RuntimeException | StackOverflowError e) {
-                api.logging().logToError("Could not open " + NAME + ": " + e);
+                reportOpenError(api, e);
             }
         };
         if (SwingUtilities.isEventDispatchThread()) {
             show.run();
         } else {
             SwingUtilities.invokeLater(show);
+        }
+    }
+
+    /** Logs the error and says so in a dialog: otherwise nothing at all would seem to happen. */
+    private static void reportOpenError(MontoyaApi api, Throwable e) {
+        api.logging().logToError("Could not open " + NAME + ": " + e);
+        String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+        Runnable dialog = () ->
+            JOptionPane.showMessageDialog(
+                api.userInterface().swingUtils().suiteFrame(),
+                NAME +
+                    " couldn't open this message: " +
+                    reason +
+                    "\n\nThe details are in the extension's errors (Extensions › Installed › " +
+                    NAME +
+                    " › Errors).",
+                NAME,
+                JOptionPane.ERROR_MESSAGE
+            );
+        if (SwingUtilities.isEventDispatchThread()) {
+            dialog.run();
+        } else {
+            SwingUtilities.invokeLater(dialog);
         }
     }
 

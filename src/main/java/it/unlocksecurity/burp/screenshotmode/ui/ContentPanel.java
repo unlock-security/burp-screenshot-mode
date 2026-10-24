@@ -11,6 +11,7 @@ import it.unlocksecurity.burp.screenshotmode.render.Decorated;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
+import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
@@ -29,13 +30,14 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.NumberFormat;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -77,6 +79,8 @@ final class ContentPanel extends JPanel {
     private MessagePane.SelectionListener selectionListener = (action, text, target) -> {};
     /** What each rule did in the last render, keyed by the rule object itself. */
     private final Map<Object, RuleStatus> ruleStatuses = new IdentityHashMap<>();
+    private boolean prettyFailed;
+    private final Set<RuleTarget> truncated = EnumSet.noneOf(RuleTarget.class);
     /** The rules that changed each header line, by message and header name (ignoring case). */
     private final Map<RuleTarget, Map<String, Set<Rule>>> headerHits = new EnumMap<>(RuleTarget.class);
 
@@ -258,6 +262,8 @@ final class ContentPanel extends JPanel {
         setBackground(palette.background());
         ruleStatuses.clear();
         headerHits.clear();
+        prettyFailed = false;
+        truncated.clear();
 
         urlHeader.setBackground(palette.headerBackground());
         urlHeader.setBorder(
@@ -334,9 +340,14 @@ final class ContentPanel extends JPanel {
             try {
                 text = PrettyPrinter.format(text);
             } catch (RuntimeException | StackOverflowError e) {
-                // The pretty printers accept any input, so this is a bug: show the raw message rather than nothing.
+                // The pretty printers accept any input, so this is a bug: show the raw message rather than nothing,
+                // and say so in the window.
+                prettyFailed = true;
                 errorListener.accept("Could not pretty print the " + target.id() + ", showing it raw: " + e);
             }
+        }
+        if (MessageText.isTruncated(raw) || MessageText.isTruncated(text)) {
+            truncated.add(target);
         }
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
         String filtered = HeaderFilter.filter(text, name -> settings.headers.hides(name, target, catalog));
@@ -351,18 +362,39 @@ final class ContentPanel extends JPanel {
                 }
             }
         });
-        pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
+        if (raw == null) {
+            pane.renderMissing("No " + target.label().toLowerCase(Locale.ROOT), palette, ui);
+        } else {
+            pane.render(
+                decorated,
+                HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST),
+                palette,
+                mono,
+                ui
+            );
+        }
+    }
+
+    /** The parts the last render showed only the start of, because they were too long. */
+    Set<RuleTarget> truncated() {
+        return truncated;
+    }
+
+    /** Whether the last render showed a part raw because Pretty view failed on it. */
+    boolean prettyFailed() {
+        return prettyFailed;
     }
 
     private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM);
 
-    /** The footer's timestamp: when the request was sent, or now when Burp doesn't know. */
+    /**
+     * The footer's timestamp: when the request was sent, or {@code null} when Burp doesn't know (an unsent Repeater
+     * edit, for example), rather than a time a report reader would take for the request's.
+     */
     static String timestamp(MessageData data) {
-        ZonedDateTime time =
-            data.requestTime() != null
-                ? data.requestTime().withZoneSameInstant(ZoneId.systemDefault())
-                : ZonedDateTime.now();
-        return TIMESTAMP.format(time);
+        return data.requestTime() == null
+            ? null
+            : TIMESTAMP.format(data.requestTime().withZoneSameInstant(ZoneId.systemDefault()));
     }
 
     /** The footer's response size and round-trip time, or {@code null} without a response. */

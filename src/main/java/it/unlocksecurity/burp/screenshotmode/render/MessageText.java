@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Pattern;
 
 /** Turns raw HTTP message bytes into the text shown in the screenshot. */
 public final class MessageText {
@@ -17,6 +18,9 @@ public final class MessageText {
      * int)}, so a huge body is never copied or decoded in full.
      */
     public static final int MAX_BYTES = MAX_CHARS * 4;
+
+    /** The note {@link #fromBytes} and {@link #truncationNote} end a cut message with. */
+    private static final Pattern TRUNCATED = Pattern.compile("\n… \\[truncated \\d+ (?:bytes|characters)]$");
 
     private MessageText() {}
 
@@ -63,6 +67,12 @@ public final class MessageText {
 
     public static String truncationNote(long characters) {
         return "\n… [truncated " + characters + " characters]";
+    }
+
+    /** Whether {@code text} ends with the note this class or the pretty printers add when they cut a message. */
+    public static boolean isTruncated(String text) {
+        // Only the end: the note is short, and the text can be 300,000 characters long.
+        return text != null && TRUNCATED.matcher(text.substring(Math.max(0, text.length() - 64))).find();
     }
 
     /** @return the text, or {@code null} when the bytes are not valid UTF-8 */

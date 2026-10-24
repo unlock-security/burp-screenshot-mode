@@ -2,10 +2,12 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
+import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
+import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
@@ -31,12 +33,14 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.text.NumberFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -97,6 +101,11 @@ final class ScreenshotDialog extends JDialog {
     private final JLabel failedRules = new JLabel();
     private final JLabel pageNote = new JLabel();
     private final JLabel tooLarge = new JLabel("⚠ Too large to export: choose a smaller height");
+    private final JLabel prettyFailed = new JLabel("⚠ Pretty view failed: showing raw");
+    // Not warnings: nothing is wrong with the export. The footer can't show a time Burp doesn't have, and a very long
+    // message shows only its start.
+    private final JLabel noTimestamp = Widgets.hint("No timestamp available");
+    private final JLabel truncated = Widgets.hint("");
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
     private int selectedTab = SettingsForm.RULES;
@@ -327,12 +336,16 @@ final class ScreenshotDialog extends JDialog {
         left.add(tip);
         // One warning per line when even a row of their own is too narrow for them.
         JPanel right = new JPanel(new WrapLayout(12, 0, true));
-        for (JLabel warning : new JLabel[] { pageNote, tooLarge }) {
+        for (JLabel warning : new JLabel[] { prettyFailed, pageNote, tooLarge }) {
             warning.setForeground(Widgets.errorColor());
             warning.setVisible(false);
             right.add(warning);
         }
         right.add(failedRules);
+        for (JLabel note : new JLabel[] { truncated, noTimestamp }) {
+            note.setVisible(false);
+            right.add(note);
+        }
         JPanel bar = new JPanel(new PreviewBarLayout(left, right));
         bar.add(left);
         bar.add(right);
@@ -564,6 +577,10 @@ final class ScreenshotDialog extends JDialog {
             host.logError().accept("Could not render the screenshot: " + e);
             showStatus("Could not render the screenshot, see the extension's errors", true);
         }
+        prettyFailed.setVisible(content.prettyFailed());
+        noTimestamp.setVisible(settings.showTimestamp && data.requestTime() == null);
+        truncated.setText(truncationNote(content.truncated()));
+        truncated.setVisible(!content.truncated().isEmpty());
 
         // Like Caido, a new content width resets the request/response split.
         Integer maxWidth = settings.maxContentWidth();
@@ -766,6 +783,19 @@ final class ScreenshotDialog extends JDialog {
         chooser.setFileFilter(new FileNameExtensionFilter("PNG images", "png"));
         chooser.setSelectedFile(new File(chooser.getCurrentDirectory(), FILE_NAME.format(LocalDateTime.now())));
         return Widgets.chooseSaveFile(this, chooser, "png");
+    }
+
+    /** Says which parts were too long to show whole, such as "Response shortened to 300,000 characters". */
+    static String truncationNote(Set<RuleTarget> parts) {
+        String which =
+            parts.contains(RuleTarget.REQUEST) && parts.contains(RuleTarget.RESPONSE)
+                ? "Request and response"
+                : parts.contains(RuleTarget.REQUEST)
+                  ? "Request"
+                  : "Response";
+        return (
+            which + " shortened to " + NumberFormat.getIntegerInstance().format(MessageText.MAX_CHARS) + " characters"
+        );
     }
 
     /** Shows the outcome of an action. A success clears after a few seconds; an error stays until the next status. */

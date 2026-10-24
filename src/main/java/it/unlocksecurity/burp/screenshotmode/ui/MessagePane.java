@@ -15,6 +15,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import javax.swing.BorderFactory;
 import javax.swing.BoundedRangeModel;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
@@ -56,6 +57,9 @@ final class MessagePane extends JPanel {
     private final MessageView view = new MessageView();
     private final LineNumberGutter gutter = new LineNumberGutter(view);
     private final JScrollPane scroll = new ChainedScrollPane(view);
+    /** Instead of the text when there is no message at all, such as a request that got no response. */
+    private final JLabel missing = new JLabel();
+    private final JPanel missingPanel = new JPanel(new BorderLayout());
     private SelectionListener selectionListener = (action, text, target) -> {};
     private boolean scrollbarVisible;
 
@@ -73,6 +77,7 @@ final class MessagePane extends JPanel {
         scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         add(scroll, BorderLayout.CENTER);
+        missingPanel.add(missing, BorderLayout.NORTH);
 
         view.addMouseListener(
             new MouseAdapter() {
@@ -94,6 +99,35 @@ final class MessagePane extends JPanel {
     }
 
     void render(Decorated decorated, java.util.List<HttpSyntax.Token> tokens, Palette palette, Font mono, Font ui) {
+        styleTitle(palette, ui);
+        show(scroll);
+        scroll.setBackground(palette.background());
+        scroll.getViewport().setBackground(palette.background());
+        styleScrollBar(scroll.getVerticalScrollBar(), palette);
+        view.render(decorated, tokens, palette, mono);
+        gutter.setPalette(palette);
+    }
+
+    /** Says there is no message, in muted text, so an empty pane isn't taken for an empty message. */
+    void renderMissing(String text, Palette palette, Font ui) {
+        styleTitle(palette, ui);
+        show(missingPanel);
+        missing.setText(text);
+        missing.setFont(ui.deriveFont(Font.ITALIC));
+        missing.setForeground(palette.muted());
+        missing.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        missingPanel.setBackground(palette.background());
+    }
+
+    private void show(JComponent body) {
+        if (body.getParent() != this) {
+            remove(body == scroll ? missingPanel : scroll);
+            add(body, BorderLayout.CENTER);
+            revalidate();
+        }
+    }
+
+    private void styleTitle(Palette palette, Font ui) {
         title.setFont(ui.deriveFont(Font.BOLD));
         title.setForeground(palette.text());
         titleBar.setBackground(palette.headerBackground());
@@ -103,11 +137,6 @@ final class MessagePane extends JPanel {
                 BorderFactory.createEmptyBorder(7, 12, 7, 12)
             )
         );
-        scroll.setBackground(palette.background());
-        scroll.getViewport().setBackground(palette.background());
-        styleScrollBar(scroll.getVerticalScrollBar(), palette);
-        view.render(decorated, tokens, palette, mono);
-        gutter.setPalette(palette);
     }
 
     /**

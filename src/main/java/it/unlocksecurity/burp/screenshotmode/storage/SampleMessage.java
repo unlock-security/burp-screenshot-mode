@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,10 +17,11 @@ import java.util.List;
  * on example.com, with something for each rule of Defaults to match. Checked by the build
  * ({@code SampleMessageTest}).
  *
- * @param request  with {@code \n} line breaks
- * @param response with {@code \n} line breaks
+ * @param request     with {@code \n} line breaks
+ * @param response    with {@code \n} line breaks
+ * @param requestTime when the request was "sent", so the preview shows a timestamp
  */
-public record SampleMessage(String url, String request, String response) {
+public record SampleMessage(String url, String request, String response, ZonedDateTime requestTime) {
     static final String FORMAT = "screenshot-mode/sample-message";
     static final int VERSION = 1;
     private static final String RESOURCE = "sample-message.json";
@@ -39,7 +41,8 @@ public record SampleMessage(String url, String request, String response) {
             return new SampleMessage(
                 root.get("url").getAsString(),
                 lines(root.getAsJsonArray("request")),
-                lines(root.getAsJsonArray("response"))
+                lines(root.getAsJsonArray("response")),
+                ZonedDateTime.parse(root.get("requestTime").getAsString())
             );
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Invalid sample message: " + e.getMessage(), e);

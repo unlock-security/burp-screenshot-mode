@@ -62,7 +62,8 @@ Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
   registers the suite tab, context menu and Ctrl+Shift+S hotkey (with a fallback for older Burp versions).
 - `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record. Its `key` (SHA-256 of
   URL + request bytes) identifies "the same message" across invocations.
-- `ScreenshotContextMenu` picks the target message (editor content wins over table selection; first selected row).
+- `ScreenshotContextMenu` picks the target message (editor content wins over table selection; a table offers it only
+  for one selected row, for the menu and the hotkey alike).
 
 Everything else (`model`, `storage`, `render`, `ui`) depends only on plain Java/Swing. `ui.Host` is the record of
 suppliers/consumers (fonts, dark theme, owner window, logging, preferences) the UI needs from Burp. This is what lets
@@ -124,7 +125,7 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   (`onSelectionAction`). `TemplateCodec.sameSettings` (comparison of the stored form) drives the "Modified"/"Unsaved"
   state of both.
 - The template editor previews `ui.TemplatePreview`: the sample message (`storage/sample-message.json`, read by
-  `storage.SampleMessage`; something for every rule of Defaults to match), edited in place and kept in memory by
+  `storage.SampleMessage`; something for every rule of Defaults to match, and a request time for the footer), edited in place and kept in memory by
   `TemplatesTab` (`TemplatePreview.Sample`), never stored. With the Rules and Headers tabs it shows one part beside its
   source (`ContentPanel.showOnly`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
   the screenshot window and feeds the form the rule statuses, header hits and the sample's headers.
