@@ -13,12 +13,16 @@ import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.Window;
@@ -60,6 +64,12 @@ final class ScreenshotDialog extends JDialog {
     private static final String SIDEBAR_KEY = "screenshot-mode.sidebarWidth";
     private static final int SIDEBAR_WIDTH = 400;
     private static final int SIDEBAR_MIN_WIDTH = 300;
+    /**
+     * The smallest window that shows every control at Burp's default font (13 pt), with the sidebar at its narrowest:
+     * the toolbars and the preview bar wrap, the Appearance tab fits without scrolling. It grows with a larger font.
+     */
+    private static final Dimension MIN_SIZE = new Dimension(800, 600);
+    private static final float DEFAULT_FONT_SIZE = 13f;
     private static final DateTimeFormatter FILE_NAME = DateTimeFormatter.ofPattern(
         "'screenshot-'yyyyMMdd-HHmmss'.png'"
     );
@@ -166,6 +176,7 @@ final class ScreenshotDialog extends JDialog {
         rebuildForm();
         render();
 
+        setMinimumSize(minimumWindowSize());
         Rectangle saved = savedBounds();
         if (saved != null) {
             setBounds(saved);
@@ -190,6 +201,19 @@ final class ScreenshotDialog extends JDialog {
             screens.add(screen.getDefaultConfiguration().getBounds());
         }
         return Widgets.boundsOnScreen(value, screens);
+    }
+
+    /** {@link #MIN_SIZE}, scaled with Burp's font size, and never larger than the screen. */
+    private static Dimension minimumWindowSize() {
+        Font font = UIManager.getFont("Label.font");
+        float scale = font == null ? 1 : Math.max(1, font.getSize2D() / DEFAULT_FONT_SIZE);
+        Dimension size = new Dimension(Math.round(MIN_SIZE.width * scale), Math.round(MIN_SIZE.height * scale));
+        if (!GraphicsEnvironment.isHeadless()) {
+            Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            size.width = Math.min(size.width, screen.width);
+            size.height = Math.min(size.height, screen.height);
+        }
+        return size;
     }
 
     private int savedSidebarWidth() {
@@ -301,16 +325,17 @@ final class ScreenshotDialog extends JDialog {
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         left.add(output);
         left.add(tip);
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
+        // One warning per line when even a row of their own is too narrow for them.
+        JPanel right = new JPanel(new WrapLayout(12, 0, true));
         for (JLabel warning : new JLabel[] { pageNote, tooLarge }) {
             warning.setForeground(Widgets.errorColor());
             warning.setVisible(false);
             right.add(warning);
         }
         right.add(failedRules);
-        JPanel bar = new JPanel(new BorderLayout(8, 0));
-        bar.add(left, BorderLayout.CENTER);
-        bar.add(right, BorderLayout.EAST);
+        JPanel bar = new JPanel(new PreviewBarLayout(left, right));
+        bar.add(left);
+        bar.add(right);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
@@ -322,6 +347,76 @@ final class ScreenshotDialog extends JDialog {
         column.add(bar, BorderLayout.NORTH);
         column.add(previewScroll, BorderLayout.CENTER);
         return column;
+    }
+
+    /**
+     * The size on the left and the warnings on the right of one row. In a window too narrow for both, the warnings take
+     * a second row rather than cutting the size off; the hint, at the end of the left side, drops first.
+     */
+    static final class PreviewBarLayout implements LayoutManager {
+
+        private static final int GAP = 8;
+        private final JPanel left;
+        private final JPanel right;
+
+        PreviewBarLayout(JPanel left, JPanel right) {
+            this.left = left;
+            this.right = right;
+        }
+
+        /** Whether the size and the warnings fit side by side; the hint doesn't count, it drops first. */
+        private boolean oneRow(Container bar, int width) {
+            Insets insets = bar.getInsets();
+            int sizeWidth = left.getComponentCount() == 0 ? 0 : left.getComponent(0).getPreferredSize().width;
+            int leftGaps = ((FlowLayout) left.getLayout()).getHgap() * 2;
+            return insets.left + leftGaps + sizeWidth + GAP + right.getPreferredSize().width + insets.right <= width;
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container bar) {
+            Insets insets = bar.getInsets();
+            // The bar spans its parent: the parent's width is already the new one while the bar's is not.
+            int width = bar.getParent() != null ? bar.getParent().getWidth() : bar.getWidth();
+            Dimension l = left.getPreferredSize();
+            Dimension r = right.getPreferredSize();
+            int height = oneRow(bar, width) ? Math.max(l.height, r.height) : l.height + r.height;
+            return new Dimension(
+                insets.left + l.width + GAP + r.width + insets.right,
+                insets.top + height + insets.bottom
+            );
+        }
+
+        /** As narrow as the size: the rest wraps or drops, so the bar never pushes the sidebar aside. */
+        @Override
+        public Dimension minimumLayoutSize(Container bar) {
+            Insets insets = bar.getInsets();
+            int sizeWidth = left.getComponentCount() == 0 ? 0 : left.getComponent(0).getPreferredSize().width;
+            int leftGaps = ((FlowLayout) left.getLayout()).getHgap() * 2;
+            return new Dimension(insets.left + leftGaps + sizeWidth + insets.right, preferredLayoutSize(bar).height);
+        }
+
+        @Override
+        public void layoutContainer(Container bar) {
+            Insets insets = bar.getInsets();
+            int width = bar.getWidth() - insets.left - insets.right;
+            int rightWidth = Math.min(right.getPreferredSize().width, width);
+            int leftHeight = left.getPreferredSize().height;
+            int rightHeight = right.getPreferredSize().height;
+            if (oneRow(bar, bar.getWidth())) {
+                int height = Math.max(leftHeight, rightHeight);
+                left.setBounds(insets.left, insets.top, width - rightWidth - GAP, height);
+                right.setBounds(insets.left + width - rightWidth, insets.top, rightWidth, height);
+            } else {
+                left.setBounds(insets.left, insets.top, width, leftHeight);
+                right.setBounds(insets.left + width - rightWidth, insets.top + leftHeight, rightWidth, rightHeight);
+            }
+        }
+
+        @Override
+        public void addLayoutComponent(String name, Component component) {}
+
+        @Override
+        public void removeLayoutComponent(Component component) {}
     }
 
     private void rebuildForm() {
@@ -420,9 +515,11 @@ final class ScreenshotDialog extends JDialog {
     private void updateOutputLabel() {
         output.setText(ImageCapture.sizeLabel(content.getWidth(), content.getHeight()));
         String note = ImageCapture.pageNote(state.settings.widthMode, content.getHeight());
+        boolean large = ImageCapture.tooLarge(content.getWidth(), content.getHeight());
         pageNote.setText(note == null ? "" : "⚠ " + note);
-        pageNote.setVisible(note != null);
-        tooLarge.setVisible(ImageCapture.tooLarge(content.getWidth(), content.getHeight()));
+        // An image too large to export is taller than a page anyway: one warning is enough.
+        pageNote.setVisible(note != null && !large);
+        tooLarge.setVisible(large);
     }
 
     /**
