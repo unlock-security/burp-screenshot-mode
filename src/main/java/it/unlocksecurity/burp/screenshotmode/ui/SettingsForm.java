@@ -317,9 +317,13 @@ final class SettingsForm extends JPanel {
 
     private void buildNotice() {
         noticeAction.putClientProperty("JButton.buttonType", "borderless");
+        noticeAction.setMargin(new Insets(2, 4, 2, 4));
         noticeAction.addActionListener(event -> noticeRun.run());
+        // The text is indented as much as the link's own, so they line up when the link wraps below the text.
+        int indent = noticeAction.getInsets().left;
+        noticeText.setBorder(BorderFactory.createEmptyBorder(0, indent, 0, 0));
         notice.setOpaque(true);
-        notice.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 6));
+        notice.setBorder(BorderFactory.createEmptyBorder(6, Math.max(0, 10 - indent), 6, 6));
         // The link moves under the text when the sidebar is too narrow for both.
         notice.add(Widgets.row(noticeText, noticeAction), BorderLayout.CENTER);
         notice.setVisible(false);

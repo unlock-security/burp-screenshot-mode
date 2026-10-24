@@ -3,6 +3,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
@@ -173,6 +174,12 @@ final class SegmentedControl<E> extends JPanel {
 
         @Override
         public void paintBorder(Component c, Graphics graphics, int x, int y, int width, int height) {
+            // Wrapped, the control takes the width of its cell: the outline hugs the widest row instead.
+            int right = 0;
+            for (Component button : ((Container) c).getComponents()) {
+                right = Math.max(right, button.getX() + button.getWidth());
+            }
+            width = Math.min(width, right + getBorderInsets(c).right - x);
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean focused = hasFocus(c);

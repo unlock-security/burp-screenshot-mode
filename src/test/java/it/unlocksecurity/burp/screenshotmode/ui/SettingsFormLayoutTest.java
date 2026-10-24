@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
@@ -31,6 +32,26 @@ class SettingsFormLayoutTest {
         for (AbstractButton option : options) {
             assertTrue(WrapLayoutTest.inView(option, appearance), option.getText() + " in view");
         }
+    }
+
+    @Test
+    void linesTheNoticeLinkUpWithItsTextWhenItWrapsBelow() throws Exception {
+        SettingsForm form = new SettingsForm(
+            BuiltInTemplates.defaults(),
+            () -> {},
+            new Font(Font.MONOSPACED, Font.PLAIN, 12)
+        );
+        form.noticeText().setText("This rule redacts Authorization and Proxy-Authorization.");
+        form.noticeAction().setText("‹ Back to Headers");
+        form.notice().setVisible(true);
+        form.setSize(300, 900);
+        WrapLayoutTest.layOut(form);
+        assertTrue(form.noticeAction().getY() > form.noticeText().getY(), "wrapped below the text");
+        assertEquals(
+            form.noticeText().getX() + form.noticeText().getInsets().left,
+            form.noticeAction().getX() + form.noticeAction().getInsets().left,
+            "both texts start at the same x"
+        );
     }
 
     private static void collect(Container container, List<AbstractButton> buttons) {
