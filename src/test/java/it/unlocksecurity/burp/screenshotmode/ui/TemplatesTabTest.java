@@ -234,7 +234,16 @@ class TemplatesTabTest {
             JTable table = find(tab, JTable.class, t -> true).get();
             for (Template builtIn : BuiltInTemplates.all()) {
                 select(tab, builtIn);
-                assertEquals("Built-in", table.getValueAt(table.getSelectedRow(), 2), "says so in words");
+                Component name = table.prepareRenderer(
+                    table.getCellRenderer(table.getSelectedRow(), 1),
+                    table.getSelectedRow(),
+                    1
+                );
+                assertEquals(
+                    builtIn.name + ", built-in",
+                    name.getAccessibleContext().getAccessibleName(),
+                    "says so in words, not only with the lock"
+                );
                 assertFalse(button(tab, "Edit").isEnabled());
                 assertFalse(button(tab, "Delete").isEnabled());
                 assertTrue(button(tab, "Duplicate").isEnabled());
@@ -331,6 +340,94 @@ class TemplatesTabTest {
             int x = table.getColumnModel().getColumn(0).getWidth() - 1;
             int y = table.getRowHeight() + table.getRowHeight() / 2;
             assertEquals(0xff0000, image.getRGB(x, y) & 0xffffff, "the column line shows on the selected row");
+        });
+    }
+
+    @Test
+    void listsWhatEachTemplateLooksLikeInTheOrderOfTheAppearanceTab() throws Exception {
+        TemplateStore store = store();
+        it.unlocksecurity.burp.screenshotmode.model.Settings settings = BuiltInTemplates.defaults();
+        settings.widthMode = it.unlocksecurity.burp.screenshotmode.model.WidthMode.A4;
+        settings.heightMode = it.unlocksecurity.burp.screenshotmode.model.HeightMode.PIXEL;
+        settings.heightPixels = 900;
+        settings.disposition = Disposition.VERTICAL;
+        settings.theme = it.unlocksecurity.burp.screenshotmode.model.ThemeMode.LIGHT;
+        settings.view = it.unlocksecurity.burp.screenshotmode.model.ViewMode.PRETTY;
+        store.createTemplate("Report", settings);
+        it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog catalog =
+            it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile.bundled();
+        String hidden = settings.headers.hiddenCount(catalog) + " of " + catalog.headerCount();
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = find(new TemplatesTab(store, host()), JTable.class, t -> true).get();
+            List<String> columns = new java.util.ArrayList<>();
+            List<String> report = new java.util.ArrayList<>();
+            for (int column = 0; column < table.getColumnCount(); column++) {
+                columns.add(table.getColumnName(column));
+                report.add(String.valueOf(table.getValueAt(2, column)));
+            }
+            assertEquals(
+                List.of(
+                    "Default",
+                    "Name",
+                    "Based on",
+                    "Width",
+                    "Height",
+                    "Layout",
+                    "Theme",
+                    "Body",
+                    "Hidden headers",
+                    "Highlights",
+                    "Redactions"
+                ),
+                columns
+            );
+            assertEquals(
+                List.of(
+                    "",
+                    "Report",
+                    "Defaults",
+                    "A4 (595px)",
+                    "900px",
+                    "Stacked",
+                    "Light",
+                    "Pretty",
+                    hidden,
+                    "0",
+                    "10"
+                ),
+                report
+            );
+            assertEquals("—", table.getValueAt(0, 2), "a built-in template is based on nothing");
+            assertEquals(
+                "0 of " + catalog.headerCount(),
+                String.valueOf(table.getValueAt(1, 8)),
+                "Empty hides nothing"
+            );
+            assertEquals(Integer.class, table.getColumnClass(9), "counts sort as numbers");
+
+            for (int column = 0; column < table.getColumnCount(); column++) {
+                int needed = table
+                    .getTableHeader()
+                    .getDefaultRenderer()
+                    .getTableCellRendererComponent(table, table.getColumnName(column), false, false, -1, column)
+                    .getPreferredSize()
+                    .width;
+                for (int row = 0; row < table.getRowCount(); row++) {
+                    needed = Math.max(
+                        needed,
+                        table.prepareRenderer(table.getCellRenderer(row, column), row, column).getPreferredSize().width
+                    );
+                }
+                assertTrue(
+                    table.getColumnModel().getColumn(column).getMinWidth() >= needed,
+                    table.getColumnName(column) + " is never cut"
+                );
+            }
+            javax.swing.JViewport viewport = (javax.swing.JViewport) table.getParent();
+            viewport.setSize(300, 200);
+            assertFalse(table.getScrollableTracksViewportWidth(), "too narrow: scrolls sideways");
+            viewport.setSize(5000, 200);
+            assertTrue(table.getScrollableTracksViewportWidth(), "wide enough: fills the width");
         });
     }
 

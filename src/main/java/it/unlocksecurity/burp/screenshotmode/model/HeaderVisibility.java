@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.model;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -30,6 +31,34 @@ public final class HeaderVisibility {
     public Visibility of(String name, HeaderCatalog catalog) {
         Visibility own = headers.get(name);
         return own != null ? own : groupVisibility(name, catalog);
+    }
+
+    /** The headers this has a setting for that the catalog doesn't know. */
+    public List<String> customHeaders(HeaderCatalog catalog) {
+        return headers
+            .keySet()
+            .stream()
+            .filter(name -> catalog.header(name).isEmpty())
+            .toList();
+    }
+
+    /** How many of the catalog's headers and of the {@link #customHeaders} this hides, in either message or both. */
+    public int hiddenCount(HeaderCatalog catalog) {
+        int count = 0;
+        for (HeaderCatalog.Group group : catalog.groups()) {
+            for (HeaderCatalog.Header header : group.headers()) {
+                count += of(header.name(), catalog) != Visibility.SHOW ? 1 : 0;
+            }
+        }
+        for (String name : customHeaders(catalog)) {
+            count += of(name, catalog) != Visibility.SHOW ? 1 : 0;
+        }
+        return count;
+    }
+
+    /** What {@link #hiddenCount} counts out of: the catalog's headers and the {@link #customHeaders}. */
+    public int knownCount(HeaderCatalog catalog) {
+        return catalog.headerCount() + customHeaders(catalog).size();
     }
 
     public boolean hides(String name, RuleTarget side, HeaderCatalog catalog) {

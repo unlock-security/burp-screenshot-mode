@@ -1,9 +1,12 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
+import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
@@ -47,6 +50,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.OverlayLayout;
@@ -74,6 +78,19 @@ public final class TemplatesTab extends JPanel {
     private final JPanel editorHolder = new JPanel(new BorderLayout());
     private final TemplateTableModel model = new TemplateTableModel();
     private final JTable table = new JTable(model) {
+        /** A new font or theme from Burp: the columns need other widths. */
+        @Override
+        public void updateUI() {
+            super.updateUI();
+            SwingUtilities.invokeLater(TemplatesTab.this::fitColumns);
+        }
+
+        /** Fills the width when every column fits whole; otherwise keeps their widths and scrolls sideways. */
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return getParent() instanceof JViewport viewport && getPreferredSize().width <= viewport.getWidth();
+        }
+
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
@@ -100,6 +117,8 @@ public final class TemplatesTab extends JPanel {
     /** Why Edit and Delete are off when a built-in template is selected; a space keeps its line. */
     private final JLabel builtInHint = Widgets.hint(" ");
     private final JLabel noMatch = Widgets.hint("");
+    /** Room around a column's widest value. */
+    private static final int COLUMN_PADDING = 16;
     private final JButton exportButton = Widgets.button("Export…");
     /** The editor's "Based on" choice, while a new template is being edited. */
     private JComboBox<Template> basedOn;
@@ -188,7 +207,6 @@ public final class TemplatesTab extends JPanel {
         table.setFillsViewportHeight(true);
         table.getTableHeader().setReorderingAllowed(false);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
-        table.getColumnModel().getColumn(TemplateTableModel.DEFAULT).setMaxWidth(70);
         // Short values and counts are centred; the name is left-aligned, as free text reads best that way. Each
         // header is aligned like its values.
         for (int column = 0; column < model.getColumnCount(); column++) {
@@ -492,7 +510,7 @@ public final class TemplatesTab extends JPanel {
             .orElse(null);
     }
 
-    /** Marks the names of built-in templates with a lock after them; the Type column says "Built-in" in words. */
+    /** Marks the names of built-in templates with a lock after them, which screen readers announce as "built-in". */
     private final class LockedNames extends DefaultTableCellRenderer {
 
         @Override
@@ -509,6 +527,7 @@ public final class TemplatesTab extends JPanel {
             // After the name, so every name starts at the same place.
             setIcon(builtIn ? Widgets.Glyph.LOCK : null);
             setHorizontalTextPosition(SwingConstants.LEADING);
+            getAccessibleContext().setAccessibleName(builtIn ? value + ", built-in" : null);
             return this;
         }
     }
@@ -580,6 +599,7 @@ public final class TemplatesTab extends JPanel {
         model.setTemplates(store.templates(), store.defaultTemplateId());
         exportButton.setEnabled(!store.userTemplates().isEmpty());
         noMatch.setVisible(table.getRowCount() == 0);
+        fitColumns();
         for (int row = 0; row < model.getRowCount(); row++) {
             if (selectedIds.contains(model.template(row).id)) {
                 int viewRow = table.convertRowIndexToView(row);
@@ -589,6 +609,29 @@ public final class TemplatesTab extends JPanel {
             }
         }
         updateButtons();
+    }
+
+    /** Makes each column as wide as its header and values, so none is cut with "…". */
+    private void fitColumns() {
+        for (int column = 0; column < table.getColumnCount(); column++) {
+            TableColumn tableColumn = table.getColumnModel().getColumn(column);
+            TableCellRenderer header =
+                tableColumn.getHeaderRenderer() != null
+                    ? tableColumn.getHeaderRenderer()
+                    : table.getTableHeader().getDefaultRenderer();
+            int width = header
+                .getTableCellRendererComponent(table, tableColumn.getHeaderValue(), false, false, -1, column)
+                .getPreferredSize()
+                .width;
+            for (int row = 0; row < table.getRowCount(); row++) {
+                width = Math.max(
+                    width,
+                    table.prepareRenderer(table.getCellRenderer(row, column), row, column).getPreferredSize().width
+                );
+            }
+            tableColumn.setMinWidth(width + COLUMN_PADDING);
+            tableColumn.setPreferredWidth(width + COLUMN_PADDING);
+        }
     }
 
     /** The selected templates, in table order. */
@@ -854,20 +897,54 @@ public final class TemplatesTab extends JPanel {
 
         static final int DEFAULT = 0;
         static final int NAME = 1;
-        static final int TYPE = 2;
-        static final int LAYOUT = 3;
-        static final int WIDTH = 4;
-        static final int HIGHLIGHTS = 5;
-        static final int REDACTIONS = 6;
+        static final int BASED_ON = 2;
+        static final int WIDTH = 3;
+        static final int HEIGHT = 4;
+        static final int LAYOUT = 5;
+        static final int THEME = 6;
+        static final int BODY = 7;
+        static final int HIDDEN_HEADERS = 8;
+        static final int HIGHLIGHTS = 9;
+        static final int REDACTIONS = 10;
+        // In the order of the Appearance tab.
         private static final String[] COLUMNS = {
             "Default",
             "Name",
-            "Type",
-            "Layout",
+            "Based on",
             "Width",
+            "Height",
+            "Layout",
+            "Theme",
+            "Body",
+            "Hidden headers",
             "Highlights",
             "Redactions",
         };
+
+        private static final HeaderCatalog CATALOG = HeaderCatalogFile.bundled();
+
+        /** "38 of 150": sorts by the number hidden. */
+        record HiddenHeaders(int hidden, int known) implements Comparable<HiddenHeaders> {
+            @Override
+            public int compareTo(HiddenHeaders other) {
+                return Integer.compare(hidden, other.hidden);
+            }
+
+            @Override
+            public String toString() {
+                return hidden + " of " + known;
+            }
+        }
+
+        /** Counts sort as numbers, not as text ("10" after "9"). */
+        @Override
+        public Class<?> getColumnClass(int column) {
+            return switch (column) {
+                case HIDDEN_HEADERS -> HiddenHeaders.class;
+                case HIGHLIGHTS, REDACTIONS -> Integer.class;
+                default -> String.class;
+            };
+        }
 
         private List<Template> templates = List.of();
         private String defaultId = "";
@@ -903,11 +980,21 @@ public final class TemplatesTab extends JPanel {
             return switch (column) {
                 case DEFAULT -> template.id.equals(defaultId) ? "★" : "";
                 case NAME -> template.name;
-                case TYPE -> template.builtIn ? "Built-in" : "Custom";
+                // A built-in template is based on nothing.
+                case BASED_ON -> template.builtIn ? "—" : BuiltInTemplates.byId(template.settings.basedOn).name;
                 case LAYOUT -> template.settings.disposition.label();
                 case WIDTH -> template.settings.widthMode == WidthMode.PIXEL
                     ? template.settings.widthPixels + "px"
                     : template.settings.widthMode.label();
+                case HEIGHT -> template.settings.heightMode == HeightMode.PIXEL
+                    ? template.settings.heightPixels + "px"
+                    : template.settings.heightMode.label();
+                case THEME -> template.settings.theme.label();
+                case BODY -> template.settings.view.label();
+                case HIDDEN_HEADERS -> new HiddenHeaders(
+                    template.settings.headers.hiddenCount(CATALOG),
+                    template.settings.headers.knownCount(CATALOG)
+                );
                 case HIGHLIGHTS -> template.settings.highlights.size();
                 case REDACTIONS -> template.settings.redactions.size();
                 default -> "";

@@ -258,16 +258,7 @@ final class HeadersTab extends JPanel {
             }
             return count;
         }
-        int count = 0;
-        for (HeaderCatalog.Group group : catalog.groups()) {
-            for (HeaderCatalog.Header header : group.headers()) {
-                count += settings.headers.of(header.name(), catalog) != Visibility.SHOW ? 1 : 0;
-            }
-        }
-        for (String name : customHeaders()) {
-            count += settings.headers.of(name, catalog) != Visibility.SHOW ? 1 : 0;
-        }
-        return count;
+        return settings.headers.hiddenCount(catalog);
     }
 
     JTable table() {
@@ -647,7 +638,7 @@ final class HeadersTab extends JPanel {
                 }
             }
         } else {
-            customHeaders().forEach(name -> add(groups, custom, name, Direction.BOTH));
+            settings.headers.customHeaders(catalog).forEach(name -> add(groups, custom, name, Direction.BOTH));
             catalog
                 .groups()
                 .forEach(group -> group.headers().forEach(header -> add(groups, custom, header.name(), header.in())));
@@ -674,15 +665,6 @@ final class HeadersTab extends JPanel {
         HeaderCatalog.Header entry = catalog.header(name).orElse(null);
         GroupRow group = entry == null ? custom : groups.get(catalog.groupOf(name).orElseThrow().id());
         group.headers.add(new HeaderRow(entry == null ? name : entry.name(), entry, group, sides));
-    }
-
-    /** The headers the template has a setting for that the catalog doesn't know. */
-    private List<String> customHeaders() {
-        return settings.headers.headers
-            .keySet()
-            .stream()
-            .filter(name -> catalog.header(name).isEmpty())
-            .toList();
     }
 
     private void showDetails() {
