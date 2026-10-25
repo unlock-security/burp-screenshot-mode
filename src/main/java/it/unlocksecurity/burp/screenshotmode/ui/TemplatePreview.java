@@ -103,7 +103,6 @@ final class TemplatePreview extends JPanel {
     private final JPanel editors = new JPanel(editorCards);
     private final Map<RuleTarget, Source> sources = new EnumMap<>(RuleTarget.class);
     private final SegmentedControl<RuleTarget> parts;
-    private final JLabel wholeHint = Widgets.hint("The whole screenshot");
     private final JButton restore = Widgets.button("Restore sample");
     private final Timer renderTimer = new Timer(150, event -> render());
     private BiConsumer<MessageData, ContentPanel> rendered = (data, content) -> {};
@@ -129,7 +128,6 @@ final class TemplatePreview extends JPanel {
         JPanel left = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0));
         left.add(Widgets.title("Sample message"));
         left.add(parts);
-        left.add(wholeHint);
         JPanel bar = new JPanel(new BorderLayout(8, 0));
         bar.add(left, BorderLayout.CENTER);
         bar.add(restore, BorderLayout.EAST);
@@ -184,7 +182,6 @@ final class TemplatePreview extends JPanel {
     void showWhole(boolean show) {
         cards.show(center, show ? WHOLE : PARTS);
         parts.setVisible(!show);
-        wholeHint.setVisible(show);
     }
 
     /** Renders again shortly: the settings changed. */
