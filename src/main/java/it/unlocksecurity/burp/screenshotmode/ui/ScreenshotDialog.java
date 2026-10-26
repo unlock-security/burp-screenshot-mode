@@ -33,8 +33,6 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.text.NumberFormat;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -73,9 +71,6 @@ final class ScreenshotDialog extends JDialog {
      * the toolbars and the preview bar wrap, the Appearance tab fits without scrolling. It grows with a larger font.
      */
     private static final Dimension MIN_SIZE = new Dimension(800, 600);
-    private static final DateTimeFormatter FILE_NAME = DateTimeFormatter.ofPattern(
-        "'screenshot-'yyyyMMdd-HHmmss'.png'"
-    );
     private static final int MENU_SHORTCUT = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
 
     private final Host host;
@@ -781,7 +776,14 @@ final class ScreenshotDialog extends JDialog {
         JFileChooser chooser = new JFileChooser(lastDirectory);
         chooser.setDialogTitle("Save Screenshot");
         chooser.setFileFilter(new FileNameExtensionFilter("PNG images", "png"));
-        chooser.setSelectedFile(new File(chooser.getCurrentDirectory(), FILE_NAME.format(LocalDateTime.now())));
+        MessageView url = content.urlView();
+        String name = ImageCapture.fileName(
+            data.requestText(),
+            url.copyText(0, url.text().length()),
+            data.responseText(),
+            state.settings.messages
+        );
+        chooser.setSelectedFile(ImageCapture.freeFile(chooser.getCurrentDirectory(), name));
         return Widgets.chooseSaveFile(this, chooser, "png");
     }
 

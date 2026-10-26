@@ -95,7 +95,8 @@ in user patterns. Message bodies come from servers under test and are processed 
 with a repeated group, like `(?:"[^"]*"|[^>])*`, over a body, since they recurse once per character and overflow the
 stack on long input. Blur has no Swing equivalent: `MessageView` post-processes the affected rows on an offscreen image
 (`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at 2× and exports PNG to file or clipboard
-(custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF).
+(custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests `ImageCapture.fileName`, built
+from the URL bar's `copyText` so what a rule redacts there stays out of the name.
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own

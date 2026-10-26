@@ -163,6 +163,27 @@ class ContentPanelTest {
     }
 
     @Test
+    void keepsWhatARuleHidesInTheUrlOutOfTheFileName() throws Throwable {
+        Settings settings = new Settings();
+        settings.redactions.add(RedactionRule.create("s3cr3t", RuleTarget.URL, RedactionMode.BLUR, MatchMode.STRING));
+        for (UrlMode mode : List.of(UrlMode.FULL, UrlMode.PATH, UrlMode.HIDDEN)) {
+            settings.url = mode;
+            ContentPanel content = rendered("https://x/reset/s3cr3t?id=1", settings);
+            MessageView url = content.urlView();
+            assertEquals(
+                "GET-reset-REDACTED-200.png",
+                ImageCapture.fileName(
+                    "GET / HTTP/1.1",
+                    url.copyText(0, url.text().length()),
+                    "HTTP/1.1 200 OK",
+                    MessageMode.BOTH
+                ),
+                mode.label()
+            );
+        }
+    }
+
+    @Test
     void hidesTheLineNumbers() throws Throwable {
         Settings settings = new Settings();
         ContentPanel shown = rendered("https://x/", settings);

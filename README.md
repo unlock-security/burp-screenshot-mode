@@ -114,7 +114,10 @@ What ends up in your report:
    its own tab. The preview updates as you type.
 3. Click **Copy image** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**). Copy only copies the
    screenshot when no text is selected; with a selection it copies the text, with blurred and covered values replaced
-   by `[REDACTED]`.
+   by `[REDACTED]`. Save suggests a name that says what the screenshot shows, such as
+   `POST-api-v1-users-42-200.png`: the method, the path (no host or query, and what a rule redacts in the URL
+   reads `REDACTED`), `req` or `resp` when only the request or the response is shown, and the response status,
+   numbered `-2`, `-3`, … when the folder already has it.
 
 From a message editor, the screenshot shows what the editor currently holds, including unsent edits in Repeater.\
 In a table, select one row: with several selected, **Screenshot** isn't offered and the shortcut does nothing.
