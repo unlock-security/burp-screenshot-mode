@@ -3,7 +3,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.FlowLayout;
+import java.awt.Container;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
@@ -33,6 +33,14 @@ import javax.swing.border.AbstractBorder;
  */
 final class SegmentedControl<E> extends JPanel {
 
+    /**
+     * Disabled, the selected option would get the panel's background and Burp's near-black disabled text, standing out
+     * from the faded others as if it alone were enabled: fade its fill and text instead, so it still shows as chosen.
+     */
+    private static final String DISABLED_SELECTED =
+        ";toolbar.disabledSelectedBackground: mix($Button.toolbar.selectedBackground,$Panel.background,35%)" +
+        ";toolbar.disabledSelectedForeground: mix($Button.toolbar.selectedForeground,$Panel.background,45%)";
+
     private final List<E> values;
     private final List<JToggleButton> buttons = new ArrayList<>();
     private final Consumer<E> onChange;
@@ -43,7 +51,8 @@ final class SegmentedControl<E> extends JPanel {
     }
 
     SegmentedControl(E[] values, E selected, Function<E, String> label, Consumer<E> onChange) {
-        super(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // Wraps an option that doesn't fit to a second row, inside the outline, rather than hiding it (large fonts).
+        super(new WrapLayout(0, 0, true));
         this.values = List.of(values);
         this.onChange = onChange;
         this.selected = Math.max(0, this.values.indexOf(selected));
@@ -84,6 +93,7 @@ final class SegmentedControl<E> extends JPanel {
         for (int i = 0; i < values.length; i++) {
             int index = i;
             JToggleButton button = Widgets.greyedWhenDisabled(new JToggleButton(label.apply(values[i])));
+            button.putClientProperty("FlatLaf.style", button.getClientProperty("FlatLaf.style") + DISABLED_SELECTED);
             button.putClientProperty("JButton.buttonType", "toolBarButton");
             button.setMargin(new Insets(2, 10, 2, 10));
             button.addActionListener(event -> select(index, true));
@@ -173,6 +183,12 @@ final class SegmentedControl<E> extends JPanel {
 
         @Override
         public void paintBorder(Component c, Graphics graphics, int x, int y, int width, int height) {
+            // Wrapped, the control takes the width of its cell: the outline hugs the widest row instead.
+            int right = 0;
+            for (Component button : ((Container) c).getComponents()) {
+                right = Math.max(right, button.getX() + button.getWidth());
+            }
+            width = Math.min(width, right + getBorderInsets(c).right - x);
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean focused = hasFocus(c);

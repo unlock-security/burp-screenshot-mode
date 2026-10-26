@@ -45,13 +45,79 @@ every push to `main`, which only accepts pull requests from `dev`. The version l
 version number in `build.gradle.kts` or elsewhere — Gradle reads it from `-PreleaseVersion`, defaulting to
 `0.0.0-SNAPSHOT`. GitHub Actions in workflows are pinned to commit SHAs with the version in a trailing comment.
 
+## Working process
+
+Work the way the maintainer does:
+
+1. **One change at a time.** Implement one step, verify it (see below), then stop and present it: what changed and
+   why, how it was verified, and a proposed commit message. Wait for approval before committing, and again before
+   starting the next step.
+2. **Ask instead of guessing** when a request is ambiguous, breaks a guideline below or involves a real trade-off:
+   explain it and offer the options, the recommended one first. Don't ask again about the settled decisions below.
+3. **Commit only to `dev`.** Never commit to `main`, push or open a pull request unless asked. Stage files by name,
+   never with `git add -A` or `git add .`: the maintainer may have files of their own in the working tree. Never
+   commit scratch files, renders or harness copies.
+4. **Keep each commit to one change.** When a fix grows beyond the step (a bug found while testing, say), say so and
+   offer to commit it separately, with its own type.
+5. **Commit bodies**, when needed, are plain prose saying what the user gets. A body line starting with `word:` makes
+   commitlint warn about a footer: rephrase it.
+6. **Report plainly**: what was done and verified, what failed (with the output) and what was left undone. Give the
+   absolute path of every render.
+
+Before presenting a step:
+
+- `npm run format`, then `./gradlew build` with every test passing. When Gradle prints nothing useful, count tests and
+  failures from `build/test-results/test/*.xml` (attributes `tests`, `failures`, `errors`).
+- For a UI change, render it in Burp's light and dark themes with the `render-ui` skill
+  ([.agents/skills/render-ui](.agents/skills/render-ui/SKILL.md): a harness that loads Burp's theme from its jar, and
+  its instructions), and also at a narrow window and a larger Burp font when the layout changed. Look at the images.
+- Update this file where behavior or architecture changed. README.md stays short: a feature gets at most a line
+  there, and its details belong in the UI and in this file. Its images in `assets/` (screenshots and the demo GIF)
+  are rebuilt with the `readme-assets` skill ([.agents/skills/readme-assets](.agents/skills/readme-assets/SKILL.md)).
+
+Headless test gotchas: `ScreenshotDialog` can't be loaded headless (its static shortcut constant needs a Toolkit), so
+put testable logic in `Widgets` or in static nested classes. Headless containers have no peer, so `validate()` does
+nothing: lay out with `RenderPreviewTest.layoutTree` (`WrapLayoutTest.layOut` runs it twice, as a window would after a
+wrapping row asks for another layout; `WrapLayoutTest.inView` checks a component isn't cut off). Before creating a test
+file, check that the name isn't taken.
+
 ## UI/UX changes
 
 Before making any UI/UX change, even a small one the user asks for, check it against UI/UX guidelines: Nielsen's
 usability heuristics, the conventions of Swing/FlatLaf and of Burp's own UI (which controls Burp uses for the same job),
-and accessibility (keyboard access, contrast, not relying on color or tooltips alone). If the change violates any of
-them, don't implement it yet: warn the user, explain which guideline it breaks and why, propose an alternative that
-doesn't, and ask which one to implement. Only go ahead directly when nothing is violated.
+and accessibility (keyboard access, text contrast of at least 4.5:1, not relying on color or tooltips alone). If the
+change violates any of them, don't implement it yet: warn the user, explain which guideline it breaks and why, propose
+an alternative that doesn't, and ask which one to implement. Only go ahead directly when nothing is violated.
+Update [ACCESSIBILITY.md](ACCESSIBILITY.md) when a change adds or changes a keyboard shortcut, or adds or removes a
+known limitation.
+
+Conventions of this UI:
+
+- **Keep it simple**: the simplest design that meets the need, with no options, settings or concepts nobody asked for.
+  No warnings or tooltips unless they are needed.
+- **Confirmations** have exactly two options, through `Widgets.confirm` / `Widgets.choose`: the safe choice is the
+  primary (orange) and default button. No "Don't ask me again".
+- **Words, not icons or color alone**: rule status reads "redacted", "Error", "Off"; hidden header rows are muted and
+  unchecked; tri-state checkboxes say "Partly shown" as their accessible description; icon-only buttons have an
+  accessible name.
+- **Names**: the rule target is "URL", the Appearance row is "URL bar".
+- **Nothing disappears** in a narrow window or with a larger font: rows wrap (`WrapLayout`), and the window and sidebar
+  minimum sizes grow with the font (`Widgets.scaled`). Text is cut with an ellipsis only where the full text is also
+  shown elsewhere.
+- **No buttons inside table rows**: row actions live in a details panel and the right-click menu, as in Burp.
+- **Jumps between tabs** move the focus on purpose and can be undone ("‹ Back to Headers", undo).
+
+## Settled decisions
+
+Decided by the maintainer: build on them, and don't propose the alternatives again.
+
+- Header rules stay minimal: a redaction replaces the whole value, a highlight marks the whole line, with no option to
+  pick a part. Defaults that must keep part of a value (the Authorization scheme, the Set-Cookie name and flags) are
+  named pattern rules, as those are often the finding.
+- The Headers tab only shows or hides headers; every redaction and highlight is a rule of the Rules tab.
+- A failed redaction doesn't block Copy or Save: they ask first, in a generic message that never lists rules or regexes.
+- The path-only URL bar has no warning or tooltip about the host still showing in `Host`, `Origin` or `Referer`; the
+  README notes it.
 
 ## Architecture
 
@@ -62,14 +128,16 @@ Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
   registers the suite tab, context menu and Ctrl+Shift+S hotkey (with a fallback for older Burp versions).
 - `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record. Its `key` (SHA-256 of
   URL + request bytes) identifies "the same message" across invocations.
-- `ScreenshotContextMenu` picks the target message (editor content wins over table selection; first selected row).
+- `ScreenshotContextMenu` picks the target message (editor content wins over table selection; a table offers it only
+  for one selected row, for the menu and the hotkey alike).
 
 Everything else (`model`, `storage`, `render`, `ui`) depends only on plain Java/Swing. `ui.Host` is the record of
 suppliers/consumers (fonts, dark theme, owner window, logging, preferences) the UI needs from Burp. This is what lets
 tests construct the full UI and render images without Burp — keep new Burp dependencies behind `Host` or
 `PreferenceStore`.
 
-**Rendering pipeline** (per message half, in `ui.ContentPanel`):
+**Rendering pipeline** (per message half, in `ui.ContentPanel`; a half that `Settings.messages` leaves out is not
+rendered at all, so its rules report nothing):
 `MessageText.fromBytes` (UTF-8 with ISO-8859-1 fallback, `\n` line breaks, truncation) →
 `pretty.PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`; only adds line breaks
 and indentation) →
@@ -92,15 +160,21 @@ in user patterns. Message bodies come from servers under test and are processed 
 `HttpSyntax` scan them by hand in linear time, with the helpers in `render.Scan`: don't run `java.util.regex` patterns
 with a repeated group, like `(?:"[^"]*"|[^>])*`, over a body, since they recurse once per character and overflow the
 stack on long input. Blur has no Swing equivalent: `MessageView` post-processes the affected rows on an offscreen image
-(`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at 2× and exports PNG to file or clipboard
-(custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF).
+(`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at `Settings.scale` and exports PNG to file
+or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests
+`ImageCapture.fileName`, built from the URL bar's `copyText` so what a rule redacts there stays out of the name.
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own
   instances, which must be treated as read-only — copy `settings` before editing.
 - `TemplateStore.templates()` lists the built-in templates (`Template.builtIn`: Defaults, then Empty) before the
   user's own. Built-in templates are never stored, updated or deleted; any template, built-in included, can be the
-  default (★), and deleting the default one makes Defaults the default. New templates start from a built-in one
+  default (★), and deleting the default one makes Defaults the default. Names are unique ignoring case and surrounding
+  spaces, built-in names included (`TemplateStore.templateNamed`): create and rename refuse a taken name, the editor
+  and Save as new… say so and disable saving (`TemplatesTab.nameProblem`), and import renames a clash to
+  "name (imported)" (`freeName`, also used for Duplicate's "name (copy)"). Import and export go through
+  `ui.TemplatePicker`, a checkbox list of the file's or the user's templates; for import it shows the names
+  `TemplateStore.importNames` would give the ticked ones, the same names `importTemplates` then uses. New templates start from a built-in one
   ("Based on" in the editor) or duplicate any template.
 - `Settings.basedOn` is that built-in **parent** (only built-in templates are parents; `null` is Empty, which hides
   nothing). In memory `Settings.headers` always holds the effective headers. `TemplateCodec` stores only
@@ -114,22 +188,38 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 - Enums implement `model.Labeled`: `id()` is the stable id written to saved templates and exports, `label()` is UI
   text. Never change an existing `id()`.
 - `ScreenshotLauncher` keeps one dialog open at a time and an LRU (50) of per-message `SessionState` (settings copy,
-  template id, split ratio, crop). Edits in the screenshot window affect only that session until the user explicitly
+  template id, split ratio). Edits in the screenshot window affect only that session until the user explicitly
   updates/saves a template.
-- `SettingsForm` mutates a `Settings` in place, in three tabs (Rules, Headers, Appearance), and is reused by both the
-  screenshot sidebar and the template editor in `TemplatesTab`. `TemplateCodec.sameSettings` (comparison of the
-  stored form) drives the "Modified"/"Unsaved" state of both.
+- `SettingsForm` mutates a `Settings` in place, in three tabs (Rules, Headers, Appearance), and is the sidebar of both
+  the screenshot window and the template editor in `TemplatesTab`, which share its preview right-click actions
+  (`onSelectionAction`). `TemplateCodec.sameSettings` (comparison of the stored form) drives the "Modified"/"Unsaved"
+  state of both.
+- The template editor previews `ui.TemplatePreview`: the sample message (`storage/sample-message.json`, read by
+  `storage.SampleMessage`; something for every rule of Defaults to match, and a request time for the footer), edited in place and kept in memory by
+  `TemplatesTab` (`TemplatePreview.Sample`), never stored. With the Rules and Headers tabs it shows one part beside its
+  source (`ContentPanel.showOnly`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
+  the screenshot window and feeds the form the rule statuses and header hits of the one-part panel (it renders every
+  part, whichever messages the template shows) and the sample's headers.
+- Undo/redo: the screenshot window and the template editor each own a `ui.SettingsHistory` of `Settings` snapshots,
+  told of every change through the form's `onChange` (a no-op change is no step; typing in a text field is one step,
+  taken when it pauses). Undo restores the snapshot **in place** (`Settings.copyFrom`, which keeps the rule lists that
+  `RuleList` holds) and calls `SettingsForm.reload(before)`, which refreshes every tab without rebuilding the form and
+  shows the tab and the rule that changed. Changes made outside the form (preview right-click, Revert, dragging the
+  height handle, recorded once when the drag ends) call `record()`; switching template calls `reset()`. History lives
+  as long as the window or editor, not in `SessionState`.
 
 **Persistence:** `TemplateStore` saves the user's templates (not the built-in ones) as one JSON string under the Burp
 preference key `screenshot-mode.templates`; exports leave the built-in ones out too. If that value can't be read at
 startup, it is copied to `screenshot-mode.templates.unreadable` before the store starts with the built-in templates
-only, and the suite tab offers to export the copy. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
+only, and the suite tab offers to export the copy. Window state is not part of templates: the screenshot window keeps
+its bounds and sidebar width under `screenshot-mode.window` and `screenshot-mode.sidebarWidth`, saved when it closes
+and ignored if the bounds no longer fit on a screen. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
 migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. The built-in templates are
 `storage/built-in-templates.json` in `src/main/resources`, an ordinary template export read by
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules
 there (in Defaults), never change the built-in ids, and update the file whenever `VERSION` changes
 (`BuiltInTemplatesTest` fails otherwise). Optional settings fields
-(`theme`, `view`, `url`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
+(`theme`, `view`, `url`, `height`, `text`, `scale`, `messages`, `lineNumbers`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
 none, with the stored headers taken as the template's own. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced

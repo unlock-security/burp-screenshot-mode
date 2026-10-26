@@ -1,29 +1,29 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
-import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
-import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
-import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
-import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
-import it.unlocksecurity.burp.screenshotmode.model.Visibility;
+import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
+import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
+import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
-import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
+import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
+import java.awt.Insets;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.Window;
@@ -33,14 +33,11 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.text.NumberFormat;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -55,6 +52,7 @@ import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.JTextComponent;
 
@@ -62,34 +60,46 @@ import javax.swing.text.JTextComponent;
 final class ScreenshotDialog extends JDialog {
 
     private static final String LAST_DIRECTORY_KEY = "screenshot-mode.lastDirectory";
-    private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM);
-    private static final DateTimeFormatter FILE_NAME = DateTimeFormatter.ofPattern(
-        "'screenshot-'yyyyMMdd-HHmmss'.png'"
-    );
-    private static final Color SUCCESS = new Color(0x3fa45b);
+    /** Where the window was and how wide its sidebar, when it was last closed: "x,y,width,height" and pixels. */
+    private static final String BOUNDS_KEY = "screenshot-mode.window";
+    private static final String SIDEBAR_KEY = "screenshot-mode.sidebarWidth";
+    /** The sidebar's width at first and at its narrowest, at Burp's default font: both grow with a larger one. */
+    private static final int SIDEBAR_WIDTH = 400;
+    private static final int SIDEBAR_MIN_WIDTH = 300;
+    /**
+     * The smallest window that shows every control at Burp's default font (13 pt), with the sidebar at its narrowest:
+     * the toolbars and the preview bar wrap, the Appearance tab fits without scrolling. It grows with a larger font.
+     */
+    private static final Dimension MIN_SIZE = new Dimension(800, 600);
     private static final int MENU_SHORTCUT = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
 
     private final Host host;
     private final TemplateStore store;
     private final SessionState state;
     private final MessageData data;
+    private final SettingsHistory history;
 
     private final ContentPanel content = new ContentPanel();
     private final PreviewArea preview = new PreviewArea(content);
     private final JScrollPane previewScroll = new JScrollPane(preview);
     private final JPanel formHolder = new JPanel(new BorderLayout());
+    private JSplitPane main;
     private final JComboBox<Template> templateCombo = new JComboBox<>();
     private final JLabel status = new JLabel(" ");
     private final Timer statusTimer = new Timer(4000, event -> status.setText(" "));
     private final Timer renderTimer = new Timer(150, event -> render());
-    private final JButton fit = Widgets.button("Fit to content");
-    private final JButton resetHeight = Widgets.button("Reset height");
-    private boolean fitCheckPending;
     private final JLabel modified = Widgets.chip("Modified");
     private final JButton revert = Widgets.button("Revert");
     private final JButton update = Widgets.button("Update template");
     private final JLabel output = Widgets.hint("");
-    private final JButton failedRules = new JButton();
+    private final JLabel failedRules = new JLabel();
+    private final JLabel pageNote = new JLabel();
+    private final JLabel tooLarge = new JLabel("⚠ Too large to export: choose a smaller height or scale");
+    private final JLabel prettyFailed = new JLabel("⚠ Pretty view failed: showing raw");
+    // Not warnings: nothing is wrong with the export. The footer can't show a time Burp doesn't have, and a very long
+    // message shows only its start.
+    private final JLabel noTimestamp = Widgets.hint("No timestamp available");
+    private final JLabel truncated = Widgets.hint("");
     private final Runnable templatesListener = this::reloadTemplates;
     private final KeyEventDispatcher copyShortcut = this::copyShortcut;
     private int selectedTab = SettingsForm.RULES;
@@ -105,18 +115,27 @@ final class ScreenshotDialog extends JDialog {
         this.store = store;
         this.state = state;
         this.data = data;
+        history = new SettingsHistory(() -> state.settings);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         statusTimer.setRepeats(false);
         renderTimer.setRepeats(false);
 
-        formHolder.setMinimumSize(new Dimension(300, 0));
-        JSplitPane main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, formHolder, buildPreview());
-        main.setDividerLocation(400);
+        formHolder.setMinimumSize(new Dimension(Widgets.scaled(SIDEBAR_MIN_WIDTH), 0));
+        main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, formHolder, buildPreview());
+        main.setDividerLocation(savedSidebarWidth());
         main.setBorder(null);
 
         JPanel root = new JPanel(new BorderLayout());
         root.add(buildTopBar(), BorderLayout.NORTH);
         root.add(main, BorderLayout.CENTER);
+        // The outcome of the last action, in a strip of its own: in the top bar, a long message pushed buttons out.
+        status.setBorder(
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, Widgets.borderColor()),
+                BorderFactory.createEmptyBorder(4, 12, 4, 12)
+            )
+        );
+        root.add(status, BorderLayout.SOUTH);
         setContentPane(root);
         getRootPane().registerKeyboardAction(
             event -> dispose(),
@@ -128,43 +147,95 @@ final class ScreenshotDialog extends JDialog {
             KeyStroke.getKeyStroke(KeyEvent.VK_S, MENU_SHORTCUT),
             JComponent.WHEN_IN_FOCUSED_WINDOW
         );
+        SettingsHistory.bindKeys(getRootPane(), JComponent.WHEN_IN_FOCUSED_WINDOW, () -> undo(false), () -> undo(true));
         // Text components bind Copy themselves, so a window-level key binding would never fire: dispatch it first.
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(copyShortcut);
 
-        content.setSelectionListener(this::onSelectionAction);
+        content.setSelectionListener((action, text, target) -> form.onSelectionAction(action, text, target));
         content.setSplitRatio(state.splitRatio);
         content.setSplitRatioListener(ratio -> state.splitRatio = ratio);
         content.setErrorListener(host.logError());
-        preview.setCropListener(height -> {
-            state.cropHeight = height;
-            resetHeight.setEnabled(height != null);
+        preview.setWidthDragListener((width, done) -> {
+            state.settings.widthMode = WidthMode.PIXEL;
+            state.settings.widthPixels = width;
+            dragged(done);
         });
-        preview.setCropHeight(state.cropHeight);
-        // What a pane needs changes with its size (window, crop, divider, width) and with each render.
-        ComponentAdapter resized = new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                updateFit();
+        preview.setHeightDragListener((height, done) -> {
+            state.settings.heightMode = HeightMode.PIXEL;
+            state.settings.heightPixels = height;
+            dragged(done);
+        });
+        content.addComponentListener(
+            new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    updateOutputLabel();
+                }
             }
-        };
-        content.requestPane().addComponentListener(resized);
-        content.responsePane().addComponentListener(resized);
+        );
 
         store.addListener(templatesListener);
         reloadTemplates();
         rebuildForm();
         render();
 
-        Rectangle area =
-            owner != null && owner.isShowing()
-                ? owner.getBounds()
-                : GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-        setSize(new Dimension((int) (area.width * 0.95), (int) (area.height * 0.9)));
-        setLocationRelativeTo(owner);
+        setMinimumSize(minimumWindowSize());
+        Rectangle saved = savedBounds();
+        if (saved != null) {
+            setBounds(saved);
+        } else {
+            Rectangle area =
+                owner != null && owner.isShowing()
+                    ? owner.getBounds()
+                    : GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            setSize(new Dimension((int) (area.width * 0.95), (int) (area.height * 0.9)));
+            setLocationRelativeTo(owner);
+        }
+    }
+
+    /** The bounds the window was closed with, or {@code null} if none or no longer on a screen (a monitor was unplugged). */
+    private Rectangle savedBounds() {
+        String value = host.preferences().get(BOUNDS_KEY);
+        if (value == null || GraphicsEnvironment.isHeadless()) {
+            return null;
+        }
+        List<Rectangle> screens = new ArrayList<>();
+        for (GraphicsDevice screen : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
+            screens.add(screen.getDefaultConfiguration().getBounds());
+        }
+        return Widgets.boundsOnScreen(value, screens);
+    }
+
+    /** {@link #MIN_SIZE}, scaled with Burp's font size, and never larger than the screen. */
+    private static Dimension minimumWindowSize() {
+        Dimension size = new Dimension(Widgets.scaled(MIN_SIZE.width), Widgets.scaled(MIN_SIZE.height));
+        if (!GraphicsEnvironment.isHeadless()) {
+            Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            size.width = Math.min(size.width, screen.width);
+            size.height = Math.min(size.height, screen.height);
+        }
+        return size;
+    }
+
+    private int savedSidebarWidth() {
+        try {
+            String value = host.preferences().get(SIDEBAR_KEY);
+            // Saved at a smaller font, it may now be too narrow.
+            return value == null
+                ? Widgets.scaled(SIDEBAR_WIDTH)
+                : Math.max(Widgets.scaled(SIDEBAR_MIN_WIDTH), Integer.parseInt(value));
+        } catch (NumberFormatException e) {
+            return Widgets.scaled(SIDEBAR_WIDTH);
+        }
     }
 
     @Override
     public void dispose() {
+        if (isShowing()) {
+            Rectangle bounds = getBounds();
+            host.preferences().set(BOUNDS_KEY, bounds.x + "," + bounds.y + "," + bounds.width + "," + bounds.height);
+            host.preferences().set(SIDEBAR_KEY, String.valueOf(main.getDividerLocation()));
+        }
         KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(copyShortcut);
         store.removeListener(templatesListener);
         renderTimer.stop();
@@ -191,6 +262,8 @@ final class ScreenshotDialog extends JDialog {
             }
             state.templateId = template.id;
             state.settings = template.settings.copy();
+            // Undo stays within a template's settings.
+            history.reset();
             selectCurrentTemplate();
             rebuildForm();
             render();
@@ -204,15 +277,16 @@ final class ScreenshotDialog extends JDialog {
         saveAs.addActionListener(event -> saveAsNewTemplate());
 
         JButton save = Widgets.button("Save PNG…");
-        save.setToolTipText("Save the screenshot as a PNG file (" + shortcut(KeyEvent.VK_S) + ")");
+        save.setToolTipText("Save the screenshot as a PNG file (" + Widgets.shortcut(KeyEvent.VK_S) + ")");
         save.addActionListener(event -> takeScreenshot(false));
         JButton copy = Widgets.primary(Widgets.button("Copy image"));
-        copy.setToolTipText("Copy the screenshot to the clipboard (" + shortcut(KeyEvent.VK_C) + ")");
+        copy.setToolTipText("Copy the screenshot to the clipboard (" + Widgets.shortcut(KeyEvent.VK_C) + ")");
         copy.addActionListener(event -> takeScreenshot(true));
 
         JLabel templateLabel = new JLabel("Template");
         templateLabel.setLabelFor(templateCombo);
-        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        // The template actions wrap to a second row when the window is narrow, instead of disappearing.
+        JPanel left = new JPanel(new WrapLayout(6, 4));
         left.add(templateLabel);
         left.add(templateCombo);
         left.add(modified);
@@ -220,8 +294,8 @@ final class ScreenshotDialog extends JDialog {
         left.add(update);
         left.add(saveAs);
 
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        right.add(status);
+        // Always on the first row, whatever the width.
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 4));
         right.add(save);
         right.add(copy);
 
@@ -231,7 +305,8 @@ final class ScreenshotDialog extends JDialog {
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
-                BorderFactory.createEmptyBorder(8, 8, 8, 8)
+                // With the layouts' 4 px gaps above and below the buttons, 8 px as before.
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)
             )
         );
         return bar;
@@ -241,33 +316,34 @@ final class ScreenshotDialog extends JDialog {
         previewScroll.setBorder(null);
         previewScroll.getVerticalScrollBar().setUnitIncrement(16);
 
-        fit.setToolTipText("Crop the height so the whole request and response are visible");
-        fit.addActionListener(event -> fitToContent());
-        resetHeight.setToolTipText("Fill the window height again");
-        resetHeight.addActionListener(event -> preview.setCropHeight(null));
-        output.setToolTipText("Drag the handle below the screenshot to crop its height");
+        output.setToolTipText("Drag the handles on the right of and below the screenshot to change its size");
 
         JLabel tip = Widgets.hint("Right-click selected text to add a rule");
         tip.setToolTipText(
             "Select text in the request or response, then right-click to highlight it, redact it or hide its header"
         );
-        failedRules.putClientProperty("JButton.buttonType", "borderless");
         failedRules.setForeground(Widgets.errorColor());
-        failedRules.setToolTipText("Show the rules");
         failedRules.setVisible(false);
-        failedRules.addActionListener(event -> showRules());
 
+        // What is always there on the left, what comes and goes on the right: nothing moves when a warning shows.
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         left.add(output);
-        left.add(failedRules);
         left.add(tip);
-        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        right.add(fit);
-        right.add(resetHeight);
-
-        JPanel bar = new JPanel(new BorderLayout(8, 0));
-        bar.add(left, BorderLayout.CENTER);
-        bar.add(right, BorderLayout.EAST);
+        // One warning per line when even a row of their own is too narrow for them.
+        JPanel right = new JPanel(new WrapLayout(12, 0, true));
+        for (JLabel warning : new JLabel[] { prettyFailed, pageNote, tooLarge }) {
+            warning.setForeground(Widgets.errorColor());
+            warning.setVisible(false);
+            right.add(warning);
+        }
+        right.add(failedRules);
+        for (JLabel note : new JLabel[] { truncated, noTimestamp }) {
+            note.setVisible(false);
+            right.add(note);
+        }
+        JPanel bar = new JPanel(new PreviewBarLayout(left, right));
+        bar.add(left);
+        bar.add(right);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
@@ -281,15 +357,88 @@ final class ScreenshotDialog extends JDialog {
         return column;
     }
 
+    /**
+     * The size on the left and the warnings on the right of one row. In a window too narrow for both, the warnings take
+     * a second row rather than cutting the size off; the hint, at the end of the left side, drops first.
+     */
+    static final class PreviewBarLayout implements LayoutManager {
+
+        private static final int GAP = 8;
+        private final JPanel left;
+        private final JPanel right;
+
+        PreviewBarLayout(JPanel left, JPanel right) {
+            this.left = left;
+            this.right = right;
+        }
+
+        /** Whether the size and the warnings fit side by side; the hint doesn't count, it drops first. */
+        private boolean oneRow(Container bar, int width) {
+            Insets insets = bar.getInsets();
+            int sizeWidth = left.getComponentCount() == 0 ? 0 : left.getComponent(0).getPreferredSize().width;
+            int leftGaps = ((FlowLayout) left.getLayout()).getHgap() * 2;
+            return insets.left + leftGaps + sizeWidth + GAP + right.getPreferredSize().width + insets.right <= width;
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container bar) {
+            Insets insets = bar.getInsets();
+            // The bar spans its parent: the parent's width is already the new one while the bar's is not.
+            int width = bar.getParent() != null ? bar.getParent().getWidth() : bar.getWidth();
+            Dimension l = left.getPreferredSize();
+            Dimension r = right.getPreferredSize();
+            int height = oneRow(bar, width) ? Math.max(l.height, r.height) : l.height + r.height;
+            return new Dimension(
+                insets.left + l.width + GAP + r.width + insets.right,
+                insets.top + height + insets.bottom
+            );
+        }
+
+        /** As narrow as the size: the rest wraps or drops, so the bar never pushes the sidebar aside. */
+        @Override
+        public Dimension minimumLayoutSize(Container bar) {
+            Insets insets = bar.getInsets();
+            int sizeWidth = left.getComponentCount() == 0 ? 0 : left.getComponent(0).getPreferredSize().width;
+            int leftGaps = ((FlowLayout) left.getLayout()).getHgap() * 2;
+            return new Dimension(insets.left + leftGaps + sizeWidth + insets.right, preferredLayoutSize(bar).height);
+        }
+
+        @Override
+        public void layoutContainer(Container bar) {
+            Insets insets = bar.getInsets();
+            int width = bar.getWidth() - insets.left - insets.right;
+            int rightWidth = Math.min(right.getPreferredSize().width, width);
+            int leftHeight = left.getPreferredSize().height;
+            int rightHeight = right.getPreferredSize().height;
+            if (oneRow(bar, bar.getWidth())) {
+                int height = Math.max(leftHeight, rightHeight);
+                left.setBounds(insets.left, insets.top, width - rightWidth - GAP, height);
+                right.setBounds(insets.left + width - rightWidth, insets.top, rightWidth, height);
+            } else {
+                left.setBounds(insets.left, insets.top, width, leftHeight);
+                right.setBounds(insets.left + width - rightWidth, insets.top + leftHeight, rightWidth, rightHeight);
+            }
+        }
+
+        @Override
+        public void addLayoutComponent(String name, Component component) {}
+
+        @Override
+        public void removeLayoutComponent(Component component) {}
+    }
+
     private void rebuildForm() {
         formHolder.removeAll();
         form = new SettingsForm(
             state.settings,
-            renderTimer::restart,
+            () -> {
+                history.changed();
+                renderTimer.restart();
+            },
             host.editorFont().get(),
-            false,
             HeadersTab.InMessage.of(data)
         );
+        form.setUndo(() -> undo(false));
         form.tabs().setSelectedIndex(selectedTab);
         form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
         formHolder.add(form, BorderLayout.CENTER);
@@ -370,13 +519,15 @@ final class ScreenshotDialog extends JDialog {
         }
     }
 
-    private void updateOutputLabel(Settings settings) {
-        String width = switch (settings.widthMode) {
-            case FULL -> "full width";
-            case PIXEL -> settings.widthPixels + " px wide";
-            case A4, LETTER -> settings.widthMode.label();
-        };
-        output.setText("2× PNG · " + width);
+    /** The size of the image Copy and Save produce: the content as laid out, at the capture scale. */
+    private void updateOutputLabel() {
+        output.setText(ImageCapture.sizeLabel(content.getWidth(), content.getHeight(), state.settings.scale));
+        String note = ImageCapture.pageNote(state.settings.widthMode, content.getHeight());
+        boolean large = ImageCapture.tooLarge(content.getWidth(), content.getHeight(), state.settings.scale);
+        pageNote.setText(note == null ? "" : "⚠ " + note);
+        // An image too large to export is taller than a page anyway: one warning is enough.
+        pageNote.setVisible(note != null && !large);
+        tooLarge.setVisible(large);
     }
 
     /**
@@ -402,11 +553,6 @@ final class ScreenshotDialog extends JDialog {
         return true;
     }
 
-    private static String shortcut(int keyCode) {
-        String key = KeyEvent.getKeyText(keyCode);
-        return System.getProperty("os.name", "").toLowerCase().contains("mac") ? "⌘" + key : "Ctrl+" + key;
-    }
-
     private void render() {
         renderTimer.stop();
         Settings settings = state.settings;
@@ -418,14 +564,18 @@ final class ScreenshotDialog extends JDialog {
                 palette,
                 host.editorFont().get(),
                 host.displayFont().get(),
-                settings.showTimestamp ? timestamp() : null,
-                settings.showResponseInfo ? responseInfo() : null
+                settings.showTimestamp ? ContentPanel.timestamp(data) : null,
+                settings.showResponseInfo ? ContentPanel.responseInfo(data) : null
             );
         } catch (RuntimeException | StackOverflowError e) {
             // Runs on the Swing thread: report it in the extension's error log rather than Burp's.
             host.logError().accept("Could not render the screenshot: " + e);
             showStatus("Could not render the screenshot, see the extension's errors", true);
         }
+        prettyFailed.setVisible(content.prettyFailed());
+        noTimestamp.setVisible(settings.showTimestamp && data.requestTime() == null);
+        truncated.setText(truncationNote(content.truncated()));
+        truncated.setVisible(!content.truncated().isEmpty());
 
         // Like Caido, a new content width resets the request/response split.
         Integer maxWidth = settings.maxContentWidth();
@@ -436,27 +586,30 @@ final class ScreenshotDialog extends JDialog {
         lastMaxWidth = maxWidth;
         rendered = true;
 
-        preview.setMaxContentWidth(maxWidth);
-        updateFit();
+        preview.setWidth(settings.widthMode, maxWidth);
+        preview.setHeight(settings.heightMode, settings.heightPixels);
         form.showRuleStatuses(content.ruleStatuses());
         form.showHeaderHits(content.headerHits());
         int failed = failedRedactions().size();
         failedRules.setText("⚠ " + failed + (failed == 1 ? " redaction rule failed" : " redaction rules failed"));
         failedRules.setVisible(failed > 0);
         updateTemplateState();
-        updateOutputLabel(settings);
+        updateOutputLabel();
         preview.setBackground(palette.canvas());
         preview.setHandleColors(palette.canvas(), palette.muted());
         previewScroll.getViewport().setBackground(palette.canvas());
     }
 
-    /** The redaction rules that did not fully apply in the last render. */
+    /**
+     * The redaction rules that did not fully apply in the last render, or that redact nothing (only some capture groups,
+     * none chosen): what they should hide may show.
+     */
     private List<RedactionRule> failedRedactions() {
         return state.settings.redactions
             .stream()
             .filter(rule -> {
                 RuleStatus status = content.ruleStatuses().get(rule);
-                return status != null && status.failed();
+                return (status != null && status.failed()) || RuleEngine.redactsNothing(rule);
             })
             .toList();
     }
@@ -510,22 +663,7 @@ final class ScreenshotDialog extends JDialog {
             render();
         }
         getRootPane().validate();
-    }
-
-    private String timestamp() {
-        ZonedDateTime time =
-            data.requestTime() != null
-                ? data.requestTime().withZoneSameInstant(ZoneId.systemDefault())
-                : ZonedDateTime.now();
-        return TIMESTAMP.format(time);
-    }
-
-    private String responseInfo() {
-        if (data.responseLength() == null) {
-            return null;
-        }
-        String info = NumberFormat.getIntegerInstance().format(data.responseLength()) + " bytes";
-        return data.roundtripMillis() == null ? info : info + " | " + data.roundtripMillis() + "ms";
+        preview.settle();
     }
 
     private void reloadTemplates() {
@@ -551,6 +689,7 @@ final class ScreenshotDialog extends JDialog {
         store.getTemplateById(state.templateId).ifPresentOrElse(
             template -> {
                 state.settings = template.settings.copy();
+                history.record();
                 rebuildForm();
                 render();
                 showStatus("Reverted to \"" + template.name + "\"", false);
@@ -569,7 +708,9 @@ final class ScreenshotDialog extends JDialog {
     }
 
     private void saveAsNewTemplate() {
-        String name = Widgets.askText(this, "Template name:", "Save As New Template");
+        String name = Widgets.askText(this, "Template name:", "Save As New Template", text ->
+            TemplatesTab.nameProblem(store, text, null)
+        );
         if (name == null || name.isBlank()) {
             return;
         }
@@ -580,93 +721,38 @@ final class ScreenshotDialog extends JDialog {
         showStatus("Template \"" + template.name + "\" created", false);
     }
 
-    /**
-     * The actions of the preview's right-click menu. New rules go first, like the ones added with +, and open; when a
-     * rule already redacts or highlights the header, that rule is shown instead of adding a duplicate.
-     */
-    private void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
-        Settings settings = state.settings;
-        Rule added = null;
-        switch (action) {
-            case HIGHLIGHT -> {
-                HighlightRule rule = HighlightRule.create(selected, target, MatchMode.STRING);
-                settings.highlights.addFirst(rule);
-                added = rule;
-            }
-            case REDACT -> {
-                RedactionRule rule = RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING);
-                settings.redactions.addFirst(rule);
-                added = rule;
-            }
-            case HIDE_HEADER -> settings.headers.set(selected, Visibility.HIDE, HeaderCatalogFile.bundled());
-            case REDACT_HEADER, HIGHLIGHT_HEADER -> {
-                boolean redaction = action == MessagePane.SelectionAction.REDACT_HEADER;
-                Rule existing = form.headersTab().existingRule(List.of(selected), redaction);
-                if (existing != null) {
-                    // Already done by a rule: show it rather than add a duplicate.
-                    form.showRule(existing);
-                    return;
-                }
-                if (redaction) {
-                    RedactionRule rule = RedactionRule.forHeaders(List.of(selected), RedactionMode.REPLACE);
-                    settings.redactions.addFirst(rule);
-                    added = rule;
-                } else {
-                    HighlightRule rule = HighlightRule.forHeaders(List.of(selected));
-                    settings.highlights.addFirst(rule);
-                    added = rule;
-                }
-            }
+    /** Shows a size set with a drag handle in the form; the whole drag is one step. */
+    private void dragged(boolean done) {
+        form.showSize();
+        if (done) {
+            history.record();
+            updateTemplateState();
         }
-        rebuildForm();
-        if (added != null) {
-            // Open, so its card shows what was added; the focus stays in the preview.
-            form.expand(added);
-        }
-        render();
     }
 
-    /** Turns "Fit to content" off while it would change nothing, once the layout has caught up. */
-    private void updateFit() {
-        if (fitCheckPending) {
+    /** Undoes or redoes the last change to the settings, showing where it was. */
+    private void undo(boolean redo) {
+        Settings before = redo ? history.redo() : history.undo();
+        if (before == null) {
+            UIManager.getLookAndFeel().provideErrorFeedback(getRootPane());
             return;
         }
-        fitCheckPending = true;
-        SwingUtilities.invokeLater(() -> {
-            fitCheckPending = false;
-            getRootPane().validate();
-            int requestOverflow = content.requestPane().overflow();
-            int responseOverflow = content.responsePane().overflow();
-            boolean fits = content.isSideBySide()
-                ? Math.max(requestOverflow, responseOverflow) == 0
-                : requestOverflow == 0 && responseOverflow == 0;
-            fit.setEnabled(!fits);
-        });
-    }
-
-    private void fitToContent() {
-        flushRender();
-        int height = content.getHeight();
-        int requestOverflow = content.requestPane().overflow();
-        int responseOverflow = content.responsePane().overflow();
-        if (content.isSideBySide()) {
-            preview.setCropHeight(height + Math.max(requestOverflow, responseOverflow));
-        } else {
-            int requestHeight = content.requestPane().getHeight() + requestOverflow;
-            int responseHeight = content.responsePane().getHeight() + responseOverflow;
-            state.splitRatio = requestHeight / (double) Math.max(1, requestHeight + responseHeight);
-            content.setSplitRatio(state.splitRatio);
-            preview.setCropHeight(height + requestOverflow + responseOverflow);
-        }
+        form.reload(before);
+        render();
     }
 
     private void takeScreenshot(boolean toClipboard) {
         flushRender();
+        if (ImageCapture.tooLarge(content.getWidth(), content.getHeight(), state.settings.scale)) {
+            // The preview bar says why and what to do.
+            showStatus("Too large to export", true);
+            return;
+        }
         if (!confirmFailedRedactions(toClipboard)) {
             return;
         }
         try {
-            BufferedImage image = ImageCapture.render(content);
+            BufferedImage image = ImageCapture.render(content, state.settings.scale);
             if (toClipboard) {
                 ImageCapture.copyToClipboard(image);
                 showStatus("Image copied", false);
@@ -690,30 +776,38 @@ final class ScreenshotDialog extends JDialog {
         JFileChooser chooser = new JFileChooser(lastDirectory);
         chooser.setDialogTitle("Save Screenshot");
         chooser.setFileFilter(new FileNameExtensionFilter("PNG images", "png"));
-        chooser.setSelectedFile(new File(chooser.getCurrentDirectory(), FILE_NAME.format(LocalDateTime.now())));
-        while (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File file = chooser.getSelectedFile();
-            if (!file.getName().toLowerCase().endsWith(".png")) {
-                file = new File(file.getParentFile(), file.getName() + ".png");
-            }
-            if (
-                !file.exists() ||
-                JOptionPane.showConfirmDialog(
-                    this,
-                    file.getName() + " already exists. Replace it?",
-                    "Save Screenshot",
-                    JOptionPane.YES_NO_OPTION
-                ) == JOptionPane.YES_OPTION
-            ) {
-                return file;
-            }
-        }
-        return null;
+        MessageView url = content.urlView();
+        String name = ImageCapture.fileName(
+            data.requestText(),
+            url.copyText(0, url.text().length()),
+            data.responseText(),
+            state.settings.messages
+        );
+        chooser.setSelectedFile(ImageCapture.freeFile(chooser.getCurrentDirectory(), name));
+        return Widgets.chooseSaveFile(this, chooser, "png");
     }
 
+    /** Says which parts were too long to show whole, such as "Response shortened to 300,000 characters". */
+    static String truncationNote(Set<RuleTarget> parts) {
+        String which =
+            parts.contains(RuleTarget.REQUEST) && parts.contains(RuleTarget.RESPONSE)
+                ? "Request and response"
+                : parts.contains(RuleTarget.REQUEST)
+                  ? "Request"
+                  : "Response";
+        return (
+            which + " shortened to " + NumberFormat.getIntegerInstance().format(MessageText.MAX_CHARS) + " characters"
+        );
+    }
+
+    /** Shows the outcome of an action. A success clears after a few seconds; an error stays until the next status. */
     private void showStatus(String message, boolean error) {
-        status.setForeground(error ? Widgets.errorColor() : SUCCESS);
+        status.setForeground(error ? Widgets.errorColor() : Widgets.successColor());
         status.setText(message);
-        statusTimer.restart();
+        if (error) {
+            statusTimer.stop();
+        } else {
+            statusTimer.restart();
+        }
     }
 }

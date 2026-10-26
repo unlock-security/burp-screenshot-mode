@@ -9,11 +9,13 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
+import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import javax.swing.BorderFactory;
 import javax.swing.BoundedRangeModel;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
@@ -49,12 +51,17 @@ final class MessagePane extends JPanel {
         void onSelectionAction(SelectionAction action, String text, RuleTarget target);
     }
 
+    private static final int TITLE_INSET = 12;
+
     private final RuleTarget target;
     private final JPanel titleBar = new JPanel(new BorderLayout());
     private final JLabel title;
     private final MessageView view = new MessageView();
     private final LineNumberGutter gutter = new LineNumberGutter(view);
     private final JScrollPane scroll = new ChainedScrollPane(view);
+    /** Instead of the text when there is no message at all, such as a request that got no response. */
+    private final JLabel missing = new JLabel();
+    private final JPanel missingPanel = new JPanel(new BorderLayout());
     private SelectionListener selectionListener = (action, text, target) -> {};
     private boolean scrollbarVisible;
 
@@ -72,6 +79,7 @@ final class MessagePane extends JPanel {
         scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         add(scroll, BorderLayout.CENTER);
+        missingPanel.add(missing, BorderLayout.NORTH);
 
         view.addMouseListener(
             new MouseAdapter() {
@@ -93,20 +101,44 @@ final class MessagePane extends JPanel {
     }
 
     void render(Decorated decorated, java.util.List<HttpSyntax.Token> tokens, Palette palette, Font mono, Font ui) {
+        styleTitle(palette, ui);
+        show(scroll);
+        scroll.setBackground(palette.background());
+        scroll.getViewport().setBackground(palette.background());
+        styleScrollBar(scroll.getVerticalScrollBar(), palette);
+        view.render(decorated, tokens, palette, mono);
+        gutter.setPalette(palette);
+    }
+
+    /** Says there is no message, in muted text, so an empty pane isn't taken for an empty message. */
+    void renderMissing(String text, Palette palette, Font ui) {
+        styleTitle(palette, ui);
+        show(missingPanel);
+        missing.setText(text);
+        missing.setFont(ui.deriveFont(Font.ITALIC));
+        missing.setForeground(palette.muted());
+        missing.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        missingPanel.setBackground(palette.background());
+    }
+
+    private void show(JComponent body) {
+        if (body.getParent() != this) {
+            remove(body == scroll ? missingPanel : scroll);
+            add(body, BorderLayout.CENTER);
+            revalidate();
+        }
+    }
+
+    private void styleTitle(Palette palette, Font ui) {
         title.setFont(ui.deriveFont(Font.BOLD));
         title.setForeground(palette.text());
         titleBar.setBackground(palette.headerBackground());
         titleBar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, palette.border()),
-                BorderFactory.createEmptyBorder(7, 12, 7, 12)
+                BorderFactory.createEmptyBorder(7, TITLE_INSET, 7, TITLE_INSET)
             )
         );
-        scroll.setBackground(palette.background());
-        scroll.getViewport().setBackground(palette.background());
-        styleScrollBar(scroll.getVerticalScrollBar(), palette);
-        view.render(decorated, tokens, palette, mono);
-        gutter.setPalette(palette);
     }
 
     /**
@@ -158,8 +190,40 @@ final class MessagePane extends JPanel {
         }
     }
 
+    /** Shows or hides the line numbers beside the text. */
+    void setLineNumbers(boolean shown) {
+        if ((scroll.getRowHeader() != null && scroll.getRowHeader().getView() == gutter) != shown) {
+            scroll.setRowHeaderView(shown ? gutter : null);
+            // Without numbers, the text lines up with the title above it.
+            view.setBorder(BorderFactory.createEmptyBorder(6, shown ? 10 : TITLE_INSET, 6, 10));
+        }
+    }
+
+    void setFitting(boolean fitting) {
+        scroll.setVerticalScrollBarPolicy(
+            fitting ? ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER : ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+        );
+    }
+
+    /** The width that shows every line whole: line numbers when shown, text and the scrollbar when there is one. */
+    int unwrappedWidth() {
+        Insets insets = getInsets();
+        if (missingPanel.getParent() == this) {
+            return insets.left + missingPanel.getPreferredSize().width + insets.right;
+        }
+        int scrollbar = scroll.getVerticalScrollBar().isVisible()
+            ? scroll.getVerticalScrollBar().getPreferredSize().width
+            : 0;
+        int numbers = gutter.getParent() != null ? gutter.getPreferredSize().width : 0;
+        return insets.left + numbers + view.unwrappedWidth() + scrollbar + insets.right;
+    }
+
     /** Extra height the view needs to show everything without scrolling (negative when there is spare room). */
     int overflow() {
+        // Without a message the text view is not shown: measured, its empty viewport would always ask for more.
+        if (missingPanel.getParent() == this) {
+            return missingPanel.getPreferredSize().height - missingPanel.getHeight();
+        }
         return view.getPreferredSize().height - scroll.getViewport().getExtentSize().height;
     }
 

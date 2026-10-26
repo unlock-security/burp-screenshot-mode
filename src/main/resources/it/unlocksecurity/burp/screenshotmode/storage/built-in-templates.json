@@ -9,19 +9,39 @@
           "groups": {
             "caching": "hide",
             "client-hints": "hide",
+            "conditional": "hide",
             "fetch": "hide",
             "general": "hide",
             "infrastructure": "hide",
             "negotiation": "hide",
             "privacy": "hide",
-            "reporting": "hide"
+            "reporting": "hide",
+            "technology": "hide"
           },
-          "headers": {}
+          "headers": {
+            "Connection": "hide",
+            "Content-Disposition": "hide",
+            "Content-Language": "hide",
+            "Content-Location": "hide",
+            "Content-Range": "hide",
+            "Range": "hide",
+            "Retry-After": "hide",
+            "Strict-Transport-Security": "hide",
+            "X-XSS-Protection": "hide"
+          }
         },
-        "disposition": "horizontal",
+        "messages": "both",
+        "disposition": "vertical",
         "width": {
-          "mode": "full"
+          "mode": "a4"
         },
+        "height": {
+          "mode": "content"
+        },
+        "text": {
+          "mode": "burp"
+        },
+        "scale": 1,
         "highlights": [],
         "redactions": [
           {
@@ -117,9 +137,9 @@
                 "request",
                 "url"
               ],
-              "regex": "[?&](?i:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
+              "regex": "[?&](?:access_token|api_?key|token|signature|sig|X-Amz-Signature|X-Amz-Credential|X-Amz-Security-Token)=(?<Value>[^&\\s#]*)",
               "matchMode": "regex",
-              "matchCase": true,
+              "matchCase": false,
               "wholeWord": false,
               "groups": [
                 1
@@ -137,9 +157,9 @@
               "targets": [
                 "request"
               ],
-              "regex": "\"(?i:password|passwd|pwd|secret|client_secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
+              "regex": "\"(?:password|passwd|pwd|secret|client_secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
               "matchMode": "regex",
-              "matchCase": true,
+              "matchCase": false,
               "wholeWord": false,
               "groups": [
                 1
@@ -157,9 +177,9 @@
               "targets": [
                 "request"
               ],
-              "regex": "(?<=[&\\n])(?i:password|passwd|pwd|client_secret)=(?<Value>[^&\\n]*)",
+              "regex": "(?<=[&\\n])(?:password|passwd|pwd|client_secret)=(?<Value>[^&\\n]*)",
               "matchMode": "regex",
-              "matchCase": true,
+              "matchCase": false,
               "wholeWord": false,
               "groups": [
                 1
@@ -177,9 +197,9 @@
               "targets": [
                 "response"
               ],
-              "regex": "\"(?i:access_token|refresh_token|id_token|token|session_?id|api_?key|secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
+              "regex": "\"(?:access_token|refresh_token|id_token|token|session_?id|api_?key|secret)\"\\s*:\\s*\"(?<Value>[^\"]*)\"",
               "matchMode": "regex",
-              "matchCase": true,
+              "matchCase": false,
               "wholeWord": false,
               "groups": [
                 1
@@ -208,11 +228,12 @@
             "replacementText": "[REDACTED]"
           }
         ],
-        "showTimestamp": false,
+        "showTimestamp": true,
         "showResponseInfo": true,
-        "theme": "auto",
-        "view": "raw",
-        "url": "full"
+        "theme": "light",
+        "view": "pretty",
+        "url": "path",
+        "lineNumbers": true
       }
     },
     {
@@ -223,17 +244,26 @@
           "groups": {},
           "headers": {}
         },
+        "messages": "both",
         "disposition": "horizontal",
         "width": {
           "mode": "full"
         },
+        "height": {
+          "mode": "full"
+        },
+        "text": {
+          "mode": "burp"
+        },
+        "scale": 2,
         "highlights": [],
         "redactions": [],
         "showTimestamp": false,
         "showResponseInfo": true,
         "theme": "auto",
         "view": "raw",
-        "url": "full"
+        "url": "full",
+        "lineNumbers": true
       }
     }
   ],

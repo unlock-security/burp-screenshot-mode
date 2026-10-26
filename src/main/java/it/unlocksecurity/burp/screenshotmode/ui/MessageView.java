@@ -9,6 +9,7 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Shape;
@@ -125,6 +126,17 @@ final class MessageView extends JTextPane {
 
     String text() {
         return text;
+    }
+
+    /**
+     * The width that shows every line whole, without wrapping. Laying out a row counts its line break as one more
+     * character, which the text's own width leaves out.
+     */
+    int unwrappedWidth() {
+        Insets insets = getInsets();
+        float lines = getUI().getRootView(this).getPreferredSpan(View.X_AXIS);
+        int lineBreak = getFontMetrics(getFont()).charWidth(' ');
+        return (int) Math.ceil(lines) + lineBreak + insets.left + insets.right;
     }
 
     void render(Decorated decorated, List<HttpSyntax.Token> tokens, Palette palette, Font font) {

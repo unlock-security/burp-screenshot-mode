@@ -13,6 +13,15 @@ public final class Settings {
     public static final int DEFAULT_PIXEL_WIDTH = 800;
     public static final int MIN_PIXEL_WIDTH = 200;
     public static final int MAX_PIXEL_WIDTH = 2000;
+    public static final int DEFAULT_PIXEL_HEIGHT = 600;
+    public static final int MIN_PIXEL_HEIGHT = 50;
+    public static final int MAX_PIXEL_HEIGHT = 20_000;
+    public static final int DEFAULT_TEXT_SIZE = 13;
+    public static final int MIN_TEXT_SIZE = 6;
+    public static final int MAX_TEXT_SIZE = 36;
+    /** The image pixels per pixel on screen that can be chosen. */
+    public static final List<Integer> SCALES = List.of(1, 2, 3);
+    public static final int DEFAULT_SCALE = 2;
 
     /**
      * The id of the built-in template these settings are based on: the headers that {@link #headers} doesn't set
@@ -21,10 +30,20 @@ public final class Settings {
     public String basedOn;
     /** The headers shown and hidden, the built-in template's included. */
     public HeaderVisibility headers = new HeaderVisibility();
+    public MessageMode messages = MessageMode.BOTH;
+    /** Only meaningful when {@link #messages} shows both. */
     public Disposition disposition = Disposition.HORIZONTAL;
     public WidthMode widthMode = WidthMode.FULL;
     /** Only meaningful when {@link #widthMode} is {@link WidthMode#PIXEL}. */
     public int widthPixels = DEFAULT_PIXEL_WIDTH;
+    public HeightMode heightMode = HeightMode.FULL;
+    /** Only meaningful when {@link #heightMode} is {@link HeightMode#PIXEL}. */
+    public int heightPixels = DEFAULT_PIXEL_HEIGHT;
+    public TextSizeMode textSizeMode = TextSizeMode.BURP;
+    /** The size of the messages' text in points; only meaningful when {@link #textSizeMode} is custom. */
+    public int textSize = DEFAULT_TEXT_SIZE;
+    /** Image pixels per pixel on screen: one of {@link #SCALES}. */
+    public int scale = DEFAULT_SCALE;
     public List<HighlightRule> highlights = new ArrayList<>();
     public List<RedactionRule> redactions = new ArrayList<>();
     public boolean showTimestamp = false;
@@ -34,11 +53,13 @@ public final class Settings {
     /** Raw or Pretty, like the tabs of Burp's message editor. */
     public ViewMode view = ViewMode.RAW;
     public UrlMode url = UrlMode.FULL;
+    /** Numbers beside the lines of the messages. */
+    public boolean lineNumbers = true;
 
-    /** Maximum width of the captured content in pixels, or {@code null} for full width. */
+    /** The fixed width of the captured content in pixels, or {@code null} when it follows the preview or the content. */
     public Integer maxContentWidth() {
         return switch (widthMode) {
-            case FULL -> null;
+            case FULL, CONTENT -> null;
             case PIXEL -> widthPixels;
             case A4, LETTER -> widthMode.presetWidth();
         };
@@ -73,10 +94,15 @@ public final class Settings {
     /** How many settings of the Appearance tab differ from {@code other}'s. */
     public int appearanceChanges(Settings other) {
         return (int) List.of(
+            messages != other.messages,
             disposition != other.disposition,
             !Objects.equals(maxContentWidth(), other.maxContentWidth()) || widthMode != other.widthMode,
+            heightMode != other.heightMode || (heightMode == HeightMode.PIXEL && heightPixels != other.heightPixels),
+            textSizeMode != other.textSizeMode || (textSizeMode == TextSizeMode.CUSTOM && textSize != other.textSize),
+            scale != other.scale,
             theme != other.theme,
             url != other.url,
+            lineNumbers != other.lineNumbers,
             view != other.view,
             showTimestamp != other.showTimestamp,
             showResponseInfo != other.showResponseInfo
@@ -88,11 +114,18 @@ public final class Settings {
 
     /** Takes the settings of the Appearance tab from {@code other}. */
     public void copyAppearance(Settings other) {
+        messages = other.messages;
         disposition = other.disposition;
         widthMode = other.widthMode;
         widthPixels = other.widthPixels;
+        heightMode = other.heightMode;
+        heightPixels = other.heightPixels;
+        textSizeMode = other.textSizeMode;
+        textSize = other.textSize;
+        scale = other.scale;
         theme = other.theme;
         url = other.url;
+        lineNumbers = other.lineNumbers;
         view = other.view;
         showTimestamp = other.showTimestamp;
         showResponseInfo = other.showResponseInfo;
@@ -100,18 +133,23 @@ public final class Settings {
 
     public Settings copy() {
         Settings copy = new Settings();
-        copy.basedOn = basedOn;
-        copy.headers = headers.copy();
-        copy.disposition = disposition;
-        copy.widthMode = widthMode;
-        copy.widthPixels = widthPixels;
-        copy.highlights = new ArrayList<>(highlights.stream().map(HighlightRule::copy).toList());
-        copy.redactions = new ArrayList<>(redactions.stream().map(RedactionRule::copy).toList());
-        copy.showTimestamp = showTimestamp;
-        copy.showResponseInfo = showResponseInfo;
-        copy.theme = theme;
-        copy.view = view;
-        copy.url = url;
+        copy.copyFrom(this);
         return copy;
+    }
+
+    /**
+     * Takes copies of all of {@code other}'s settings. The rule lists stay the same objects, refilled, since editors
+     * hold them.
+     */
+    public void copyFrom(Settings other) {
+        List<HighlightRule> otherHighlights = other.highlights.stream().map(HighlightRule::copy).toList();
+        List<RedactionRule> otherRedactions = other.redactions.stream().map(RedactionRule::copy).toList();
+        highlights.clear();
+        highlights.addAll(otherHighlights);
+        redactions.clear();
+        redactions.addAll(otherRedactions);
+        basedOn = other.basedOn;
+        headers = other.headers.copy();
+        copyAppearance(other);
     }
 }

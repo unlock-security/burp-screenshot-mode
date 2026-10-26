@@ -9,15 +9,18 @@ import com.google.gson.JsonParser;
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderVisibility;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
@@ -188,6 +191,171 @@ class TemplateCodecTest {
         Settings fullWithStalePixels = full.copy();
         fullWithStalePixels.widthPixels = 1234;
         assertTrue(TemplateCodec.sameSettings(full, fullWithStalePixels), "pixels are not stored in full width");
+    }
+
+    @Test
+    void readsAWidthThatFitsTheContent() {
+        Settings settings = decodeSettings(
+            v3(V3_SETTINGS.replace("\"width\": {\"mode\": \"full\"},", "\"width\": {\"mode\": \"content\"},"))
+        );
+        assertEquals(WidthMode.CONTENT, settings.widthMode);
+        assertEquals(null, settings.maxContentWidth(), "no fixed width");
+    }
+
+    @Test
+    void readsTheHeightAndFillsThePreviewWithout() {
+        assertEquals(HeightMode.FULL, decodeSettings(v3(V3_SETTINGS)).heightMode, "saved before the height existed");
+
+        Settings fitted = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"width\": {\"mode\": \"full\"},",
+                    "\"width\": {\"mode\": \"full\"}, \"height\": {\"mode\": \"content\"},"
+                )
+            )
+        );
+        assertEquals(HeightMode.CONTENT, fitted.heightMode);
+
+        Settings pixels = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"width\": {\"mode\": \"full\"},",
+                    "\"width\": {\"mode\": \"full\"}, \"height\": {\"mode\": \"pixel\", \"value\": 640},"
+                )
+            )
+        );
+        assertEquals(HeightMode.PIXEL, pixels.heightMode);
+        assertEquals(640, pixels.heightPixels);
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", pixels)), "t1"));
+        assertEquals(640, decodeSettings(encoded).heightPixels, "round trip");
+
+        Settings huge = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"width\": {\"mode\": \"full\"},",
+                    "\"width\": {\"mode\": \"full\"}, \"height\": {\"mode\": \"pixel\", \"value\": 999999},"
+                )
+            )
+        );
+        assertEquals(Settings.MAX_PIXEL_HEIGHT, huge.heightPixels);
+
+        for (String unreadable : List.of("{\"mode\": \"pixel\"}", "{\"mode\": \"later\"}", "\"tall\"")) {
+            Settings settings = decodeSettings(
+                v3(
+                    V3_SETTINGS.replace(
+                        "\"width\": {\"mode\": \"full\"},",
+                        "\"width\": {\"mode\": \"full\"}, \"height\": " + unreadable + ","
+                    )
+                )
+            );
+            assertEquals(HeightMode.FULL, settings.heightMode, unreadable);
+        }
+    }
+
+    @Test
+    void readsWhichMessagesAreShownAndBothWithout() {
+        assertEquals(MessageMode.BOTH, decodeSettings(v3(V3_SETTINGS)).messages, "saved before the setting existed");
+        for (MessageMode mode : MessageMode.values()) {
+            Settings settings = decodeSettings(
+                v3(V3_SETTINGS.replace("\"disposition\"", "\"messages\": \"" + mode.id() + "\", \"disposition\""))
+            );
+            assertEquals(mode, settings.messages);
+            String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", settings)), "t1"));
+            assertEquals(mode, decodeSettings(encoded).messages, "round trip");
+        }
+        Settings later = decodeSettings(
+            v3(V3_SETTINGS.replace("\"disposition\"", "\"messages\": \"later\", \"disposition\""))
+        );
+        assertEquals(MessageMode.BOTH, later.messages, "a value from a later release");
+    }
+
+    @Test
+    void roundTripsTheCaptureGroupsOfAHighlight() {
+        Settings settings = new Settings();
+        HighlightRule groups = HighlightRule.create("(a)(?<b>b)", RuleTarget.RESPONSE, MatchMode.REGEX);
+        groups.useCaptureGroups = true;
+        groups.selectedGroups = List.of(2);
+        HighlightRule whole = HighlightRule.create("(a)b", RuleTarget.RESPONSE, MatchMode.REGEX);
+        settings.highlights.addAll(List.of(groups, whole));
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", settings)), "t1"));
+        List<HighlightRule> decoded = decodeSettings(encoded).highlights;
+        assertTrue(decoded.getFirst().useCaptureGroups);
+        assertEquals(List.of(2), decoded.getFirst().selectedGroups);
+        assertFalse(decoded.getLast().useCaptureGroups, "the whole match");
+        assertTrue(TemplateCodec.sameSettings(settings, decodeSettings(encoded)));
+    }
+
+    @Test
+    void readsTheTextSizeAndFollowsBurpWithout() {
+        assertEquals(TextSizeMode.BURP, decodeSettings(v3(V3_SETTINGS)).textSizeMode, "saved before it existed");
+        Settings custom = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"showResponseInfo\": true",
+                    "\"showResponseInfo\": true, \"text\": {\"mode\": \"custom\", \"size\": 11}"
+                )
+            )
+        );
+        assertEquals(TextSizeMode.CUSTOM, custom.textSizeMode);
+        assertEquals(11, custom.textSize);
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", custom)), "t1"));
+        assertEquals(11, decodeSettings(encoded).textSize, "round trip");
+
+        Settings huge = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"showResponseInfo\": true",
+                    "\"showResponseInfo\": true, \"text\": {\"mode\": \"custom\", \"size\": 500}"
+                )
+            )
+        );
+        assertEquals(Settings.MAX_TEXT_SIZE, huge.textSize);
+        for (String unreadable : List.of("{\"mode\": \"custom\"}", "{\"mode\": \"later\"}", "\"big\"")) {
+            Settings settings = decodeSettings(
+                v3(
+                    V3_SETTINGS.replace(
+                        "\"showResponseInfo\": true",
+                        "\"showResponseInfo\": true, \"text\": " + unreadable
+                    )
+                )
+            );
+            assertEquals(TextSizeMode.BURP, settings.textSizeMode, unreadable);
+        }
+    }
+
+    @Test
+    void readsTheScaleAndTakesTwoWithout() {
+        assertEquals(2, decodeSettings(v3(V3_SETTINGS)).scale, "saved before the setting existed");
+        for (int scale : Settings.SCALES) {
+            Settings settings = decodeSettings(
+                v3(V3_SETTINGS.replace("\"showResponseInfo\": true", "\"showResponseInfo\": true, \"scale\": " + scale))
+            );
+            assertEquals(scale, settings.scale);
+            String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", settings)), "t1"));
+            assertEquals(scale, decodeSettings(encoded).scale, "round trip");
+        }
+        for (String unknown : List.of("4", "2.5", "0", "\"2\"", "null")) {
+            Settings settings = decodeSettings(
+                v3(
+                    V3_SETTINGS.replace(
+                        "\"showResponseInfo\": true",
+                        "\"showResponseInfo\": true, \"scale\": " + unknown
+                    )
+                )
+            );
+            assertEquals(2, settings.scale, unknown);
+        }
+    }
+
+    @Test
+    void readsTheLineNumbersAndShowsThemWithout() {
+        assertTrue(decodeSettings(v3(V3_SETTINGS)).lineNumbers, "saved before the setting existed");
+        Settings hidden = decodeSettings(
+            v3(V3_SETTINGS.replace("\"showResponseInfo\": true", "\"showResponseInfo\": true, \"lineNumbers\": false"))
+        );
+        assertFalse(hidden.lineNumbers);
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", hidden)), "t1"));
+        assertFalse(decodeSettings(encoded).lineNumbers, "round trip");
     }
 
     @Test

@@ -8,8 +8,6 @@ final class SessionState {
     Settings settings;
     String templateId;
     double splitRatio = 0.5;
-    /** {@code null} when the content is not cropped. */
-    Integer cropHeight;
 
     SessionState(Settings settings, String templateId) {
         this.settings = settings;

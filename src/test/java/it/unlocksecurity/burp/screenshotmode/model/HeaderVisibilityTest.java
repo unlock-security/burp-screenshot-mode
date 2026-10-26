@@ -50,6 +50,19 @@ class HeaderVisibilityTest {
     }
 
     @Test
+    void countsTheHiddenHeadersOfTheCatalogAndTheCustomOnes() {
+        HeaderVisibility headers = new HeaderVisibility();
+        assertEquals(0, headers.hiddenCount(CATALOG));
+        assertEquals(2, headers.knownCount(CATALOG));
+        headers.setGroup("caching", true, CATALOG);
+        headers.set("X-Backend", Visibility.HIDE, CATALOG);
+        headers.set("X-Shown", Visibility.SHOW, CATALOG);
+        assertEquals(3, headers.hiddenCount(CATALOG), "both of the group and X-Backend");
+        assertEquals(4, headers.knownCount(CATALOG), "a custom header counts even when shown");
+        assertEquals(List.of("X-Backend", "X-Shown"), headers.customHeaders(CATALOG));
+    }
+
+    @Test
     void keepsCustomHeadersEvenWhenShown() {
         HeaderVisibility headers = new HeaderVisibility();
         headers.set("X-Backend", Visibility.HIDE, CATALOG);

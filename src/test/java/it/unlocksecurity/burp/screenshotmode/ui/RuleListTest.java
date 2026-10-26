@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
@@ -25,7 +26,7 @@ class RuleListTest {
 
     private final Settings settings = BuiltInTemplates.defaults();
     private int changes;
-    private final SettingsForm form = new SettingsForm(settings, () -> changes++, MONO, false);
+    private final SettingsForm form = new SettingsForm(settings, () -> changes++, MONO);
 
     private RedactionRule named(String name) {
         return settings.redactions
@@ -55,7 +56,7 @@ class RuleListTest {
     @Test
     void opensOneRuleAtATimeAcrossBothLists() {
         settings.highlights.add(HighlightRule.create("x", RuleTarget.REQUEST, MatchMode.STRING));
-        SettingsForm form = new SettingsForm(settings, () -> {}, MONO, false);
+        SettingsForm form = new SettingsForm(settings, () -> {}, MONO);
         RuleList<RedactionRule>.Row cookie = form.redactionList().row(named("Cookie values"));
         RuleList<HighlightRule>.Row highlight = form.highlightList().row(settings.highlights.getFirst());
 
@@ -101,7 +102,7 @@ class RuleListTest {
     void flagsRulesThatFailed() {
         RedactionRule rule = RedactionRule.create("(", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
         settings.redactions.addFirst(rule);
-        SettingsForm form = new SettingsForm(settings, () -> {}, MONO, false);
+        SettingsForm form = new SettingsForm(settings, () -> {}, MONO);
         Map<Object, RuleStatus> statuses = new IdentityHashMap<>();
         statuses.put(rule, new RuleStatus(0, RuleStatus.Problem.INVALID, "Unclosed group"));
         form.showRuleStatuses(statuses);
@@ -122,14 +123,239 @@ class RuleListTest {
     }
 
     @Test
+    void choosesBetweenTheWholeMatchAndSomeCaptureGroups() {
+        RedactionRule rule = RedactionRule.create("token", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        javax.swing.JLabel what = label(row.editorPanel(), "What");
+        assertFalse(what.isVisible(), "no capture groups, nothing to choose");
+
+        ((javax.swing.text.JTextComponent) find(row.editorPanel(), "Pattern")).setText("token=(?<Value>\\w+)");
+        assertTrue(what.isVisible());
+        javax.swing.AbstractButton some = button(row.editorPanel(), "Only these capture groups:");
+        javax.swing.AbstractButton value = button(row.editorPanel(), "Value");
+        assertTrue(some.isSelected(), "a new group is redacted on its own");
+        assertTrue(value.isSelected() && value.isEnabled());
+
+        button(row.editorPanel(), "The whole match").doClick();
+        assertFalse(rule.useCaptureGroups);
+        assertFalse(value.isEnabled(), "the groups belong to the other choice");
+        some.doClick();
+        assertEquals(List.of(1), rule.selectedGroups);
+
+        // Only some groups, but none: the card says the rule redacts nothing.
+        javax.swing.JTextArea nothing = textArea(row.editorPanel(), "Tick at least one group");
+        assertFalse(nothing.isVisible());
+        value.doClick();
+        assertTrue(rule.selectedGroups.isEmpty());
+        assertTrue(nothing.isVisible());
+        value.doClick();
+        assertFalse(nothing.isVisible());
+        value.doClick();
+        button(row.editorPanel(), "The whole match").doClick();
+        assertFalse(nothing.isVisible(), "the whole match is redacted again");
+    }
+
+    @Test
+    void choosesTheCaptureGroupsAHighlightMarks() {
+        HighlightRule rule = HighlightRule.create("role", RuleTarget.RESPONSE, MatchMode.REGEX);
+        form.highlightList().addFirst(rule);
+        RuleList<HighlightRule>.Row row = form.highlightList().row(rule);
+        javax.swing.JLabel what = label(row.editorPanel(), "What");
+        assertFalse(what.isVisible(), "no capture groups, nothing to choose");
+
+        ((javax.swing.text.JTextComponent) find(row.editorPanel(), "Pattern")).setText("\"role\": \"(?<role>\\w+)\"");
+        assertTrue(what.isVisible());
+        assertTrue(rule.useCaptureGroups, "a new group is highlighted on its own, as for redactions");
+        assertEquals(List.of(1), rule.selectedGroups);
+
+        button(row.editorPanel(), "role").doClick();
+        assertTrue(
+            textArea(row.editorPanel(), "Tick at least one group: the rule highlights nothing now.").isVisible()
+        );
+        button(row.editorPanel(), "The whole match").doClick();
+        assertFalse(rule.useCaptureGroups);
+
+        List<String> order = new java.util.ArrayList<>();
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JLabel label && label.isVisible()) {
+                order.add(label.getText());
+            }
+        }
+        assertEquals(List.of("Name", "MATCH", "Pattern", "Options", "Applies to", "HIGHLIGHT", "What", "Style"), order);
+    }
+
+    @Test
+    void keepsTheWholeMatchWhileThePatternIsEdited() {
+        RedactionRule rule = RedactionRule.create(
+            "token=(\\w+)",
+            RuleTarget.REQUEST,
+            RedactionMode.REPLACE,
+            MatchMode.REGEX
+        );
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        assertFalse(rule.useCaptureGroups, "as created");
+        javax.swing.text.JTextComponent pattern = (javax.swing.text.JTextComponent) find(row.editorPanel(), "Pattern");
+        type(pattern, "&");
+        assertEquals("token=(\\w+)&", rule.regex);
+        assertFalse(rule.useCaptureGroups, "the whole match, as chosen, until groups first appear");
+        type(pattern, "(?<id>\\d+)");
+        assertFalse(rule.useCaptureGroups, "nor when one more group appears");
+    }
+
+    /** Types at the end of a field, as the user does, rather than replacing its text. */
+    private static void type(javax.swing.text.JTextComponent field, String text) {
+        try {
+            field.getDocument().insertString(field.getDocument().getLength(), text, null);
+        } catch (javax.swing.text.BadLocationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static javax.swing.JTextArea textArea(java.awt.Container container, String start) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith(start)) {
+                return area;
+            }
+            if (component instanceof java.awt.Container child) {
+                javax.swing.JTextArea found = textArea(child, start);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void groupsTheCardIntoMatchAndRedact() {
+        RedactionRule rule = named("Authorization credentials");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        List<String> order = new java.util.ArrayList<>();
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JLabel label && label.isVisible()) {
+                order.add(label.getText());
+            }
+        }
+        assertEquals(List.of("Name", "MATCH", "Pattern", "Options", "Applies to", "REDACT", "What", "With"), order);
+        assertTrue(button(row.editorPanel(), "Delete rule") != null, "a labelled action at the end of the card");
+    }
+
+    @Test
+    void explainsAnInvalidPatternRightUnderIt() {
+        RedactionRule rule = RedactionRule.create(
+            "(unclosed",
+            RuleTarget.REQUEST,
+            RedactionMode.REPLACE,
+            MatchMode.REGEX
+        );
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        form.showRuleStatuses(
+            java.util.Map.of(
+                rule,
+                new it.unlocksecurity.burp.screenshotmode.render.RuleStatus(
+                    0,
+                    it.unlocksecurity.burp.screenshotmode.render.RuleStatus.Problem.INVALID,
+                    "Unclosed group"
+                )
+            )
+        );
+        java.awt.GridBagLayout grid = (java.awt.GridBagLayout) row.editorPanel().getLayout();
+        java.awt.Component pattern = find(row.editorPanel(), "Pattern");
+        java.awt.Component problem = null;
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith("⚠ Invalid regex")) {
+                problem = area;
+            }
+        }
+        assertTrue(problem != null && problem.isVisible());
+        assertEquals(grid.getConstraints(pattern).gridy + 1, grid.getConstraints(problem).gridy);
+    }
+
+    @Test
+    void anyPlaceCanBeUntickedAndTheCardSaysSo() {
+        RedactionRule rule = RedactionRule.create("token", RuleTarget.REQUEST, RedactionMode.REPLACE, MatchMode.REGEX);
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        javax.swing.AbstractButton request = button(row.editorPanel(), "Request");
+        assertTrue(request.isEnabled(), "the last place is not greyed out");
+        request.doClick();
+        assertTrue(rule.targets.isEmpty());
+        assertEquals("Off", row.pill().getText());
+        assertTrue(row.summaryLabel().getText().startsWith("Applies nowhere"));
+        javax.swing.JTextArea nowhere = null;
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JTextArea area && area.getText().startsWith("Tick at least one")) {
+                nowhere = area;
+            }
+        }
+        assertTrue(nowhere != null && nowhere.isVisible());
+        request.doClick();
+        assertFalse(nowhere.isVisible());
+    }
+
+    @Test
+    void offersTheSafestRedactionStyleFirst() {
+        RedactionRule rule = named("Authorization credentials");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        javax.swing.JComboBox<?> style = (javax.swing.JComboBox<?>) find(row.editorPanel(), "With");
+        List<String> labels = new java.util.ArrayList<>();
+        for (int i = 0; i < style.getItemCount(); i++) {
+            labels.add(style.getItemAt(i).toString());
+        }
+        assertEquals(List.of("Text", "Black box", "Blur"), labels);
+    }
+
+    @Test
+    void deletesFromTheEndOfTheCard() {
+        RedactionRule rule = named("Cookie values");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        javax.swing.AbstractButton delete = button(row.editorPanel(), "Delete rule");
+        assertEquals("Delete Cookie values rule", delete.getAccessibleContext().getAccessibleName(), "names its rule");
+        assertEquals(java.awt.Font.PLAIN, delete.getFont().getStyle(), "not bold: it shouldn't invite a click");
+        assertEquals(
+            java.awt.BorderLayout.EAST,
+            ((java.awt.BorderLayout) delete.getParent().getLayout()).getConstraints(delete),
+            "on the right"
+        );
+        delete.doClick();
+        assertFalse(settings.redactions.contains(rule));
+    }
+
+    @Test
     void editsUpdateTheRuleLine() {
         RedactionRule cookie = named("Cookie values");
         RuleList<RedactionRule>.Row row = form.redactionList().row(cookie);
         row.header().toggle();
-        javax.swing.JTextField headers = (javax.swing.JTextField) find(row.editorPanel(), "Headers");
+        javax.swing.text.JTextComponent headers = (javax.swing.text.JTextComponent) find(row.editorPanel(), "Headers");
         headers.setText("Cookie, X-Session");
         assertEquals(List.of("Cookie", "X-Session"), cookie.headers);
         assertEquals("Header · Cookie and 1 more · Replace with [OMITTED]", row.summaryLabel().getText());
+    }
+
+    @Test
+    void showsTheWholePatternAndItsOptionsInWords() {
+        RedactionRule rule = named("Authorization credentials");
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        row.header().toggle();
+        javax.swing.JTextArea pattern = (javax.swing.JTextArea) find(row.editorPanel(), "Pattern");
+        assertEquals(rule.regex, pattern.getText());
+        assertTrue(pattern.getLineWrap(), "wraps instead of scrolling sideways");
+
+        // Options in Burp's words, Regex first.
+        javax.swing.AbstractButton regex = button(row.editorPanel(), "Regex");
+        assertTrue(regex.isSelected());
+        assertSame(regex.getParent(), find(row.editorPanel(), "Options").getParent());
+        button(row.editorPanel(), "Case sensitive").doClick();
+        assertFalse(rule.matchCase);
+
+        pattern.setText("a\nb\nc");
+        assertEquals("abc", rule.regex, "one line: line breaks are dropped");
     }
 
     private static void click(java.awt.Component component) {
@@ -179,6 +405,40 @@ class RuleListTest {
         throw new AssertionError("no checkbox");
     }
 
+    private static javax.swing.JLabel label(java.awt.Container container, String text) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (component instanceof javax.swing.JLabel label && text.equals(label.getText())) {
+                return label;
+            }
+            if (component instanceof java.awt.Container child) {
+                javax.swing.JLabel found = label(child, text);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The button with this text or accessible name. */
+    private static javax.swing.AbstractButton button(java.awt.Container container, String name) {
+        for (java.awt.Component component : container.getComponents()) {
+            if (
+                component instanceof javax.swing.AbstractButton button &&
+                (name.equals(button.getText()) || name.equals(button.getAccessibleContext().getAccessibleName()))
+            ) {
+                return button;
+            }
+            if (component instanceof java.awt.Container child) {
+                javax.swing.AbstractButton found = button(child, name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
     /** The control a label is for. */
     private static java.awt.Component find(java.awt.Container container, String label) {
         for (java.awt.Component component : container.getComponents()) {
@@ -188,7 +448,11 @@ class RuleListTest {
                 title.getLabelFor() != null
             ) {
                 java.awt.Component target = title.getLabelFor();
-                if (target instanceof java.awt.Container holder && !(target instanceof javax.swing.JTextField)) {
+                if (
+                    target instanceof java.awt.Container holder &&
+                    !(target instanceof javax.swing.text.JTextComponent) &&
+                    holder.getComponentCount() > 0
+                ) {
                     return holder.getComponent(0);
                 }
                 return target;

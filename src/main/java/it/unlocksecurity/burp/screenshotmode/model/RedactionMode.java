@@ -2,8 +2,8 @@ package it.unlocksecurity.burp.screenshotmode.model;
 
 public enum RedactionMode implements Labeled {
     BLUR("blur", "Blur"),
-    OPAQUE("opaque", "Opaque"),
-    REPLACE("replace", "Replace");
+    OPAQUE("opaque", "Black box"),
+    REPLACE("replace", "Text");
 
     private final String id;
     private final String label;

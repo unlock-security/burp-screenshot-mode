@@ -1,0 +1,43 @@
+{
+  "format": "screenshot-mode/sample-message",
+  "version": 1,
+  "comment": "Shown by the template editor's preview. Made up, on example.com, so that each rule of Defaults has something to match.",
+  "requestTime": "2026-03-12T10:42:07Z",
+  "url": "https://shop.example.com/api/v1/login?redirect=%2Fcart&api_key=sk_test_4f9a2c",
+  "request": [
+    "POST /api/v1/login?redirect=%2Fcart&api_key=sk_test_4f9a2c HTTP/2",
+    "Host: shop.example.com",
+    "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36",
+    "Accept: application/json",
+    "Accept-Language: en-US,en;q=0.9",
+    "Accept-Encoding: gzip, deflate, br",
+    "Content-Type: application/json",
+    "Content-Length: 57",
+    "Origin: https://shop.example.com",
+    "Referer: https://shop.example.com/login",
+    "Cookie: session=7c1e9b2d4a; theme=dark",
+    "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.c2lnbmF0dXJl",
+    "X-Api-Key: 0d2f8e1a9b7c",
+    "Sec-Fetch-Site: same-origin",
+    "Sec-Fetch-Mode: cors",
+    "Sec-Fetch-Dest: empty",
+    "Priority: u=1, i",
+    "",
+    "{\"email\": \"alice@example.com\", \"password\": \"Summer2026!\"}"
+  ],
+  "response": [
+    "HTTP/2 200 OK",
+    "Date: Thu, 22 Oct 2026 09:30:00 GMT",
+    "Content-Type: application/json; charset=utf-8",
+    "Content-Length: 174",
+    "Cache-Control: no-store",
+    "Set-Cookie: session=9f3b7a1c2e; Path=/; Secure; HttpOnly; SameSite=Lax",
+    "Strict-Transport-Security: max-age=63072000; includeSubDomains",
+    "X-Content-Type-Options: nosniff",
+    "Server: nginx",
+    "Vary: Accept-Encoding",
+    "X-Request-Id: 5f2a9c0e",
+    "",
+    "{\"user\": {\"id\": 42, \"email\": \"alice@example.com\", \"role\": \"customer\"}, \"access_token\": \"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI0MiJ9.c2lnbmF0dXJl\", \"refresh_token\": \"rt_8d1f6b0c93\"}"
+  ]
+}

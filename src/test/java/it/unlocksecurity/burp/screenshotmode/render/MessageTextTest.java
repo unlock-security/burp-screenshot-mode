@@ -9,6 +9,20 @@ import org.junit.jupiter.api.Test;
 class MessageTextTest {
 
     @Test
+    void recognisesItsOwnTruncationNote() {
+        byte[] huge = new byte[MessageText.MAX_BYTES + 10];
+        java.util.Arrays.fill(huge, (byte) 'a');
+        assertTrue(MessageText.isTruncated(MessageText.fromBytes(huge)), "cut by bytes");
+        assertTrue(MessageText.isTruncated("short" + MessageText.truncationNote(12)), "cut by characters");
+        assertTrue(
+            !MessageText.isTruncated("HTTP/1.1 200 OK\n\n[truncated 3 bytes]"),
+            "only our note, on its own line"
+        );
+        assertTrue(!MessageText.isTruncated("HTTP/1.1 200 OK\n"));
+        assertTrue(!MessageText.isTruncated(null));
+    }
+
+    @Test
     void decodesUtf8() {
         assertEquals("caffè ☕", MessageText.fromBytes("caffè ☕".getBytes(StandardCharsets.UTF_8)));
     }

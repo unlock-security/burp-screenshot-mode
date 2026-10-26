@@ -1,10 +1,12 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -13,18 +15,24 @@ import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.KeyboardFocusManager;
 import java.awt.LayoutManager;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.Window;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
@@ -34,6 +42,7 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -45,18 +54,29 @@ import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.UIManager;
+import javax.swing.border.Border;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.AbstractDocument;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.DocumentFilter;
 import javax.swing.text.JTextComponent;
+import javax.swing.text.View;
 
 /** Small Swing building blocks shared by the screenshot window and the template editor. */
 final class Widgets {
 
     private Widgets() {}
 
+    private static final Color MUTED = new ThemeColor("Label.disabledForeground", Color.GRAY);
+    private static final Color ERROR = new ThemeColor("Colors.ui.text.error", new Color(0xc4314b));
+    private static final Color SUCCESS = new ThemeColor("Colors.ui.icon.success", new Color(0x387723));
+    private static final Color LINK = new ThemeColor("Colors.ui.text.link", new Color(0xad5b28));
+
+    /** Secondary text, such as hints. */
     static Color mutedColor() {
-        Color color = UIManager.getColor("Label.disabledForeground");
-        return color != null ? color : Color.GRAY;
+        return MUTED;
     }
 
     static Color borderColor() {
@@ -65,7 +85,54 @@ final class Widgets {
     }
 
     static Color errorColor() {
-        return new Color(0xd9534f);
+        return ERROR;
+    }
+
+    static Color successColor() {
+        return SUCCESS;
+    }
+
+    /** Burp's color for text that takes you somewhere, such as a link back to a list. */
+    static Color linkColor() {
+        return LINK;
+    }
+
+    /**
+     * A text color of Burp's theme, looked up each time it is painted. Components keep a color set with
+     * {@code setForeground} across Burp's theme switches, so a fixed color would stay the old theme's. Where the theme's
+     * color is too faint for text on the panel background (Burp Dark's disabled grey), it is mixed with the label
+     * color until it reaches 4.5:1 (WCAG AA).
+     */
+    private static final class ThemeColor extends Color {
+
+        private final String key;
+        private final Color fallback;
+
+        ThemeColor(String key, Color fallback) {
+            super(fallback.getRGB());
+            this.key = key;
+            this.fallback = fallback;
+        }
+
+        @Override
+        public int getRGB() {
+            Color color = themeColor(key, fallback);
+            Color background = themeColor("Panel.background", Color.WHITE);
+            Color text = themeColor("Label.foreground", Color.BLACK);
+            Color readable = color;
+            for (int step = 1; step <= 10 && Palette.contrast(readable, background) < 4.5; step++) {
+                readable = mix(color, text, step / 10.0);
+            }
+            return readable.getRGB();
+        }
+
+        private static Color mix(Color from, Color to, double amount) {
+            return new Color(
+                (int) Math.round(from.getRed() + (to.getRed() - from.getRed()) * amount),
+                (int) Math.round(from.getGreen() + (to.getGreen() - from.getGreen()) * amount),
+                (int) Math.round(from.getBlue() + (to.getBlue() - from.getBlue()) * amount)
+            );
+        }
     }
 
     static JLabel title(String text) {
@@ -117,6 +184,113 @@ final class Widgets {
             }
         );
         return area;
+    }
+
+    /**
+     * A tab's footer: a {@link #wrappingHint} with a button on its right while both fit on one line. Otherwise the
+     * button goes below, still on the right, and the text wraps if a line of its own is too narrow: nothing is cut off.
+     */
+    static JPanel footer(JTextArea text, JButton button) {
+        JPanel footer = new JPanel(new FooterLayout(text, button));
+        footer.setOpaque(false);
+        footer.add(text);
+        footer.add(button);
+        return footer;
+    }
+
+    static final class FooterLayout implements LayoutManager {
+
+        private static final int GAP = 8;
+        private final JTextArea text;
+        private final JComponent button;
+        /** The height last asked of the footer, so it is asked once per change and never in a loop. */
+        private int requestedHeight = -1;
+
+        FooterLayout(JTextArea text, JComponent button) {
+            this.text = text;
+            this.button = button;
+        }
+
+        /** The width of the text on one line. */
+        private int lineWidth() {
+            Insets insets = text.getInsets();
+            return text.getFontMetrics(text.getFont()).stringWidth(text.getText()) + insets.left + insets.right;
+        }
+
+        /** Whether the text, on one line, and the button fit side by side in {@code width}. */
+        private boolean oneRow(int width) {
+            return width <= 0 || lineWidth() + GAP + button.getPreferredSize().width <= width;
+        }
+
+        /** The height of the text wrapped to {@code width}. */
+        private int textHeight(int width) {
+            Insets insets = text.getInsets();
+            View view = text.getUI().getRootView(text);
+            view.setSize(Math.max(1, width - insets.left - insets.right), Integer.MAX_VALUE);
+            return (int) Math.ceil(view.getPreferredSpan(View.Y_AXIS)) + insets.top + insets.bottom;
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container footer) {
+            Insets insets = footer.getInsets();
+            int width = footer.getWidth() - insets.left - insets.right;
+            Dimension b = button.getPreferredSize();
+            int height = oneRow(width)
+                ? Math.max(textHeight(Integer.MAX_VALUE), b.height)
+                : textHeight(width) + b.height;
+            return new Dimension(
+                insets.left + lineWidth() + GAP + b.width + insets.right,
+                insets.top + height + insets.bottom
+            );
+        }
+
+        /** As narrow as the button: the text wraps. */
+        @Override
+        public Dimension minimumLayoutSize(Container footer) {
+            Insets insets = footer.getInsets();
+            return new Dimension(
+                insets.left + button.getPreferredSize().width + insets.right,
+                preferredLayoutSize(footer).height
+            );
+        }
+
+        @Override
+        public void layoutContainer(Container footer) {
+            Insets insets = footer.getInsets();
+            int width = footer.getWidth() - insets.left - insets.right;
+            Dimension b = button.getPreferredSize();
+            int buttonWidth = Math.min(b.width, width);
+            if (oneRow(width)) {
+                int textWidth = width - GAP - b.width;
+                int textHeight = textHeight(textWidth);
+                int height = Math.max(textHeight, b.height);
+                text.setBounds(insets.left, insets.top + (height - textHeight) / 2, textWidth, textHeight);
+                button.setBounds(
+                    insets.left + width - b.width,
+                    insets.top + (height - b.height) / 2,
+                    b.width,
+                    b.height
+                );
+            } else {
+                int textHeight = textHeight(width);
+                text.setBounds(insets.left, insets.top, width, textHeight);
+                button.setBounds(insets.left + width - buttonWidth, insets.top + textHeight, buttonWidth, b.height);
+            }
+            // The height depends on the width, which the footer only knows now: ask for another layout if it changed.
+            int height = preferredLayoutSize(footer).height;
+            if (height == footer.getHeight()) {
+                requestedHeight = -1;
+            } else if (height != requestedHeight && footer instanceof JComponent component) {
+                requestedHeight = height;
+                SwingUtilities.invokeLater(component::revalidate);
+            }
+        }
+
+        @Override
+        public void addLayoutComponent(String name, Component component) {}
+
+        @Override
+        public void removeLayoutComponent(Component component) {}
     }
 
     /** A titled block of the settings form, with an optional hint and an optional button on the right. */
@@ -201,7 +375,36 @@ final class Widgets {
     /** Burp's orange call-to-action style ({@code [style]Button.primary} in its theme); one per view. */
     static JButton primary(JButton button) {
         button.putClientProperty("FlatLaf.styleClass", "primary");
+        // Borderless: disabled, it keeps Burp's grey fill rather than the panel's, or it would read as plain text.
+        button.putClientProperty("FlatLaf.style", "disabledText: mix($Button.foreground,$Panel.background,35%)");
         return button;
+    }
+
+    private static final float DEFAULT_FONT_SIZE = 13f;
+
+    /**
+     * A size in pixels chosen at Burp's default font (13 pt), grown in proportion when the user picks a larger one, so
+     * what fitted at the default size still fits. Never shrunk for a smaller font.
+     */
+    static int scaled(int size) {
+        Font font = UIManager.getFont("Label.font");
+        float scale = font == null ? 1 : Math.max(1, font.getSize2D() / DEFAULT_FONT_SIZE);
+        return Math.round(size * scale);
+    }
+
+    /** The menu shortcut of a key as written in tooltips: "⌘Z" on macOS, "Ctrl+Z" elsewhere. */
+    static String shortcut(int keyCode) {
+        String key = KeyEvent.getKeyText(keyCode);
+        return isMac() ? "⌘" + key : "Ctrl+" + key;
+    }
+
+    /** The modifier of menu shortcuts: ⌘ on macOS, Ctrl elsewhere. Unlike the toolkit's, also known headless. */
+    static int menuShortcutMask() {
+        return isMac() ? InputEvent.META_DOWN_MASK : InputEvent.CTRL_DOWN_MASK;
+    }
+
+    private static boolean isMac() {
+        return System.getProperty("os.name", "").toLowerCase().contains("mac");
     }
 
     /**
@@ -211,11 +414,36 @@ final class Widgets {
      * @return the text entered, or {@code null} when cancelled
      */
     static String askText(Component parent, String label, String title) {
+        return askText(parent, label, title, text -> null);
+    }
+
+    /**
+     * Like {@link #askText(Component, String, String)}, with OK disabled while {@code problem} finds one in the text:
+     * it returns what is wrong, shown under the field, {@code ""} to only disable OK, or {@code null} if nothing is.
+     */
+    static String askText(Component parent, String label, String title, Function<String, String> problem) {
         JTextField field = new JTextField(20);
         JButton ok = primary(button("OK"));
         JButton cancel = button("Cancel");
+        // A space keeps a line for the message, which the dialog is sized for when it opens.
+        JLabel error = new JLabel(" ");
+        error.setForeground(errorColor());
+        Runnable check = () -> {
+            String found = problem.apply(field.getText());
+            ok.setEnabled(found == null);
+            error.setText(found == null || found.isEmpty() ? " " : found);
+            field.putClientProperty("JComponent.outline", found == null || found.isEmpty() ? null : "error");
+            field.getAccessibleContext().setAccessibleDescription(found == null || found.isEmpty() ? null : found);
+            // A message wider than the dialog widens it, once: it never shrinks back, so it doesn't jump while typing.
+            Window window = SwingUtilities.getWindowAncestor(error);
+            if (window != null && error.getPreferredSize().width > error.getWidth()) {
+                window.pack();
+            }
+        };
+        check.run();
+        onTextChange(field, text -> check.run());
         JOptionPane pane = new JOptionPane(
-            new Object[] { label, field },
+            new Object[] { label, field, error },
             JOptionPane.PLAIN_MESSAGE,
             JOptionPane.DEFAULT_OPTION,
             null,
@@ -274,6 +502,40 @@ final class Widgets {
         return pane.getValue() == act ? action : pane.getValue() == keep ? safe : null;
     }
 
+    /**
+     * Asks where to save a file, adding {@code extension} when the name lacks it. Before replacing a file that exists it
+     * asks, with Cancel as the safe choice, which goes back to the chooser to pick another name.
+     *
+     * @return the file to write, or {@code null} if the user cancelled
+     */
+    static File chooseSaveFile(Component parent, JFileChooser chooser, String extension) {
+        while (chooser.showSaveDialog(parent) == JFileChooser.APPROVE_OPTION) {
+            File file = chooser.getSelectedFile();
+            if (
+                !file
+                    .getName()
+                    .toLowerCase()
+                    .endsWith("." + extension)
+            ) {
+                file = new File(file.getParentFile(), file.getName() + "." + extension);
+            }
+            if (
+                !file.exists() ||
+                confirm(
+                    parent,
+                    chooser.getDialogTitle(),
+                    "\"" + file.getName() + "\" already exists. Replace it?",
+                    "Replace",
+                    "Cancel"
+                )
+            ) {
+                return file;
+            }
+            chooser.setSelectedFile(file);
+        }
+        return null;
+    }
+
     /** A borderless icon button, like the ones in Burp's toolbars; used where a bordered button would be noise. */
     static JButton flatIconButton(Icon icon, String tooltip, Runnable action) {
         JButton button = iconButton(icon, tooltip, action);
@@ -291,19 +553,88 @@ final class Widgets {
     }
 
     /**
-     * Puts {@code component} inside the right end of {@code field}, like the regex toggle of a search box. FlatLaf
-     * (Burp) supports this natively; other look and feels get the component next to the field.
+     * A text field for long values, such as patterns: it wraps at any character and grows a line at a time, so the
+     * whole value stays in view. It holds one line of text: line breaks, typed or pasted, are dropped, and Tab moves
+     * on. It looks like a text field, focus ring and error outline included.
      */
-    static JComponent withTrailing(JTextField field, JComponent component) {
-        if (isFlatLaf()) {
-            field.putClientProperty("JTextField.trailingComponent", component);
-            return field;
+    static JTextArea wrappingField(String text, int columns) {
+        JTextArea field = new JTextArea(text) {
+            @Override
+            public void updateUI() {
+                super.updateUI();
+                // Burp's theme switch calls this again: take the text field's look each time.
+                Border border = UIManager.getBorder("TextField.border");
+                if (border != null) {
+                    setBorder(border);
+                }
+                Insets margin = UIManager.getInsets("TextField.margin");
+                if (margin != null) {
+                    setMargin(margin);
+                }
+                Color background = UIManager.getColor("TextField.background");
+                if (background != null) {
+                    setBackground(background);
+                }
+            }
+
+            /** The {@link #placeholder}, which FlatLaf paints in text fields only. */
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                super.paintComponent(graphics);
+                if (getText().isEmpty() && getClientProperty("JTextField.placeholderText") instanceof String text) {
+                    Graphics2D g = (Graphics2D) graphics.create();
+                    g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    g.setFont(getFont());
+                    g.setColor(themeColor("TextField.placeholderForeground", mutedColor()));
+                    Insets insets = getInsets();
+                    g.drawString(text, insets.left, insets.top + g.getFontMetrics().getAscent());
+                    g.dispose();
+                }
+            }
+
+            /** As wide as {@code columns}, not as the text: the layout gives it the width, and the text wraps. */
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                Insets insets = getInsets();
+                return new Dimension(getColumns() * getColumnWidth() + insets.left + insets.right, size.height);
+            }
+        };
+        field.setColumns(columns);
+        field.setLineWrap(true);
+        field.setCaretPosition(0);
+        ((AbstractDocument) field.getDocument()).setDocumentFilter(new SingleLine());
+        // Inherit Tab and Shift+Tab, which a text area otherwise types.
+        field.setFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS, null);
+        field.setFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS, null);
+        // Its height is only known once it has a width: lay out again after the first pass.
+        field.addComponentListener(
+            new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    if (field.getPreferredSize().height != field.getHeight()) {
+                        field.revalidate();
+                    }
+                }
+            }
+        );
+        return field;
+    }
+
+    /** Drops line breaks, typed or pasted, from a document that holds one line. */
+    static final class SingleLine extends DocumentFilter {
+
+        @Override
+        public void insertString(FilterBypass bypass, int offset, String text, AttributeSet attributes)
+            throws BadLocationException {
+            super.insertString(bypass, offset, text.replaceAll("[\r\n]", ""), attributes);
         }
-        JPanel panel = new JPanel(new BorderLayout(4, 0));
-        panel.setOpaque(false);
-        panel.add(field, BorderLayout.CENTER);
-        panel.add(component, BorderLayout.EAST);
-        return panel;
+
+        @Override
+        public void replace(FilterBypass bypass, int offset, int length, String text, AttributeSet attributes)
+            throws BadLocationException {
+            super.replace(bypass, offset, length, text == null ? null : text.replaceAll("[\r\n]", ""), attributes);
+        }
     }
 
     /** A small rounded status label, such as "Modified", in the theme's warning tones. */
@@ -323,6 +654,27 @@ final class Widgets {
         label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 1));
         label.setBorder(BorderFactory.createEmptyBorder(2, 9, 2, 9));
         return label;
+    }
+
+    /** {@code value} ("x,y,width,height") if it lies whole on one of {@code screens}, else {@code null}. */
+    static Rectangle boundsOnScreen(String value, List<Rectangle> screens) {
+        try {
+            String[] parts = value.split(",");
+            Rectangle bounds = new Rectangle(
+                Integer.parseInt(parts[0]),
+                Integer.parseInt(parts[1]),
+                Integer.parseInt(parts[2]),
+                Integer.parseInt(parts[3])
+            );
+            for (Rectangle screen : screens) {
+                if (!bounds.isEmpty() && screen.contains(bounds)) {
+                    return bounds;
+                }
+            }
+        } catch (RuntimeException e) {
+            // Not written by this version: use the default bounds.
+        }
+        return null;
     }
 
     /** A color of Burp's palette (theme JSON), resolved at paint time so it follows theme switches. */
@@ -568,7 +920,9 @@ final class Widgets {
         CHEVRON_DOWN,
         CHEVRON_UP,
         /** The magnifier of a search field, muted like FlatLaf's own. */
-        SEARCH;
+        SEARCH,
+        /** Read-only: marks the built-in templates, which can't be edited or deleted. */
+        LOCK;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
@@ -605,6 +959,16 @@ final class Widgets {
                     g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     g.draw(new java.awt.geom.Ellipse2D.Float(2, 2, 7.5f, 7.5f));
                     g.draw(new Line2D.Float(8.6f, 8.6f, 12, 12));
+                }
+                case LOCK -> {
+                    g.setStroke(new BasicStroke(1.4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    Path2D shackle = new Path2D.Float();
+                    shackle.moveTo(4.5f, 6.5f);
+                    shackle.lineTo(4.5f, 4.5f);
+                    shackle.curveTo(4.5f, 1.2f, 9.5f, 1.2f, 9.5f, 4.5f);
+                    shackle.lineTo(9.5f, 6.5f);
+                    g.draw(shackle);
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2.5f, 6.5f, 9, 6.5f, 2, 2));
                 }
                 case CHEVRON_DOWN, CHEVRON_UP -> {
                     g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));

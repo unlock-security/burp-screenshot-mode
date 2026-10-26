@@ -16,52 +16,27 @@ No external tools, no manual cropping and blurring.
 > Started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode) plugin, it has
 > since grown into an independent project, with its own features and a UI designed for Burp.
 
-![From a Repeater request to a report-ready screenshot: open Screenshot Mode, highlight a leaked token, hide and show headers, switch to A4, pretty and stacked, update the template and copy](assets/demo.gif)
+![From a Repeater request to a report-ready screenshot: open Screenshot Mode from the context menu, highlight the leaked reset token, redact its tail with a named capture group, find the Server header and highlight it, try request only, response only, the full URL, raw and dark, and copy](assets/demo.gif)
 
 ## Features
 
-- **Live preview** of the request and response in a dedicated window, laid out side by side or stacked, with line
-  numbers, wrapping and HTTP/JSON/XML/HTML syntax colors.
-- **Hide noisy headers** from a catalog of about 150 common headers in groups (content negotiation, caching, client
-  hints, fetch metadata, CDNs, …): uncheck a header, or a whole group, to hide it. The screenshot window lists the
-  headers of the message on screen, and the tab title counts how many it hides. Headers that aren't in the catalog are
-  listed first, as custom headers; one used in both messages can be hidden in only one of them. By default, security
-  headers and anything that can take part in request smuggling stay visible, as they can be the finding. Each header
-  also says in words whether a rule redacts or highlights it, and links to that rule, or adds one with **Redact
-  value…** or **Highlight…**.
-- **Highlights**: painted as a translucent marker or as a rectangle, in any color.
-- **Redactions**: blur, opaque box or replacement text (`[REDACTED]`).
-- **Two kinds of rules**, chosen when you add one with **+**: a **header** rule names one or more headers and
-  redacts their whole value (a highlight marks the whole line), in requests and responses; a **text pattern** rule
-  matches a regex or literal text in the request, the response, the URL or any of them, and a redaction can be
-  limited to selected capture groups (e.g. `session=([0-9a-f]+)` redacts only the value).
-- **One list of rules**: each rule has an optional name, an on/off checkbox and a one-line summary, and opens into
-  its editor when clicked. The built-in *Defaults* template comes with named redactions for credentials, cookies, API keys,
-  passwords, tokens and JWTs, including in the URL, so a secret in the request line doesn't show up above it.
-- **Rule checks**: in the screenshot window, each rule shows how many times it matched. A redaction with an invalid
-  or too slow pattern is flagged on its line, on the *Rules* tab and above the preview, and **Copy** and **Save** ask
-  before exporting a screenshot it may not fully cover.
-- **Pretty view** for JSON, HTML, XML (SVG, RSS, SOAP, …), CSS and JavaScript bodies, like Burp's Pretty tab.
-  Only line breaks and indentation change, so your rules still match and broken or malicious markup shows exactly as
-  sent.
-- **Right-click** in the preview to highlight or redact the selected text, or to hide, redact or highlight the header
-  under the pointer, in one click.
-- **Content width** presets for reports: full width, custom pixels, A4 (595px) or Letter (612px).
-- **Crop** the captured height with the drag handle, or **Fit to content** to show the whole messages.
-- **Metadata footer**: request timestamp and response size/round-trip time.
-- **URL bar**: the full URL, only the path and query (the label reads *Path*), or no URL bar at all. Path only leaves
-  out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
-  redact those too if it must not show.
-- **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
-  suite tab, and import/export them as JSON. Two built-in templates ship with the extension and are updated with it:
-  *Defaults* (noisy headers hidden, secrets redacted) and *Empty* (messages as they are). They can't be edited or
-  deleted: start a new template from one of them, or duplicate it. Your template keeps following its built-in
-  template's hidden headers, except the ones you changed, so new releases can hide more noise for you; its rules and
-  appearance are yours and never change by themselves.
-- **Restore defaults** in each tab, from the built-in template yours is based on, after asking: the *Rules* tab adds
-  back the rules you deleted (or replaces all your rules), the *Headers* tab drops your header changes, and the
-  *Appearance* tab resets width, layout, theme, URL bar, body and footer. Each tab says what it would change.
-- **Export** as a 2× PNG file or straight to the clipboard.
+- **Live preview** of the request and response, side by side or stacked, with syntax colors and a Pretty view for
+  JSON, HTML, XML, CSS and JavaScript bodies.
+- **Redact** secrets with replacement text, a black box or blur, and **highlight** what matters with a marker or a
+  rectangle. Rules match headers or a regex, optionally only some of its capture groups.
+- **Safe by default**: the built-in *Defaults* template redacts credentials, cookies, API keys, passwords, tokens and
+  JWTs, even in the URL. Each rule shows how many times it matched, and Copy and Save ask first if a redaction fails.
+- **Hide noisy headers** from a catalog of about 150 common ones, one by one or a whole group at a time.
+- **Right-click** in the preview to redact, highlight or hide what's under the pointer.
+- **Report-ready size**: A4, Letter, fit to content or a custom width and height, at 1×, 2× or 3×, in a light or dark
+  theme, with Burp's text size or your own.
+- **Show only what matters**: the request, the response or both; the full URL, the path only or no URL bar; line
+  numbers, timestamp and response time.
+- **Templates** to reuse your settings: pick a default, share them as JSON, start from the built-in *Defaults* or
+  *Empty*.
+- **Undo and redo** every change.
+- **Copy** to the clipboard, or **save** a PNG with a name that says what it shows, such as
+  `POST-api-v1-users-42-200.png`.
 
 ## Screenshots
 
@@ -83,29 +58,24 @@ What ends up in your report:
 
 ## Usage
 
-1. Right-click a request anywhere in Burp (Repeater, Proxy, HTTP history, Target site map, Logger, …) and choose
-   **Extensions › Screenshot Mode › Screenshot**, or press **Ctrl+Shift+S**.
-2. Pick a template and tweak the rules (highlights and redactions), the hidden headers and the appearance, each in
-   its own tab. The preview updates as you type.
-3. Click **Copy image** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**). Copy only copies the
-   screenshot when no text is selected; with a selection it copies the text, with blurred and covered values replaced
-   by `[REDACTED]`.
+1. Right-click a request anywhere in Burp and choose **Extensions › Screenshot Mode › Screenshot**, or select it and
+   press **Ctrl+Shift+S**.
+2. Pick a template and adjust the rules, headers and appearance: the preview updates as you type.
+3. **Copy image** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**).
 
-From a message editor, the screenshot shows what the editor currently holds, including unsent edits in Repeater.\
-When several rows are selected in a table, the first one is used.
+Changes made in the screenshot window apply to that message only: **Update template** or **Save as new…** keeps
+them. The *Screenshot Mode* suite tab manages the templates.
 
-Settings changed in the screenshot window apply to that message only, and are remembered if you screenshot the
-same message again; a **Modified** label shows when they differ from the template. Use **Update template** or
-**Save as new…** to keep them, or **Revert** to go back to the template. Switching template while they differ asks
-first, so they aren't lost by accident. The **Screenshot Mode** suite tab manages the templates.
+> [!NOTE]
+> The path-only URL bar hides the host from the URL, not from headers such as `Host` or `Referer`.
 
 ## Installation
 
-Requires Burp Suite Professional or Community 2025.x or newer (Java 21).
+Requires Burp Suite Professional or Community 2025.x or newer.
 
-1. Build the jar (see below), or grab it from the [releases](https://github.com/unlock-security/burp-screenshot-mode/releases).
-2. In Burp, go to **Extensions › Installed › Add**, choose **Java** as the extension type and select
-   `build/libs/screenshot-mode-<version>.jar`.
+1. Download the jar from the [latest release](https://github.com/unlock-security/burp-screenshot-mode/releases/latest),
+   or build it.
+2. In Burp, go to **Extensions › Installed › Add**, choose **Java** as the extension type and select the jar.
 
 ## Building
 
@@ -113,12 +83,13 @@ Requires Burp Suite Professional or Community 2025.x or newer (Java 21).
 ./gradlew build
 ```
 
-This compiles against the Montoya API, runs the tests and produces a self-contained jar in `build/libs/`.
+The jar ends up in `build/libs/`.
 
 ## Contributing
 
-Bug reports, feature requests and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
-development setup, code formatting, commit conventions and how releases work.
+Bug reports, feature requests and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
+For accessibility, see [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 ## License
 

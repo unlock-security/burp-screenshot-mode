@@ -11,10 +11,12 @@ import it.unlocksecurity.burp.screenshotmode.model.Direction;
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderVisibility;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.Labeled;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
@@ -22,6 +24,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
@@ -145,6 +148,7 @@ public final class TemplateCodec {
         headers.add("headers", visibilityMap(visibility.headers));
         object.add("headers", headers);
 
+        object.addProperty("messages", settings.messages.id());
         object.addProperty("disposition", settings.disposition.id());
 
         JsonObject width = new JsonObject();
@@ -154,9 +158,24 @@ public final class TemplateCodec {
         }
         object.add("width", width);
 
+        JsonObject height = new JsonObject();
+        height.addProperty("mode", settings.heightMode.id());
+        if (settings.heightMode == HeightMode.PIXEL) {
+            height.addProperty("value", settings.heightPixels);
+        }
+        object.add("height", height);
+
+        JsonObject text = new JsonObject();
+        text.addProperty("mode", settings.textSizeMode.id());
+        if (settings.textSizeMode == TextSizeMode.CUSTOM) {
+            text.addProperty("size", settings.textSize);
+        }
+        object.add("text", text);
+        object.addProperty("scale", settings.scale);
+
         JsonArray highlights = new JsonArray();
         for (HighlightRule rule : settings.highlights) {
-            JsonObject json = encodeRule(rule, null);
+            JsonObject json = encodeRule(rule, rule.useCaptureGroups ? rule.selectedGroups : null);
             json.addProperty("mode", rule.mode.id());
             json.addProperty("color", rule.color);
             highlights.add(json);
@@ -179,6 +198,7 @@ public final class TemplateCodec {
         object.addProperty("theme", settings.theme.id());
         object.addProperty("view", settings.view.id());
         object.addProperty("url", settings.url.id());
+        object.addProperty("lineNumbers", settings.lineNumbers);
         return object;
     }
 
@@ -262,6 +282,11 @@ public final class TemplateCodec {
         } else {
             settings.headers = migrateHiddenHeaders(object.get("headersToHide"), version, HeaderCatalogFile.bundled());
         }
+        JsonElement messages = object.get("messages");
+        settings.messages =
+            messages != null && isString(messages)
+                ? lenientEnum(MessageMode.class, messages.getAsString(), MessageMode.BOTH)
+                : MessageMode.BOTH;
         settings.disposition = enumValue(Disposition.class, object, "disposition");
 
         JsonObject width = asObject(object.get("width"), "width");
@@ -269,6 +294,18 @@ public final class TemplateCodec {
         if (settings.widthMode == WidthMode.PIXEL) {
             settings.widthPixels = (int) Math.round(number(width, "value"));
         }
+        parseHeight(object.get("height"), settings);
+        parseTextSize(object.get("text"), settings);
+        JsonElement scale = object.get("scale");
+        // Optional, and a scale this release doesn't offer reads as the default.
+        settings.scale =
+            scale != null &&
+            scale.isJsonPrimitive() &&
+            scale.getAsJsonPrimitive().isNumber() &&
+            scale.getAsDouble() == scale.getAsInt() &&
+            Settings.SCALES.contains(scale.getAsInt())
+                ? scale.getAsInt()
+                : Settings.DEFAULT_SCALE;
 
         for (JsonElement element : asArray(object.get("highlights"), "highlights")) {
             settings.highlights.add(parseHighlight(asObject(element, "highlight")));
@@ -303,7 +340,58 @@ public final class TemplateCodec {
         JsonElement url = object.get("url");
         settings.url =
             url != null && isString(url) ? lenientEnum(UrlMode.class, url.getAsString(), UrlMode.FULL) : UrlMode.FULL;
+        settings.lineNumbers = optionalBoolean(object, "lineNumbers", true);
         return settings;
+    }
+
+    /** The text size is optional: templates saved before it existed, or with one this release can't read, follow Burp. */
+    private static void parseTextSize(JsonElement element, Settings settings) {
+        if (element == null || !element.isJsonObject()) {
+            return;
+        }
+        JsonObject text = element.getAsJsonObject();
+        JsonElement mode = text.get("mode");
+        if (mode == null || !isString(mode)) {
+            return;
+        }
+        settings.textSizeMode = lenientEnum(TextSizeMode.class, mode.getAsString(), TextSizeMode.BURP);
+        if (settings.textSizeMode == TextSizeMode.CUSTOM) {
+            JsonElement size = text.get("size");
+            if (size != null && size.isJsonPrimitive() && size.getAsJsonPrimitive().isNumber()) {
+                settings.textSize = (int) Math.clamp(
+                    Math.round(size.getAsDouble()),
+                    Settings.MIN_TEXT_SIZE,
+                    Settings.MAX_TEXT_SIZE
+                );
+            } else {
+                settings.textSizeMode = TextSizeMode.BURP;
+            }
+        }
+    }
+
+    /** The height is optional: templates saved before it existed, or with one this release can't read, fill the preview. */
+    private static void parseHeight(JsonElement element, Settings settings) {
+        if (element == null || !element.isJsonObject()) {
+            return;
+        }
+        JsonObject height = element.getAsJsonObject();
+        JsonElement mode = height.get("mode");
+        if (mode == null || !isString(mode)) {
+            return;
+        }
+        settings.heightMode = lenientEnum(HeightMode.class, mode.getAsString(), HeightMode.FULL);
+        if (settings.heightMode == HeightMode.PIXEL) {
+            JsonElement value = height.get("value");
+            if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
+                settings.heightPixels = (int) Math.clamp(
+                    Math.round(value.getAsDouble()),
+                    Settings.MIN_PIXEL_HEIGHT,
+                    Settings.MAX_PIXEL_HEIGHT
+                );
+            } else {
+                settings.heightMode = HeightMode.FULL;
+            }
+        }
     }
 
     private static HeaderVisibility parseHeaders(JsonObject object) {
@@ -392,7 +480,11 @@ public final class TemplateCodec {
 
     private static HighlightRule parseHighlight(JsonObject object) {
         HighlightRule rule = new HighlightRule();
-        parseRule(object, rule);
+        List<Integer> groups = parseRule(object, rule);
+        if (groups != null) {
+            rule.useCaptureGroups = true;
+            rule.selectedGroups = groups;
+        }
         rule.color = string(object, "color");
         rule.mode = enumValue(HighlightMode.class, object, "mode");
         return rule;

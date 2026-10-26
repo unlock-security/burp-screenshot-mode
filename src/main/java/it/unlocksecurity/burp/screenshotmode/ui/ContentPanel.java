@@ -5,12 +5,14 @@ import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
 import it.unlocksecurity.burp.screenshotmode.render.HeaderFilter;
 import it.unlocksecurity.burp.screenshotmode.render.HttpSyntax;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
+import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
@@ -21,15 +23,22 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.text.NumberFormat;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -62,6 +71,8 @@ final class ContentPanel extends JPanel {
     private final JLabel timestampLabel = new JLabel();
     private final JLabel responseInfoLabel = new JLabel();
 
+    /** The only part shown, or {@code null} for the whole screenshot. */
+    private RuleTarget only;
     private double splitRatio = 0.5;
     private boolean applyingRatio;
     private DoubleConsumer splitRatioListener = ratio -> {};
@@ -69,6 +80,8 @@ final class ContentPanel extends JPanel {
     private MessagePane.SelectionListener selectionListener = (action, text, target) -> {};
     /** What each rule did in the last render, keyed by the rule object itself. */
     private final Map<Object, RuleStatus> ruleStatuses = new IdentityHashMap<>();
+    private boolean prettyFailed;
+    private final Set<RuleTarget> truncated = EnumSet.noneOf(RuleTarget.class);
     /** The rules that changed each header line, by message and header name (ignoring case). */
     private final Map<RuleTarget, Map<String, Set<Rule>>> headerHits = new EnumMap<>(RuleTarget.class);
 
@@ -155,10 +168,82 @@ final class ContentPanel extends JPanel {
         this.errorListener = listener;
     }
 
+    /**
+     * Shows only the URL bar, the request or the response, without the footer, from the next {@link #render}; {@code
+     * null} shows the whole screenshot again.
+     */
+    void showOnly(RuleTarget part) {
+        only = part;
+    }
+
     void setSplitRatio(double ratio) {
         splitRatio = ratio;
         split.setResizeWeight(ratio);
         applySplitRatio();
+    }
+
+    /**
+     * Sets the split that fits both messages, one above the other, as if the user had moved the divider there.
+     *
+     * @return whether the divider moved
+     */
+    boolean fitSplitRatio(double ratio) {
+        int before = split.getDividerLocation();
+        boolean changed = Math.abs(ratio - splitRatio) > 1e-9;
+        setSplitRatio(ratio);
+        if (changed) {
+            splitRatioListener.accept(ratio);
+        }
+        return split.getDividerLocation() != before;
+    }
+
+    /** The width that shows every line of the URL bar, the request and the response whole, without wrapping. */
+    int unwrappedWidth() {
+        Insets insets = getInsets();
+        int messages = 0;
+        if (split.isVisible()) {
+            int request = requestPane.isVisible() ? requestPane.unwrappedWidth() : 0;
+            int response = responsePane.isVisible() ? responsePane.unwrappedWidth() : 0;
+            messages =
+                isSideBySide() && requestPane.isVisible() && responsePane.isVisible()
+                    ? request + split.getDividerSize() + response
+                    : Math.max(request, response);
+        }
+        int urlBar = 0;
+        if (urlHeader.isVisible()) {
+            Insets header = urlHeader.getInsets();
+            Insets box = urlBox.getInsets();
+            urlBar =
+                header.left +
+                urlLabel.getParent().getPreferredSize().width +
+                ((BorderLayout) urlHeader.getLayout()).getHgap() +
+                box.left +
+                url.unwrappedWidth() +
+                box.right +
+                header.right;
+        }
+        return insets.left + Math.max(messages, urlBar) + insets.right;
+    }
+
+    /**
+     * The request's share of the width that shows both messages side by side without wrapping, or {@code -1} when
+     * they are not side by side.
+     */
+    double unwrappedSplitRatio() {
+        if (!isSideBySide() || !requestPane.isVisible() || !responsePane.isVisible()) {
+            return -1;
+        }
+        int request = requestPane.unwrappedWidth();
+        return request / (double) Math.max(1, request + responsePane.unwrappedWidth());
+    }
+
+    /**
+     * While the height fits the content, the panes never scroll: without a scrollbar coming and going, the lines they
+     * need don't depend on their height, so fitting settles.
+     */
+    void setFitting(boolean fitting) {
+        requestPane.setFitting(fitting);
+        responsePane.setFitting(fitting);
     }
 
     /**
@@ -169,15 +254,25 @@ final class ContentPanel extends JPanel {
         MessageData data,
         Settings settings,
         Palette palette,
-        Font mono,
-        Font ui,
+        Font burpMono,
+        Font burpUi,
         String timestamp,
         String responseInfo
     ) {
+        Font mono = burpMono;
+        Font ui = burpUi;
+        if (settings.textSizeMode == TextSizeMode.CUSTOM) {
+            // The size is the messages'; the titles and footer keep their proportion to it.
+            float ratio = settings.textSize / burpMono.getSize2D();
+            mono = burpMono.deriveFont((float) settings.textSize);
+            ui = burpUi.deriveFont(burpUi.getSize2D() * ratio);
+        }
         setBorder(BorderFactory.createLineBorder(palette.border()));
         setBackground(palette.background());
         ruleStatuses.clear();
         headerHits.clear();
+        prettyFailed = false;
+        truncated.clear();
 
         urlHeader.setBackground(palette.headerBackground());
         urlHeader.setBorder(
@@ -189,7 +284,7 @@ final class ContentPanel extends JPanel {
         urlLabel.setFont(ui.deriveFont(Font.BOLD, ui.getSize2D() - 2));
         urlLabel.setForeground(palette.muted());
         urlBox.setBackground(palette.codeBackground());
-        urlHeader.setVisible(settings.url != UrlMode.HIDDEN);
+        urlHeader.setVisible(only == null ? settings.url != UrlMode.HIDDEN : only == RuleTarget.URL);
         urlLabel.setText(settings.url == UrlMode.PATH ? "Path" : "URL");
         Decorated decoratedUrl = decorate(
             data.url() == null ? "" : data.url(),
@@ -204,8 +299,16 @@ final class ContentPanel extends JPanel {
         url.render(decoratedUrl, List.of(), palette, mono);
         url.setBackground(palette.codeBackground());
 
-        renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
-        renderPane(responsePane, data.responseText(), RuleTarget.RESPONSE, settings, palette, mono, ui);
+        // A message left out of the screenshot is not rendered, so its rules match nothing there and can't fail. A
+        // single part is shown with every part rendered, for the statuses of all the rules it edits.
+        boolean request = only == null ? settings.messages.shows(RuleTarget.REQUEST) : only == RuleTarget.REQUEST;
+        boolean response = only == null ? settings.messages.shows(RuleTarget.RESPONSE) : only == RuleTarget.RESPONSE;
+        if (request || only != null) {
+            renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
+        }
+        if (response || only != null) {
+            renderPane(responsePane, data.responseText(), RuleTarget.RESPONSE, settings, palette, mono, ui);
+        }
 
         int orientation =
             settings.disposition == Disposition.HORIZONTAL ? JSplitPane.HORIZONTAL_SPLIT : JSplitPane.VERTICAL_SPLIT;
@@ -216,7 +319,17 @@ final class ContentPanel extends JPanel {
         split.setDividerColor(palette.border());
         split.setBackground(palette.background());
 
-        footer.setVisible(timestamp != null || responseInfo != null);
+        requestPane.setVisible(request);
+        responsePane.setVisible(response);
+        split.setVisible(request || response);
+        // The split pane keeps its divider beside a hidden side: a message shown alone has none, only the thin line
+        // below the URL bar.
+        int dividerSize = request && response ? DIVIDER_SIZE : 0;
+        if (split.getDividerSize() != dividerSize) {
+            split.setDividerSize(dividerSize);
+            SwingUtilities.invokeLater(this::applySplitRatio);
+        }
+        footer.setVisible(only == null && (timestamp != null || responseInfo != null));
         footer.setBackground(palette.background());
         footer.setBorder(
             BorderFactory.createCompoundBorder(
@@ -251,9 +364,14 @@ final class ContentPanel extends JPanel {
             try {
                 text = PrettyPrinter.format(text);
             } catch (RuntimeException | StackOverflowError e) {
-                // The pretty printers accept any input, so this is a bug: show the raw message rather than nothing.
+                // The pretty printers accept any input, so this is a bug: show the raw message rather than nothing,
+                // and say so in the window.
+                prettyFailed = true;
                 errorListener.accept("Could not pretty print the " + target.id() + ", showing it raw: " + e);
             }
+        }
+        if (MessageText.isTruncated(raw) || MessageText.isTruncated(text)) {
+            truncated.add(target);
         }
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
         String filtered = HeaderFilter.filter(text, name -> settings.headers.hides(name, target, catalog));
@@ -268,7 +386,49 @@ final class ContentPanel extends JPanel {
                 }
             }
         });
-        pane.render(decorated, HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST), palette, mono, ui);
+        pane.setLineNumbers(settings.lineNumbers);
+        if (raw == null) {
+            pane.renderMissing("No " + target.label().toLowerCase(Locale.ROOT), palette, ui);
+        } else {
+            pane.render(
+                decorated,
+                HttpSyntax.tokenize(decorated.text(), target == RuleTarget.REQUEST),
+                palette,
+                mono,
+                ui
+            );
+        }
+    }
+
+    /** The parts the last render showed only the start of, because they were too long. */
+    Set<RuleTarget> truncated() {
+        return truncated;
+    }
+
+    /** Whether the last render showed a part raw because Pretty view failed on it. */
+    boolean prettyFailed() {
+        return prettyFailed;
+    }
+
+    private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM);
+
+    /**
+     * The footer's timestamp: when the request was sent, or {@code null} when Burp doesn't know (an unsent Repeater
+     * edit, for example), rather than a time a report reader would take for the request's.
+     */
+    static String timestamp(MessageData data) {
+        return data.requestTime() == null
+            ? null
+            : TIMESTAMP.format(data.requestTime().withZoneSameInstant(ZoneId.systemDefault()));
+    }
+
+    /** The footer's response size and round-trip time, or {@code null} without a response. */
+    static String responseInfo(MessageData data) {
+        if (data.responseLength() == null) {
+            return null;
+        }
+        String info = NumberFormat.getIntegerInstance().format(data.responseLength()) + " bytes";
+        return data.roundtripMillis() == null ? info : info + " | " + data.roundtripMillis() + "ms";
     }
 
     /** Where the path starts in a URL: after the scheme, host and port, at the first "/", "?" or "#". */

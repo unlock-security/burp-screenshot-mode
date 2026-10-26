@@ -2,8 +2,10 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
@@ -11,23 +13,33 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
+import it.unlocksecurity.burp.screenshotmode.model.Visibility;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
+import it.unlocksecurity.burp.screenshotmode.render.RuleEngine;
 import it.unlocksecurity.burp.screenshotmode.render.RuleStatus;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateCodec;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.LayoutManager;
+import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -39,13 +51,14 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
 /**
  * Editors for every screenshot setting, mutating the given {@link Settings} in place, in three tabs ordered by how
- * often they are used: Rules, Headers, Appearance. Used both by the screenshot window sidebar and, {@code wide}, by
- * the template editor. Caido shows the same settings in one long column; this layout is our own.
+ * often they are used: Rules, Headers, Appearance. The sidebar of both the screenshot window and the template editor.
  */
 final class SettingsForm extends JPanel {
 
@@ -63,7 +76,7 @@ final class SettingsForm extends JPanel {
     private RuleList<HighlightRule> highlightList;
     private RuleList<RedactionRule> redactionList;
     private final HeadersTab headers;
-    /** Above the rules after a jump from the Headers tab, with the way back. */
+    /** Above the rules after a jump from the Headers tab, with the way back, or after a deletion, with Undo. */
     private final JPanel notice = new JPanel(new BorderLayout(8, 0)) {
         @Override
         public java.awt.Color getBackground() {
@@ -72,11 +85,23 @@ final class SettingsForm extends JPanel {
         }
     };
     private final JLabel noticeText = new JLabel();
+    private final JButton noticeAction = Widgets.button("");
+    private Runnable noticeRun = () -> {};
+    /** Whether the notice offers Undo, which would undo another change once the settings change again. */
+    private boolean undoNotice;
+    /** Undoes the last change, or {@code null} where there is no undo. */
+    private Runnable undo;
     private int failedRules;
     /** The built-in template the settings are based on, and what Restore defaults does in the Rules tab. */
-    private final JLabel rulesBasis = Widgets.hint("");
+    private final JTextArea rulesBasis = Widgets.wrappingHint("", Integer.MAX_VALUE);
     private final JButton restoreRules = Widgets.button("Restore defaults…");
-    private final JLabel appearanceBasis = Widgets.hint("");
+    private final JTextArea appearanceBasis = Widgets.wrappingHint("", Integer.MAX_VALUE);
+    /** The Width and Height rows' controls, built again with the Appearance tab. */
+    private JComboBox<WidthMode> widthMode;
+    private JSpinner widthPixels;
+    private JComboBox<HeightMode> heightMode;
+    private JSpinner heightPixels;
+    private boolean showingSize;
     private final JButton restoreAppearance = Widgets.button("Restore defaults");
     private Chooser chooser = (title, message, action, safe) -> Widgets.choose(this, title, message, action, safe);
 
@@ -88,16 +113,19 @@ final class SettingsForm extends JPanel {
     private static final String ADD_MISSING = "Add missing defaults";
     private static final String REPLACE = "Replace with defaults";
 
-    SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide) {
-        this(settings, onChange, mono, wide, null);
+    SettingsForm(Settings settings, Runnable onChange, Font mono) {
+        this(settings, onChange, mono, null);
     }
 
-    /** @param message the headers of the message on screen, or {@code null} in the template editor */
-    SettingsForm(Settings settings, Runnable onChange, Font mono, boolean wide, HeadersTab.InMessage message) {
+    /** @param message the headers of the message on screen, or {@code null} for none */
+    SettingsForm(Settings settings, Runnable onChange, Font mono, HeadersTab.InMessage message) {
         super(new BorderLayout());
         this.settings = settings;
         this.mono = mono;
         this.onChange = () -> {
+            if (undoNotice) {
+                notice.setVisible(false);
+            }
             updateCounts();
             updateRestore();
             onChange.run();
@@ -106,7 +134,7 @@ final class SettingsForm extends JPanel {
 
         restoreRules.addActionListener(event -> restoreRules());
         restoreAppearance.addActionListener(event -> restoreAppearance());
-        tabs.addTab("Rules", withFooter(scrollable(rulesTab(wide)), rulesBasis, restoreRules));
+        tabs.addTab("Rules", withFooter(scrollable(rulesTab()), rulesBasis, restoreRules));
         headers = new HeadersTab(
             settings,
             HeaderCatalogFile.bundled(),
@@ -121,13 +149,13 @@ final class SettingsForm extends JPanel {
                         redactionList.addFirst((RedactionRule) rule);
                     }
                     showRule(rule);
-                    showNotice(text);
+                    showBackNotice(text);
                 }
 
                 @Override
                 public void open(Rule rule, String text) {
                     showRule(rule);
-                    showNotice(text);
+                    showBackNotice(text);
                 }
             }
         );
@@ -158,15 +186,81 @@ final class SettingsForm extends JPanel {
         return noticeText;
     }
 
+    /** Takes the headers of the message on screen again, after it was edited. */
+    void setMessage(HeadersTab.InMessage message) {
+        headers.setMessage(message);
+        updateCounts();
+    }
+
+    /**
+     * The actions of the preview's right-click menu. New rules go first, like the ones added with +, and open; when a
+     * rule already redacts or highlights the header, that rule is shown instead of adding a duplicate.
+     */
+    void onSelectionAction(MessagePane.SelectionAction action, String selected, RuleTarget target) {
+        switch (action) {
+            case HIGHLIGHT -> highlightList.addFirst(HighlightRule.create(selected, target, MatchMode.STRING), false);
+            case REDACT -> redactionList.addFirst(
+                RedactionRule.create(selected, target, RedactionMode.REPLACE, MatchMode.STRING),
+                false
+            );
+            case HIDE_HEADER -> {
+                settings.headers.set(selected, Visibility.HIDE, HeaderCatalogFile.bundled());
+                headers.reload();
+                onChange.run();
+            }
+            case REDACT_HEADER, HIGHLIGHT_HEADER -> {
+                boolean redaction = action == MessagePane.SelectionAction.REDACT_HEADER;
+                Rule existing = headers.existingRule(List.of(selected), redaction);
+                if (existing != null) {
+                    showRule(existing);
+                } else if (redaction) {
+                    redactionList.addFirst(RedactionRule.forHeaders(List.of(selected), RedactionMode.REPLACE), false);
+                } else {
+                    highlightList.addFirst(HighlightRule.forHeaders(List.of(selected)), false);
+                }
+            }
+        }
+    }
+
     /** Takes what the rules changed in the header lines of the message on screen. */
     void showHeaderHits(Map<RuleTarget, Map<String, java.util.Set<Rule>>> hits) {
         headers.showHits(hits);
     }
 
-    private void showNotice(String text) {
+    JButton noticeAction() {
+        return noticeAction;
+    }
+
+    /** "‹ Back to Headers" returns to the header the user came from, still selected there. */
+    private void showBackNotice(String text) {
+        showNotice(text, "‹ Back to Headers", null, false, () -> {
+            tabs.setSelectedIndex(HEADERS);
+            headers.table().requestFocusInWindow();
+        });
+    }
+
+    /** After a rule was deleted with its trash button, where the settings can be undone. */
+    private void showDeletedNotice() {
+        if (undo != null) {
+            showNotice("Rule deleted.", "Undo", "Undo (" + Widgets.shortcut(KeyEvent.VK_Z) + ")", true, undo);
+        }
+    }
+
+    private void showNotice(String text, String action, String tooltip, boolean undoes, Runnable run) {
         noticeText.setText(text);
+        noticeAction.setText(action);
+        noticeAction.setToolTipText(tooltip);
+        noticeRun = run;
+        undoNotice = undoes;
         notice.setVisible(true);
         notice.revalidate();
+        // The first layout wraps the row for the width it had while hidden: lay it out again at its real width.
+        SwingUtilities.invokeLater(notice::revalidate);
+    }
+
+    /** Offers Undo after a deletion: the settings have an undo history. */
+    void setUndo(Runnable undo) {
+        this.undo = undo;
     }
 
     JTabbedPane tabs() {
@@ -185,7 +279,7 @@ final class SettingsForm extends JPanel {
         headersCount.setText(headers.hiddenCount() + " hidden");
     }
 
-    private JComponent rulesTab(boolean wide) {
+    private JComponent rulesTab() {
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
         highlightList = new RuleList<>(
             "Highlights",
@@ -214,18 +308,9 @@ final class SettingsForm extends JPanel {
             onChange,
             mono
         );
+        highlightList.setDeleteListener(this::showDeletedNotice);
+        redactionList.setDeleteListener(this::showDeletedNotice);
         buildNotice();
-        if (wide) {
-            JPanel columns = new JPanel(new GridLayout(1, 2, 24, 0));
-            columns.setOpaque(false);
-            columns.add(highlightList);
-            columns.add(redactionList);
-            JPanel wideTab = new JPanel(new BorderLayout(0, 16));
-            wideTab.setOpaque(false);
-            wideTab.add(notice, BorderLayout.NORTH);
-            wideTab.add(columns, BorderLayout.CENTER);
-            return wideTab;
-        }
         Widgets.Stack stack = new Widgets.Stack(20, false);
         stack.addItem(notice());
         stack.addItem(highlightList);
@@ -233,18 +318,17 @@ final class SettingsForm extends JPanel {
         return stack;
     }
 
-    /** "‹ Back to Headers" returns to the header the user came from, still selected there. */
     private void buildNotice() {
-        JButton back = Widgets.button("‹ Back to Headers");
-        back.putClientProperty("JButton.buttonType", "borderless");
-        back.addActionListener(event -> {
-            tabs.setSelectedIndex(HEADERS);
-            headers.table().requestFocusInWindow();
-        });
+        noticeAction.putClientProperty("JButton.buttonType", "borderless");
+        noticeAction.setMargin(new Insets(2, 4, 2, 4));
+        noticeAction.addActionListener(event -> noticeRun.run());
+        // The text is indented as much as the link's own, so they line up when the link wraps below the text.
+        int indent = noticeAction.getInsets().left;
+        noticeText.setBorder(BorderFactory.createEmptyBorder(0, indent, 0, 0));
         notice.setOpaque(true);
-        notice.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 6));
+        notice.setBorder(BorderFactory.createEmptyBorder(6, Math.max(0, 10 - indent), 6, 6));
         // The link moves under the text when the sidebar is too narrow for both.
-        notice.add(Widgets.row(noticeText, back), BorderLayout.CENTER);
+        notice.add(Widgets.row(noticeText, noticeAction), BorderLayout.CENTER);
         notice.setVisible(false);
     }
 
@@ -272,6 +356,84 @@ final class SettingsForm extends JPanel {
     }
 
     /**
+     * Shows the settings again after undo or redo changed them under the form, and where they changed: their tab, if
+     * the open one didn't change, and the rule that changed or came back, open.
+     *
+     * @param before the settings as they were
+     */
+    void reload(Settings before) {
+        String open = expansion.open() == null ? null : expansion.open().id;
+        highlightList.reload();
+        redactionList.reload();
+        headers.reload();
+        int selected = tabs.getSelectedIndex();
+        // The controls show the settings they were built with: build them again.
+        tabs.setComponentAt(APPEARANCE, appearancePanel());
+        notice.setVisible(false);
+        updateCounts();
+        updateRestore();
+
+        Rule changed = ruleChangedSince(before);
+        boolean rules =
+            changed != null ||
+            settings.highlights.size() != before.highlights.size() ||
+            settings.redactions.size() != before.redactions.size();
+        Settings sameHeaders = settings.copy();
+        sameHeaders.headers = before.headers;
+        List<Integer> tabsChanged = new ArrayList<>();
+        if (rules) {
+            tabsChanged.add(RULES);
+        }
+        if (!TemplateCodec.sameSettings(settings, sameHeaders)) {
+            tabsChanged.add(HEADERS);
+        }
+        if (settings.appearanceChanges(before) > 0) {
+            tabsChanged.add(APPEARANCE);
+        }
+        tabs.setSelectedIndex(
+            tabsChanged.isEmpty() || tabsChanged.contains(selected) ? selected : tabsChanged.getFirst()
+        );
+
+        if (changed != null && tabs.getSelectedIndex() == RULES) {
+            showRule(changed);
+        } else if (changed != null) {
+            expand(changed);
+        } else {
+            // The rule open before, if it is still there: its row was built again.
+            Stream.concat(settings.highlights.stream(), settings.redactions.stream())
+                .filter(rule -> rule.id.equals(open))
+                .findFirst()
+                .ifPresent(this::expand);
+        }
+        revalidate();
+        repaint();
+    }
+
+    /** The first rule that {@code before} doesn't have, or has with other settings. */
+    private Rule ruleChangedSince(Settings before) {
+        Map<String, Rule> old = new HashMap<>();
+        Stream.concat(before.highlights.stream(), before.redactions.stream()).forEach(rule -> old.put(rule.id, rule));
+        return Stream.concat(settings.highlights.stream(), settings.redactions.stream())
+            .filter(rule -> !old.containsKey(rule.id) || !sameRule(rule, old.get(rule.id)))
+            .findFirst()
+            .orElse(null);
+    }
+
+    private static boolean sameRule(Rule a, Rule b) {
+        return a.getClass() == b.getClass() && TemplateCodec.sameSettings(holding(a), holding(b));
+    }
+
+    private static Settings holding(Rule rule) {
+        Settings settings = new Settings();
+        if (rule instanceof HighlightRule highlight) {
+            settings.highlights.add(highlight);
+        } else {
+            settings.redactions.add((RedactionRule) rule);
+        }
+        return settings;
+    }
+
+    /**
      * Shows on each rule what it did in the screenshot: its matches, or why it did not fully apply. Rules without a
      * status (as in the template editor, which renders no message) show none.
      */
@@ -280,8 +442,13 @@ final class SettingsForm extends JPanel {
         redactionList.showStatuses(statuses);
         failedRules = (int) Stream.concat(settings.highlights.stream(), settings.redactions.stream())
             .filter(rule -> rule.enabled)
-            .map(statuses::get)
-            .filter(status -> status != null && status.failed())
+            .filter(rule -> {
+                RuleStatus status = statuses.get(rule);
+                return (
+                    (status != null && status.failed()) ||
+                    (rule instanceof RedactionRule redaction && RuleEngine.redactsNothing(redaction))
+                );
+            })
             .count();
         updateCounts();
         revalidate();
@@ -290,7 +457,7 @@ final class SettingsForm extends JPanel {
 
     static String describe(RuleStatus status) {
         if (status.problem() == RuleStatus.Problem.INVALID) {
-            return "⚠ Not applied: invalid regex" + (status.detail() == null ? "" : " (" + status.detail() + ")");
+            return "⚠ Invalid regex" + (status.detail() == null ? "" : ": " + status.detail());
         }
         if (status.problem() == RuleStatus.Problem.STOPPED) {
             return "⚠ Partly applied: matching stopped early, the pattern is too slow for this message";
@@ -308,13 +475,10 @@ final class SettingsForm extends JPanel {
     }
 
     /** A tab's content with, pinned below it, which built-in template it follows and its Restore defaults. */
-    private static JComponent withFooter(JComponent content, JLabel basis, JButton restore) {
+    private static JComponent withFooter(JComponent content, JTextArea basis, JButton restore) {
         restore.putClientProperty("JButton.buttonType", "borderless");
-        JPanel footer = new JPanel(new BorderLayout(8, 0));
-        footer.setOpaque(false);
+        JPanel footer = Widgets.footer(basis, restore);
         footer.setBorder(BorderFactory.createEmptyBorder(6, 14, 8, 8));
-        footer.add(basis, BorderLayout.CENTER);
-        footer.add(restore, BorderLayout.EAST);
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
         panel.add(content, BorderLayout.CENTER);
@@ -457,11 +621,11 @@ final class SettingsForm extends JPanel {
         return restoreAppearance;
     }
 
-    JLabel rulesBasis() {
+    JTextArea rulesBasis() {
         return rulesBasis;
     }
 
-    JLabel appearanceBasis() {
+    JTextArea appearanceBasis() {
         return appearanceBasis;
     }
 
@@ -476,13 +640,69 @@ final class SettingsForm extends JPanel {
         int row = 0;
 
         addHeading(grid, row++, "Image");
-        addRow(grid, row++, "Width", widthControl(), "Width of the captured image", true);
+        addRow(
+            grid,
+            row++,
+            "Width",
+            widthControl(),
+            "Width of the captured image. Dragging the handle on the right of the screenshot sets a custom width.",
+            true
+        );
+        addRow(
+            grid,
+            row++,
+            "Height",
+            heightControl(),
+            "Height of the captured image. Dragging the handle below the screenshot sets a custom height.",
+            false
+        );
+
+        addRow(
+            grid,
+            row++,
+            "Text size",
+            textSizeControl(),
+            "Size of the request and response text: Burp's editor font, or a size of your own, the same for " +
+                "everyone who uses the template",
+            false
+        );
+
+        SegmentedControl<Integer> scale = new SegmentedControl<>(
+            Settings.SCALES.toArray(Integer[]::new),
+            settings.scale,
+            value -> value + "×",
+            value -> {
+                settings.scale = value;
+                onChange.run();
+            }
+        );
+        addRow(
+            grid,
+            row++,
+            "Scale",
+            scale,
+            "Image pixels per pixel on screen: a higher scale is sharper when zoomed in or printed, and a larger file",
+            false
+        );
 
         SegmentedControl<Disposition> layout = Widgets.segmented(Disposition.values(), settings.disposition, value -> {
             settings.disposition = value;
             onChange.run();
         });
-        addRow(grid, row++, "Layout", layout, "Request and response side by side, or one above the other", false);
+        JLabel layoutLabel = addRow(
+            grid,
+            row++,
+            "Layout",
+            layout,
+            "Request and response side by side, or one above the other, when both are shown",
+            false
+        );
+        // Kept, not reset, while one message is shown: showing both again brings back the layout chosen before.
+        Consumer<MessageMode> enableLayout = messages -> {
+            layout.setEnabled(messages == MessageMode.BOTH);
+            layoutLabel.setEnabled(messages == MessageMode.BOTH);
+        };
+        enableLayout.accept(settings.messages);
 
         SegmentedControl<ThemeMode> theme = Widgets.segmented(ThemeMode.values(), settings.theme, value -> {
             settings.theme = value;
@@ -496,6 +716,24 @@ final class SettingsForm extends JPanel {
             onChange.run();
         });
         addRow(grid, row++, "URL bar", url, null, true);
+
+        SegmentedControl<MessageMode> messages = Widgets.segmented(MessageMode.values(), settings.messages, value -> {
+            settings.messages = value;
+            enableLayout.accept(value);
+            onChange.run();
+        });
+        addRow(grid, row++, "Messages", messages, "The request, the response or both", false);
+
+        SegmentedControl<Boolean> lineNumbers = new SegmentedControl<>(
+            new Boolean[] { true, false },
+            settings.lineNumbers,
+            shown -> shown ? "Shown" : "Hidden",
+            value -> {
+                settings.lineNumbers = value;
+                onChange.run();
+            }
+        );
+        addRow(grid, row++, "Line numbers", lineNumbers, null, false);
 
         SegmentedControl<ViewMode> view = Widgets.segmented(ViewMode.values(), settings.view, value -> {
             settings.view = value;
@@ -521,7 +759,14 @@ final class SettingsForm extends JPanel {
         grid.add(Widgets.title(text), at);
     }
 
-    private static void addRow(JPanel grid, int row, String label, JComponent control, String tooltip, boolean first) {
+    private static JLabel addRow(
+        JPanel grid,
+        int row,
+        String label,
+        JComponent control,
+        String tooltip,
+        boolean first
+    ) {
         int top = first ? 8 : 12;
         GridBagConstraints labelAt = new GridBagConstraints();
         labelAt.gridx = 0;
@@ -537,36 +782,163 @@ final class SettingsForm extends JPanel {
         controlAt.gridx = 1;
         controlAt.gridy = row;
         controlAt.weightx = 1;
+        controlAt.fill = GridBagConstraints.HORIZONTAL;
         controlAt.anchor = GridBagConstraints.LINE_START;
         controlAt.insets = new Insets(top, 0, 0, 0);
         control.setToolTipText(tooltip);
-        grid.add(control, controlAt);
+        JPanel cell = new JPanel(new FitWidth());
+        cell.setOpaque(false);
+        cell.add(control);
+        grid.add(cell, controlAt);
+        return title;
+    }
+
+    /**
+     * Lays out one component at the left, as wide as it prefers or as the cell, whichever is less. A grid too narrow for
+     * its controls (large fonts) gives each one its minimum width; in a cell that fills the column, a control that wraps
+     * (a segmented control, a row of checkboxes) wraps only as much as it must.
+     */
+    private static final class FitWidth implements LayoutManager {
+
+        @Override
+        public void addLayoutComponent(String name, Component component) {}
+
+        @Override
+        public void removeLayoutComponent(Component component) {}
+
+        @Override
+        public Dimension preferredLayoutSize(Container parent) {
+            return parent.getComponent(0).getPreferredSize();
+        }
+
+        @Override
+        public Dimension minimumLayoutSize(Container parent) {
+            return parent.getComponent(0).getMinimumSize();
+        }
+
+        @Override
+        public void layoutContainer(Container parent) {
+            Component child = parent.getComponent(0);
+            child.setBounds(0, 0, Math.min(child.getPreferredSize().width, parent.getWidth()), parent.getHeight());
+        }
     }
 
     private JComponent widthControl() {
         JSpinner pixels = new JSpinner(
             new SpinnerNumberModel(settings.widthPixels, Settings.MIN_PIXEL_WIDTH, Settings.MAX_PIXEL_WIDTH, 10)
         );
-        pixels.setVisible(settings.widthMode == WidthMode.PIXEL);
-        pixels.addChangeListener(event -> {
-            settings.widthPixels = (Integer) pixels.getValue();
-            onChange.run();
-        });
-
         JComboBox<WidthMode> mode = new JComboBox<>(WidthMode.values());
-        mode.setSelectedItem(settings.widthMode);
         JPanel row = flush(mode, pixels);
-        mode.addActionListener(event -> {
-            settings.widthMode = (WidthMode) mode.getSelectedItem();
-            if (settings.widthMode == WidthMode.PIXEL) {
-                settings.widthPixels = Settings.DEFAULT_PIXEL_WIDTH;
-                pixels.setValue(Settings.DEFAULT_PIXEL_WIDTH);
+        widthMode = mode;
+        widthPixels = pixels;
+        showSize();
+        pixels.addChangeListener(event -> {
+            if (!showingSize) {
+                settings.widthPixels = (Integer) pixels.getValue();
+                onChange.run();
             }
-            pixels.setVisible(settings.widthMode == WidthMode.PIXEL);
+        });
+        mode.addActionListener(event -> {
+            if (!showingSize) {
+                settings.widthMode = (WidthMode) mode.getSelectedItem();
+                pixels.setVisible(settings.widthMode == WidthMode.PIXEL);
+                row.revalidate();
+                onChange.run();
+            }
+        });
+        return row;
+    }
+
+    private JComponent heightControl() {
+        JSpinner pixels = new JSpinner(
+            new SpinnerNumberModel(settings.heightPixels, Settings.MIN_PIXEL_HEIGHT, Settings.MAX_PIXEL_HEIGHT, 10)
+        );
+        JComboBox<HeightMode> mode = new JComboBox<>(HeightMode.values());
+        JPanel row = flush(mode, pixels);
+        heightMode = mode;
+        heightPixels = pixels;
+        showSize();
+        pixels.addChangeListener(event -> {
+            if (!showingSize) {
+                settings.heightPixels = (Integer) pixels.getValue();
+                onChange.run();
+            }
+        });
+        mode.addActionListener(event -> {
+            if (!showingSize) {
+                settings.heightMode = (HeightMode) mode.getSelectedItem();
+                pixels.setVisible(settings.heightMode == HeightMode.PIXEL);
+                row.revalidate();
+                onChange.run();
+            }
+        });
+        return row;
+    }
+
+    private JComponent textSizeControl() {
+        JSpinner size = new JSpinner(
+            new SpinnerNumberModel(settings.textSize, Settings.MIN_TEXT_SIZE, Settings.MAX_TEXT_SIZE, 1)
+        );
+        JComboBox<TextSizeMode> mode = new JComboBox<>(TextSizeMode.values());
+        mode.setSelectedItem(settings.textSizeMode);
+        size.setVisible(settings.textSizeMode == TextSizeMode.CUSTOM);
+        JPanel row = flush(mode, size);
+        size.addChangeListener(event -> {
+            if (!showingSize) {
+                settings.textSize = (Integer) size.getValue();
+                onChange.run();
+            }
+        });
+        mode.addActionListener(event -> {
+            TextSizeMode chosen = (TextSizeMode) mode.getSelectedItem();
+            if (chosen == settings.textSizeMode) {
+                return;
+            }
+            if (chosen == TextSizeMode.CUSTOM) {
+                // From the size the screenshot had, so choosing Custom changes nothing until the size does.
+                settings.textSize = Math.clamp(
+                    Math.round(mono.getSize2D()),
+                    Settings.MIN_TEXT_SIZE,
+                    Settings.MAX_TEXT_SIZE
+                );
+                showingSize = true;
+                try {
+                    size.setValue(settings.textSize);
+                } finally {
+                    showingSize = false;
+                }
+            }
+            settings.textSizeMode = chosen;
+            size.setVisible(chosen == TextSizeMode.CUSTOM);
             row.revalidate();
             onChange.run();
         });
         return row;
+    }
+
+    /**
+     * Shows a width or height set outside the form, by dragging a handle beside the screenshot, without a change of
+     * its own.
+     */
+    void showSize() {
+        showingSize = true;
+        try {
+            if (widthMode != null) {
+                widthMode.setSelectedItem(settings.widthMode);
+                widthPixels.setValue(settings.widthPixels);
+                widthPixels.setVisible(settings.widthMode == WidthMode.PIXEL);
+                widthPixels.getParent().revalidate();
+            }
+            if (heightMode != null) {
+                heightMode.setSelectedItem(settings.heightMode);
+                heightPixels.setValue(settings.heightPixels);
+                heightPixels.setVisible(settings.heightMode == HeightMode.PIXEL);
+                heightPixels.getParent().revalidate();
+            }
+        } finally {
+            showingSize = false;
+        }
+        updateRestore();
     }
 
     private JComponent footerControl() {
@@ -586,9 +958,12 @@ final class SettingsForm extends JPanel {
         return flush(timestamp, responseInfo);
     }
 
-    /** A row whose first component starts exactly at the left edge, aligned with the rest of the grid. */
+    /**
+     * A row whose first component starts exactly at the left edge, aligned with the rest of the grid. It wraps when the
+     * sidebar is too narrow (large fonts), rather than hiding what doesn't fit.
+     */
     private static JPanel flush(JComponent... components) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel row = new JPanel(new WrapLayout(0, 0, true));
         row.setOpaque(false);
         for (JComponent component : components) {
             if (row.getComponentCount() > 0) {

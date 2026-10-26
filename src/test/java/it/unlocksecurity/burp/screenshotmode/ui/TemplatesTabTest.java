@@ -13,6 +13,7 @@ import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Font;
+import java.awt.event.KeyEvent;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,8 +21,11 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import javax.swing.AbstractButton;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
@@ -64,13 +68,108 @@ class TemplatesTabTest {
     }
 
     @Test
-    void cancelDiscardsAnUntouchedDuplicate() throws Exception {
+    void savesAndKeepsEditingWhatItSaved() throws Exception {
+        TemplateStore store = store();
+        List<String> asked = new java.util.ArrayList<>();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            tab.setDiscardConfirmation(message -> {
+                asked.add(message);
+                return false;
+            });
+            button(tab, "New template").doClick();
+            JTextField name = find(tab, JTextField.class, f -> f.getText().isEmpty() && isShowing(f, tab)).get();
+            name.setText("Report");
+            assertTrue(find(tab, JComboBox.class, c -> c.getSelectedItem() instanceof Template).isPresent());
+            button(tab, "Save").doClick();
+
+            assertEquals(BuiltInTemplates.all().size() + 1, store.templates().size(), "created");
+            Template created = store.templateNamed("Report").get();
+            assertTrue(isShowing(button(tab, "Save"), tab), "still editing");
+            assertTrue(isShowing(label(tab, "Edit \"Report\""), tab), "now an edit of the saved template");
+            assertTrue(isShowing(label(tab, "Template created"), tab));
+            assertFalse(label(tab, "Unsaved").isVisible());
+            assertFalse(button(tab, "Save").isEnabled(), "nothing left to save");
+            assertFalse(
+                find(tab, JComboBox.class, c -> c.getSelectedItem() instanceof Template).isPresent(),
+                "Based on is fixed once the template exists"
+            );
+
+            name.setText("Report A4");
+            assertTrue(label(tab, "Unsaved").isVisible());
+            assertTrue(button(tab, "Save").isEnabled());
+            name.setText("Report");
+            assertFalse(button(tab, "Save").isEnabled(), "back as saved");
+            name.setText("Report A4");
+            button(tab, "Save").doClick();
+            assertEquals(BuiltInTemplates.all().size() + 1, store.templates().size(), "saved again, not created again");
+            assertEquals("Report A4", store.getTemplateById(created.id).get().name);
+            assertTrue(isShowing(label(tab, "Template saved"), tab));
+
+            button(tab, "Close").doClick();
+            assertEquals(List.of(), asked, "nothing unsaved to ask about");
+            assertTrue(isShowing(button(tab, "New template"), tab), "back to the list");
+        });
+    }
+
+    @Test
+    void savesWithTheMenuShortcut() throws Exception {
+        TemplateStore store = store();
+        Template custom = store.createTemplate("Report", RenderPreviewTest.sampleSettings());
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            select(tab, custom);
+            button(tab, "Edit").doClick();
+            JTextField name = find(tab, JTextField.class, field -> field.getText().equals("Report")).get();
+            assertFalse(button(tab, "Save").isEnabled(), "an untouched template has nothing to save");
+            name.setText("Renamed");
+            javax.swing.KeyStroke key = javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_S,
+                Widgets.menuShortcutMask()
+            );
+            JComponent editor = (JComponent) SwingUtilities.getAncestorOfClass(JComponent.class, name);
+            while (editor.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key) == null) {
+                editor = (JComponent) editor.getParent();
+            }
+            Object action = editor.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key);
+            editor.getActionMap().get(action).actionPerformed(null);
+            assertEquals("Renamed", store.getTemplateById(custom.id).get().name);
+            assertTrue(isShowing(button(tab, "Save"), tab), "still editing");
+        });
+    }
+
+    @Test
+    void namesTheExportAfterItsTemplate() {
+        Template report = Template.create("Report A4", null);
+        Template letter = Template.create("Letter", null);
+        assertEquals("screenshot-mode-report-a4-template.json", TemplatesTab.exportFileName(List.of(report)));
+        assertEquals("screenshot-mode-templates.json", TemplatesTab.exportFileName(List.of(report, letter)), "several");
+        assertEquals(
+            "screenshot-mode-client-citta-report-v2-template.json",
+            TemplatesTab.exportFileName(List.of(Template.create(" Client: Città / report_v2? ", null)))
+        );
+        assertEquals(
+            "screenshot-mode-templates.json",
+            TemplatesTab.exportFileName(List.of(Template.create("報告", null))),
+            "nothing left of the name"
+        );
+    }
+
+    /** The label with this text. */
+    private static JLabel label(java.awt.Container root, String text) {
+        return find(root, JLabel.class, label -> text.equals(label.getText())).orElseThrow(() ->
+            new AssertionError("no label " + text)
+        );
+    }
+
+    @Test
+    void closeDiscardsAnUntouchedDuplicate() throws Exception {
         TemplateStore store = store();
         SwingUtilities.invokeAndWait(() -> {
             TemplatesTab tab = new TemplatesTab(store, host());
             select(tab, store.getDefaultTemplate());
             button(tab, "Duplicate").doClick();
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
         });
         assertEquals(BuiltInTemplates.all().size(), store.templates().size());
     }
@@ -138,7 +237,7 @@ class TemplatesTabTest {
     }
 
     @Test
-    void cancelAsksBeforeDiscardingChanges() throws Exception {
+    void closeAsksBeforeDiscardingChanges() throws Exception {
         TemplateStore store = store();
         Template original = store.createTemplate("Report", null);
         SwingUtilities.invokeAndWait(() -> {
@@ -151,22 +250,75 @@ class TemplatesTabTest {
             });
             select(tab, original);
             button(tab, "Edit").doClick();
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
             assertTrue(asked.isEmpty(), "nothing to discard yet");
             assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
 
             button(tab, "Edit").doClick();
             JTextField name = find(tab, JTextField.class, f -> f.getText().equals(original.name)).get();
             name.setText("Renamed");
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
             assertEquals(List.of("Your changes to \"" + original.name + "\" haven't been saved."), asked);
             button(tab, "Save"); // still editing: throws if the Save button is not showing
 
             discard[0] = true;
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
             assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
         });
         assertEquals(original.name, store.getTemplateById(original.id).orElseThrow().name, "nothing was saved");
+    }
+
+    @Test
+    void templatesInTheHeadingLeadBackToTheListLikeClose() throws Exception {
+        TemplateStore store = store();
+        Template original = store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            List<String> asked = new java.util.ArrayList<>();
+            tab.setDiscardConfirmation(name -> {
+                asked.add(name);
+                return false;
+            });
+            select(tab, original);
+            button(tab, "Edit").doClick();
+            AbstractButton back = button(tab, "Templates");
+            assertEquals("Back to templates", back.getAccessibleContext().getAccessibleName());
+            back.doClick();
+            assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
+
+            button(tab, "Edit").doClick();
+            find(tab, JTextField.class, f -> f.getText().equals(original.name))
+                .get()
+                .setText("Renamed");
+            button(tab, "Templates").doClick();
+            assertEquals(1, asked.size(), "asks before discarding the changes");
+            button(tab, "Save"); // still editing
+        });
+    }
+
+    @Test
+    void wrapsTheToolbarRatherThanHidingButtons() throws Exception {
+        TemplateStore store = store();
+        for (int width : new int[] { 1024, 800, 640, 400 }) {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            tab.setSize(width, 500);
+            WrapLayoutTest.layOut(tab);
+            JTextField search = find(tab, JTextField.class, field ->
+                "Search templates...".equals(placeholder(field))
+            ).get();
+            assertTrue(WrapLayoutTest.inView(search, tab), "search in view at " + width + " px");
+            for (String name : List.of(
+                "Edit",
+                "Duplicate",
+                "Set as default",
+                "Delete",
+                "Import…",
+                "Export…",
+                "New template"
+            )) {
+                assertTrue(WrapLayoutTest.inView(button(tab, name), tab), name + " in view at " + width + " px");
+            }
+        }
     }
 
     @Test
@@ -177,13 +329,227 @@ class TemplatesTabTest {
             JTable table = find(tab, JTable.class, t -> true).get();
             for (Template builtIn : BuiltInTemplates.all()) {
                 select(tab, builtIn);
-                assertEquals("Built-in", table.getValueAt(table.getSelectedRow(), 2), "says so in words");
+                Component name = table.prepareRenderer(
+                    table.getCellRenderer(table.getSelectedRow(), 1),
+                    table.getSelectedRow(),
+                    1
+                );
+                assertEquals(
+                    builtIn.name + ", built-in",
+                    name.getAccessibleContext().getAccessibleName(),
+                    "says so in words, not only with the lock"
+                );
                 assertFalse(button(tab, "Edit").isEnabled());
                 assertFalse(button(tab, "Delete").isEnabled());
                 assertTrue(button(tab, "Duplicate").isEnabled());
+                String why = "\"" + builtIn.name + "\" is built in, so it can't be edited or deleted.";
+                assertTrue(
+                    find(tab, JLabel.class, label -> label.getText().startsWith(why)).isPresent(),
+                    "says why on screen, not only in tooltips"
+                );
             }
             assertTrue(button(tab, "Set as default").isEnabled(), "Empty can be the default");
             assertFalse(button(tab, "Export…").isEnabled(), "nothing of the user's to export");
+        });
+    }
+
+    @Test
+    void selectsSeveralTemplatesOrAllWithCtrlA() throws Exception {
+        TemplateStore store = store();
+        store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            JTable table = find(tab, JTable.class, t -> true).get();
+            for (KeyStroke key : List.of(
+                KeyStroke.getKeyStroke(KeyEvent.VK_A, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+                KeyStroke.getKeyStroke(KeyEvent.VK_A, Widgets.menuShortcutMask())
+            )) {
+                table.clearSelection();
+                Object action = table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key);
+                table
+                    .getActionMap()
+                    .get(action)
+                    .actionPerformed(new java.awt.event.ActionEvent(table, 0, "selectAll"));
+                assertEquals(store.templates().size(), table.getSelectedRowCount(), key + " selects all");
+            }
+            assertFalse(button(tab, "Edit").isEnabled(), "one at a time");
+            assertFalse(button(tab, "Duplicate").isEnabled());
+            assertFalse(button(tab, "Set as default").isEnabled());
+            assertTrue(button(tab, "Delete").isEnabled(), "deletes the user's templates, keeps the built-in ones");
+            assertTrue(
+                find(tab, JLabel.class, label ->
+                    label.getText().equals("Built-in templates can't be edited, deleted or exported.")
+                ).isPresent()
+            );
+        });
+    }
+
+    @Test
+    void exportTicksTheSelectedTemplatesOrAllWhenNoneIs() throws Exception {
+        TemplateStore store = store();
+        Template report = store.createTemplate("Report", null);
+        Template other = store.createTemplate("Other", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            assertEquals(List.of(report, other), tab.exportPicker().chosen(), "nothing selected: all");
+            select(tab, other);
+            TemplatePicker picker = tab.exportPicker();
+            assertEquals(2, picker.boxes().size(), "lists them all");
+            assertEquals(List.of(other), picker.chosen(), "ticks the selected one");
+            select(tab, BuiltInTemplates.all().get(0));
+            assertEquals(List.of(report, other), tab.exportPicker().chosen(), "built-in ones can't be exported");
+        });
+    }
+
+    @Test
+    void marksBuiltInTemplatesWithALockAndShowsEveryColumnLine() throws Exception {
+        TemplateStore store = store();
+        store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = find(new TemplatesTab(store, host()), JTable.class, t -> true).get();
+            JLabel builtIn = (JLabel) table.prepareRenderer(table.getCellRenderer(0, 1), 0, 1);
+            assertEquals(Widgets.Glyph.LOCK, builtIn.getIcon(), "a lock on the built-in template");
+            assertEquals(table.getForeground(), builtIn.getForeground(), "in normal text: it isn't disabled");
+            JLabel custom = (JLabel) table.prepareRenderer(table.getCellRenderer(2, 1), 2, 1);
+            assertEquals(null, custom.getIcon());
+            assertEquals(
+                null,
+                ((JLabel) table.prepareRenderer(table.getCellRenderer(0, 2), 0, 2)).getIcon(),
+                "on the name only"
+            );
+            // As in Burp's theme: no gap between cells, and a shaded (here, selected) row painted over the lines.
+            table.setIntercellSpacing(new java.awt.Dimension(0, 0));
+            table.setShowVerticalLines(true);
+            table.setGridColor(java.awt.Color.RED);
+            table.setRowSelectionInterval(1, 1);
+            table.setSize(700, table.getRowHeight() * table.getRowCount());
+            table.doLayout();
+            java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(
+                700,
+                table.getHeight(),
+                java.awt.image.BufferedImage.TYPE_INT_RGB
+            );
+            java.awt.Graphics2D g = image.createGraphics();
+            table.paint(g);
+            g.dispose();
+            int x = table.getColumnModel().getColumn(0).getWidth() - 1;
+            int y = table.getRowHeight() + table.getRowHeight() / 2;
+            assertEquals(0xff0000, image.getRGB(x, y) & 0xffffff, "the column line shows on the selected row");
+        });
+    }
+
+    @Test
+    void listsAOneMessageTemplateByTheMessageItShowsInsteadOfItsLayout() throws Exception {
+        TemplateStore store = store();
+        it.unlocksecurity.burp.screenshotmode.model.Settings settings = BuiltInTemplates.defaults();
+        settings.messages = it.unlocksecurity.burp.screenshotmode.model.MessageMode.RESPONSE;
+        store.createTemplate("Responses", settings);
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = find(new TemplatesTab(store, host()), JTable.class, t -> true).get();
+            assertEquals("Response only", table.getValueAt(2, table.getColumn("Layout").getModelIndex()));
+        });
+    }
+
+    @Test
+    void listsWhatEachTemplateLooksLikeInTheOrderOfTheAppearanceTab() throws Exception {
+        TemplateStore store = store();
+        it.unlocksecurity.burp.screenshotmode.model.Settings settings = BuiltInTemplates.defaults();
+        settings.widthMode = it.unlocksecurity.burp.screenshotmode.model.WidthMode.A4;
+        settings.heightMode = it.unlocksecurity.burp.screenshotmode.model.HeightMode.PIXEL;
+        settings.heightPixels = 900;
+        settings.disposition = Disposition.VERTICAL;
+        settings.theme = it.unlocksecurity.burp.screenshotmode.model.ThemeMode.LIGHT;
+        settings.view = it.unlocksecurity.burp.screenshotmode.model.ViewMode.PRETTY;
+        store.createTemplate("Report", settings);
+        it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog catalog =
+            it.unlocksecurity.burp.screenshotmode.storage.HeaderCatalogFile.bundled();
+        String hidden = settings.headers.hiddenCount(catalog) + " of " + catalog.headerCount();
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = find(new TemplatesTab(store, host()), JTable.class, t -> true).get();
+            List<String> columns = new java.util.ArrayList<>();
+            List<String> report = new java.util.ArrayList<>();
+            for (int column = 0; column < table.getColumnCount(); column++) {
+                columns.add(table.getColumnName(column));
+                report.add(String.valueOf(table.getValueAt(2, column)));
+            }
+            assertEquals(
+                List.of(
+                    "Default",
+                    "Name",
+                    "Based on",
+                    "Width",
+                    "Height",
+                    "Layout",
+                    "Theme",
+                    "Body",
+                    "Hidden headers",
+                    "Highlights",
+                    "Redactions"
+                ),
+                columns
+            );
+            assertEquals(
+                List.of(
+                    "",
+                    "Report",
+                    "Defaults",
+                    "A4 (595px)",
+                    "900px",
+                    "Stacked",
+                    "Light",
+                    "Pretty",
+                    hidden,
+                    "0",
+                    "10"
+                ),
+                report
+            );
+            assertEquals("—", table.getValueAt(0, 2), "a built-in template is based on nothing");
+            assertEquals(
+                "0 of " + catalog.headerCount(),
+                String.valueOf(table.getValueAt(1, 8)),
+                "Empty hides nothing"
+            );
+            assertEquals(Integer.class, table.getColumnClass(9), "counts sort as numbers");
+
+            for (int column = 0; column < table.getColumnCount(); column++) {
+                int needed = table
+                    .getTableHeader()
+                    .getDefaultRenderer()
+                    .getTableCellRendererComponent(table, table.getColumnName(column), false, false, -1, column)
+                    .getPreferredSize()
+                    .width;
+                for (int row = 0; row < table.getRowCount(); row++) {
+                    needed = Math.max(
+                        needed,
+                        table.prepareRenderer(table.getCellRenderer(row, column), row, column).getPreferredSize().width
+                    );
+                }
+                assertTrue(
+                    table.getColumnModel().getColumn(column).getMinWidth() >= needed,
+                    table.getColumnName(column) + " is never cut"
+                );
+            }
+            javax.swing.JViewport viewport = (javax.swing.JViewport) table.getParent();
+            viewport.setSize(300, 200);
+            assertFalse(table.getScrollableTracksViewportWidth(), "too narrow: scrolls sideways");
+            viewport.setSize(5000, 200);
+            assertTrue(table.getScrollableTracksViewportWidth(), "wide enough: fills the width");
+        });
+    }
+
+    @Test
+    void saysWhyOnlyForBuiltInTemplates() throws Exception {
+        TemplateStore store = store();
+        Template custom = store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            select(tab, BuiltInTemplates.all().get(0));
+            JLabel hint = find(tab, JLabel.class, label -> label.getText().contains("is built in")).get();
+            int height = hint.getPreferredSize().height;
+            select(tab, custom);
+            assertEquals(" ", hint.getText());
+            assertEquals(height, hint.getPreferredSize().height, "keeps its line, so the table doesn't move");
         });
     }
 
@@ -236,6 +602,167 @@ class TemplatesTabTest {
             TemplatesTab tab = new TemplatesTab(store, host());
             assertEquals("primary", button(tab, "New template").getClientProperty("FlatLaf.styleClass"));
         });
+    }
+
+    @Test
+    void undoesInTheEditorWithTheMenuShortcut() throws Exception {
+        TemplateStore store = store();
+        Template template = store.createTemplate("Report", BuiltInTemplates.defaults());
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            select(tab, template);
+            button(tab, "Edit").doClick();
+            SettingsForm form = find(tab, SettingsForm.class, f -> true).get();
+            JLabel unsaved = find(tab, JLabel.class, label -> "Unsaved".equals(label.getText())).get();
+            int count = template.settings.redactions.size();
+
+            find(form.redactionList(), RuleList.Row.class, row -> true)
+                .get()
+                .delete();
+            assertTrue(unsaved.isVisible());
+
+            KeyStroke undo = KeyStroke.getKeyStroke(KeyEvent.VK_Z, Widgets.menuShortcutMask());
+            Object action = form.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(undo);
+            form.getActionMap().get(action).actionPerformed(null);
+            assertFalse(unsaved.isVisible(), "back to the saved settings");
+            button(tab, "Save").doClick();
+            assertEquals(count, store.getTemplateById(template.id).get().settings.redactions.size());
+        });
+    }
+
+    @Test
+    void saysWhenTheNameIsTakenAndWontSave() throws Exception {
+        TemplateStore store = store();
+        Template report = store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            button(tab, "New template").doClick();
+            JTextField name = find(tab, JTextField.class, field -> "Template name".equals(placeholder(field))).get();
+            AbstractButton save = button(tab, "Save");
+            assertFalse(save.isEnabled(), "no name yet");
+
+            name.setText(" defaults ");
+            JLabel error = find(tab, JLabel.class, label -> label.getText().contains("already exists")).get();
+            assertEquals("A template named \"Defaults\" already exists", error.getText());
+            assertTrue(error.isVisible());
+            assertEquals("error", name.getClientProperty("JComponent.outline"));
+            assertFalse(save.isEnabled());
+
+            name.setText("Mine");
+            assertFalse(error.isVisible());
+            assertTrue(save.isEnabled());
+
+            // Its own name is not taken.
+            tab.setDiscardConfirmation(message -> true);
+            button(tab, "Close").doClick();
+            select(tab, report);
+            button(tab, "Edit").doClick();
+            name = find(tab, JTextField.class, field -> "Template name".equals(placeholder(field))).get();
+            assertFalse(button(tab, "Save").isEnabled(), "nothing changed yet");
+            name.setText("REPORT");
+            assertTrue(button(tab, "Save").isEnabled());
+        });
+    }
+
+    @Test
+    void saysWhichImportedTemplatesWereRenamed() {
+        assertEquals("Imported 2 templates", TemplatesTab.importStatus(new TemplateStore.Imported(2, List.of())));
+        assertEquals(
+            "Imported 2 templates, 1 renamed: \"Report\" is now \"Report (imported)\"",
+            TemplatesTab.importStatus(
+                new TemplateStore.Imported(2, List.of(new TemplateStore.Rename("Report", "Report (imported)")))
+            )
+        );
+        assertEquals(
+            "Imported 3 templates, 2 renamed with \"(imported)\" because their names were taken",
+            TemplatesTab.importStatus(
+                new TemplateStore.Imported(
+                    3,
+                    List.of(
+                        new TemplateStore.Rename("A", "A (imported)"),
+                        new TemplateStore.Rename("B", "B (imported)")
+                    )
+                )
+            )
+        );
+    }
+
+    @Test
+    void notesTheNameEachImportedTemplateIsAddedAs() {
+        Template report = Template.create("Report", BuiltInTemplates.defaults());
+        Template other = Template.create("Other", BuiltInTemplates.defaults());
+        assertEquals(
+            java.util.Arrays.asList("Name taken: added as \"Report (imported)\"", null),
+            TemplatesTab.importNotes(List.of(report, other), List.of("Report (imported)", "Other"))
+        );
+    }
+
+    @Test
+    void saysWhenTheSearchMatchesNoTemplate() throws Exception {
+        TemplateStore store = store();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            JTextField search = find(tab, JTextField.class, field ->
+                "Search templates...".equals(placeholder(field))
+            ).get();
+            assertTrue(
+                find(tab, JLabel.class, label -> label.isVisible() && label.getText().startsWith("No ")).isEmpty()
+            );
+            search.setText("zzz");
+            JLabel noMatch = find(tab, JLabel.class, label -> label.getText().startsWith("No templates match")).get();
+            assertTrue(noMatch.isVisible());
+            assertEquals("No templates match \"zzz\"", noMatch.getText());
+            search.setText("def");
+            assertFalse(noMatch.isVisible());
+        });
+    }
+
+    @Test
+    void searchIsAStandardSearchField() throws Exception {
+        TemplateStore store = store();
+        store.createTemplate("Report", null);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            JTextField search = find(tab, JTextField.class, field ->
+                "Search templates...".equals(placeholder(field))
+            ).get();
+            assertEquals(Widgets.Glyph.SEARCH, search.getClientProperty("JTextField.leadingIcon"));
+            assertEquals(true, search.getClientProperty("JTextField.showClearButton"));
+            assertEquals("Search templates", search.getAccessibleContext().getAccessibleName());
+
+            JTable table = find(tab, JTable.class, t -> true).get();
+            search.setText("rep");
+            assertEquals(1, table.getRowCount());
+            Object clear = search.getInputMap(JComponent.WHEN_FOCUSED).get(KeyStroke.getKeyStroke("ESCAPE"));
+            search.getActionMap().get(clear).actionPerformed(null);
+            assertEquals("", search.getText(), "Escape clears it");
+            assertEquals(store.templates().size(), table.getRowCount());
+        });
+    }
+
+    @Test
+    void previewsTheSampleMessageInTheEditor() throws Exception {
+        TemplateStore store = store();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            button(tab, "New template").doClick();
+            SettingsForm form = find(tab, SettingsForm.class, f -> true).get();
+            TemplatePreview preview = find(tab, TemplatePreview.class, p -> true).get();
+
+            // Each rule shows what it matched in the sample, as in the screenshot window.
+            RuleList<?>.Row row = find(form.redactionList(), RuleList.Row.class, r -> true).get();
+            assertTrue(row.pill().isVisible());
+            assertEquals(RuleList.Pill.Style.FILLED, row.pill().style());
+
+            form.tabs().setSelectedIndex(SettingsForm.APPEARANCE);
+            assertFalse(preview.parts().isVisible(), "the whole screenshot");
+            form.tabs().setSelectedIndex(SettingsForm.HEADERS);
+            assertTrue(preview.parts().isVisible());
+        });
+    }
+
+    private static Object placeholder(JTextField field) {
+        return field.getClientProperty("JTextField.placeholderText");
     }
 
     static TemplateStore store() {

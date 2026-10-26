@@ -2,7 +2,9 @@ package it.unlocksecurity.burp.screenshotmode.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,11 +49,46 @@ class SettingsTest {
         settings.widthPixels = 900;
         settings.theme = ThemeMode.DARK;
         settings.showTimestamp = true;
+        settings.heightMode = HeightMode.PIXEL;
+        settings.heightPixels = 640;
+        settings.messages = MessageMode.REQUEST;
+        settings.lineNumbers = false;
+        settings.scale = 3;
+        settings.textSize = 9;
+        assertEquals(8, settings.appearanceChanges(parent), "a size not used is no change");
+        settings.textSizeMode = TextSizeMode.CUSTOM;
         settings.redactions.add(named("Kept", "k"));
-        assertEquals(4, settings.appearanceChanges(parent));
+        assertEquals(9, settings.appearanceChanges(parent));
 
         settings.copyAppearance(parent);
         assertEquals(0, settings.appearanceChanges(parent));
         assertEquals(1, settings.redactions.size(), "rules are not appearance");
+        assertEquals(MessageMode.BOTH, settings.messages);
+        assertTrue(settings.lineNumbers);
+        assertEquals(Settings.DEFAULT_SCALE, settings.scale);
+        assertEquals(TextSizeMode.BURP, settings.textSizeMode);
+    }
+
+    @Test
+    void copiesEverythingIntoTheSameRuleLists() {
+        Settings other = new Settings();
+        other.basedOn = "defaults";
+        other.disposition = Disposition.VERTICAL;
+        RedactionRule rule = named("Tokens", "t");
+        other.redactions.add(rule);
+
+        Settings settings = new Settings();
+        List<RedactionRule> redactions = settings.redactions;
+        settings.redactions.add(named("Gone", "g"));
+        settings.copyFrom(other);
+
+        assertSame(redactions, settings.redactions, "editors hold the list");
+        assertEquals(1, settings.redactions.size());
+        assertEquals(rule.id, settings.redactions.getFirst().id);
+        assertNotSame(rule, settings.redactions.getFirst());
+        assertNotSame(other.headers, settings.headers);
+        assertEquals("defaults", settings.basedOn);
+        assertEquals(Disposition.VERTICAL, settings.disposition);
+        assertEquals(0, settings.appearanceChanges(other));
     }
 }

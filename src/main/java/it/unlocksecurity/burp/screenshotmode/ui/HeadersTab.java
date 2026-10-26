@@ -47,6 +47,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
@@ -150,14 +151,14 @@ final class HeadersTab extends JPanel {
 
     private final Settings settings;
     private final HeaderCatalog catalog;
-    private final InMessage message;
+    private InMessage message;
     private final Runnable onChange;
     private final JTextField filter = new JTextField();
     private final Model model = new Model();
     private final JTable table = new Table(model);
     private final JPanel details = Widgets.card(new BorderLayout());
     /** The built-in template the headers follow, and how many of them the template changes. */
-    private final JLabel basis = Widgets.hint("");
+    private final JTextArea basis = Widgets.wrappingHint("", Integer.MAX_VALUE);
     private final JButton restore = Widgets.button("Restore defaults");
     private Predicate<String> confirmRestore = message ->
         Widgets.confirm(this, "Restore Defaults", message, "Restore", "Cancel");
@@ -232,10 +233,7 @@ final class HeadersTab extends JPanel {
                 changed();
             }
         });
-        JPanel footer = new JPanel(new BorderLayout(8, 0));
-        footer.setOpaque(false);
-        footer.add(basis, BorderLayout.CENTER);
-        footer.add(restore, BorderLayout.EAST);
+        JPanel footer = Widgets.footer(basis, restore);
 
         JPanel bottom = new JPanel(new BorderLayout(0, 8));
         bottom.setOpaque(false);
@@ -260,16 +258,7 @@ final class HeadersTab extends JPanel {
             }
             return count;
         }
-        int count = 0;
-        for (HeaderCatalog.Group group : catalog.groups()) {
-            for (HeaderCatalog.Header header : group.headers()) {
-                count += settings.headers.of(header.name(), catalog) != Visibility.SHOW ? 1 : 0;
-            }
-        }
-        for (String name : customHeaders()) {
-            count += settings.headers.of(name, catalog) != Visibility.SHOW ? 1 : 0;
-        }
-        return count;
+        return settings.headers.hiddenCount(catalog);
     }
 
     JTable table() {
@@ -569,6 +558,23 @@ final class HeadersTab extends JPanel {
         }
     }
 
+    /** Shows the headers again after the settings changed from outside, keeping the filter, groups and selection. */
+    void reload() {
+        refresh();
+    }
+
+    /**
+     * Takes the headers of a message that changed on screen, as the template editor's sample does when edited. Only
+     * where the tab was built with a message.
+     */
+    void setMessage(InMessage message) {
+        if (this.message == null || message.equals(this.message)) {
+            return;
+        }
+        this.message = message;
+        refresh();
+    }
+
     /** Lists the rows again after a change, keeping the selection. */
     private void refresh() {
         Object selected = selectedRow().orElse(null);
@@ -632,7 +638,7 @@ final class HeadersTab extends JPanel {
                 }
             }
         } else {
-            customHeaders().forEach(name -> add(groups, custom, name, Direction.BOTH));
+            settings.headers.customHeaders(catalog).forEach(name -> add(groups, custom, name, Direction.BOTH));
             catalog
                 .groups()
                 .forEach(group -> group.headers().forEach(header -> add(groups, custom, header.name(), header.in())));
@@ -659,15 +665,6 @@ final class HeadersTab extends JPanel {
         HeaderCatalog.Header entry = catalog.header(name).orElse(null);
         GroupRow group = entry == null ? custom : groups.get(catalog.groupOf(name).orElseThrow().id());
         group.headers.add(new HeaderRow(entry == null ? name : entry.name(), entry, group, sides));
-    }
-
-    /** The headers the template has a setting for that the catalog doesn't know. */
-    private List<String> customHeaders() {
-        return settings.headers.headers
-            .keySet()
-            .stream()
-            .filter(name -> catalog.header(name).isEmpty())
-            .toList();
     }
 
     private void showDetails() {

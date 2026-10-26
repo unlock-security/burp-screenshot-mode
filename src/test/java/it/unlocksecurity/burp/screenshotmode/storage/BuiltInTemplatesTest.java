@@ -48,18 +48,13 @@ class BuiltInTemplatesTest {
     }
 
     @Test
-    void emptyHidesAndRedactsNothingAndLooksLikeDefaults() {
+    void emptyHidesAndRedactsNothingAndChangesNoAppearance() {
         Settings empty = BuiltInTemplates.all().getLast().settings;
         assertTrue(empty.highlights.isEmpty());
         assertTrue(empty.redactions.isEmpty());
         assertTrue(empty.headers.groups.isEmpty());
         assertTrue(empty.headers.headers.isEmpty());
-        // Only rules and headers differ: the screenshot is laid out the same way.
-        Settings defaults = BuiltInTemplates.defaults();
-        defaults.redactions.clear();
-        defaults.headers = empty.headers;
-        defaults.basedOn = empty.basedOn;
-        assertTrue(TemplateCodec.sameSettings(defaults, empty));
+        assertTrue(TemplateCodec.sameSettings(new Settings(), empty));
     }
 
     @Test
@@ -77,26 +72,35 @@ class BuiltInTemplatesTest {
         settings.redactions.clear();
         settings.headers.groups.clear();
         assertEquals(10, BuiltInTemplates.defaults().redactions.size());
-        assertEquals(8, BuiltInTemplates.defaults().headers.groups.size());
+        assertEquals(10, BuiltInTemplates.defaults().headers.groups.size());
     }
 
     @Test
     void hidesNoiseAndKeepsWhatCanBeEvidence() {
         HeaderVisibility headers = BuiltInTemplates.defaults().headers;
         HeaderCatalog catalog = HeaderCatalogFile.bundled();
-        for (String hidden : List.of("Sec-Fetch-Mode", "ETag", "Date", "Accept", "CF-RAY", "Sec-CH-UA")) {
+        for (String hidden : List.of(
+            "Sec-Fetch-Mode",
+            "ETag",
+            "Date",
+            "Accept",
+            "CF-RAY",
+            "Sec-CH-UA",
+            "If-None-Match",
+            "Server",
+            "X-Powered-By",
+            "Strict-Transport-Security",
+            "Connection"
+        )) {
             assertEquals(Visibility.HIDE, headers.of(hidden, catalog), hidden);
         }
-        // Security headers, technology and anything that can take part in request smuggling stay visible.
+        // Message framing, other security policies and cookies stay visible.
         for (String shown : List.of(
             "Content-Length",
             "Transfer-Encoding",
             "TE",
             "Host",
-            "Strict-Transport-Security",
             "Content-Security-Policy",
-            "X-Powered-By",
-            "Server",
             "Set-Cookie",
             "Location",
             "X-Unknown"
