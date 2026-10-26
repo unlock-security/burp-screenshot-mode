@@ -81,6 +81,10 @@ nothing: lay out with `RenderPreviewTest.layoutTree` (`WrapLayoutTest.layOut` ru
 wrapping row asks for another layout; `WrapLayoutTest.inView` checks a component isn't cut off). Before creating a test
 file, check that the name isn't taken.
 
+Swing behaves differently under Burp's look and feel than under plain Swing: Burp shows `<html>` label text as plain
+text, for instance. Before reporting a rendering or security issue that depends on Swing, reproduce it with Burp's
+look and feel (the `render-ui` harness loads it) or in Burp itself, and say how it was checked.
+
 ## UI/UX changes
 
 Before making any UI/UX change, even a small one the user asks for, check it against UI/UX guidelines: Nielsen's
