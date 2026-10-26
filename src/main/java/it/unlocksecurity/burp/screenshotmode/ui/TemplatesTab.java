@@ -26,10 +26,12 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
@@ -865,7 +867,7 @@ public final class TemplatesTab extends JPanel {
     private void exportTemplates() {
         TemplatePicker picker = exportPicker();
         TemplatePicker.show(this, "Export Templates", "Export…", picker).ifPresent(chosen -> {
-            File file = writeJson("Export Templates", "screenshot-mode-templates.json", store.exportJson(chosen));
+            File file = writeJson("Export Templates", exportFileName(chosen), store.exportJson(chosen));
             if (file != null) {
                 int count = chosen.size();
                 showStatus(
@@ -874,6 +876,27 @@ public final class TemplatesTab extends JPanel {
                 );
             }
         });
+    }
+
+    /**
+     * The name Export suggests: after the template, such as "screenshot-mode-report-a4-template.json", or a generic one
+     * for several, or when nothing of the name is left in the slug.
+     */
+    static String exportFileName(List<Template> templates) {
+        String slug = templates.size() != 1 ? "" : slug(templates.getFirst().name);
+        return slug.isEmpty() ? "screenshot-mode-templates.json" : "screenshot-mode-" + slug + "-template.json";
+    }
+
+    /**
+     * Lower-case letters and digits, accents dropped, with one "-" for each run of anything else: "Città A4" is
+     * "citta-a4".
+     */
+    static String slug(String text) {
+        return Normalizer.normalize(text, Normalizer.Form.NFD)
+            .replaceAll("\\p{M}+", "")
+            .toLowerCase(Locale.ROOT)
+            .replaceAll("[^a-z0-9]+", "-")
+            .replaceAll("^-|-$", "");
     }
 
     /**

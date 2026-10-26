@@ -138,6 +138,23 @@ class TemplatesTabTest {
         });
     }
 
+    @Test
+    void namesTheExportAfterItsTemplate() {
+        Template report = Template.create("Report A4", null);
+        Template letter = Template.create("Letter", null);
+        assertEquals("screenshot-mode-report-a4-template.json", TemplatesTab.exportFileName(List.of(report)));
+        assertEquals("screenshot-mode-templates.json", TemplatesTab.exportFileName(List.of(report, letter)), "several");
+        assertEquals(
+            "screenshot-mode-client-citta-report-v2-template.json",
+            TemplatesTab.exportFileName(List.of(Template.create(" Client: Città / report_v2? ", null)))
+        );
+        assertEquals(
+            "screenshot-mode-templates.json",
+            TemplatesTab.exportFileName(List.of(Template.create("報告", null))),
+            "nothing left of the name"
+        );
+    }
+
     /** The label with this text. */
     private static JLabel label(java.awt.Container root, String text) {
         return find(root, JLabel.class, label -> text.equals(label.getText())).orElseThrow(() ->

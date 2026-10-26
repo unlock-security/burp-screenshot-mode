@@ -73,8 +73,9 @@ No external tools, no manual cropping and blurring.
   out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
   redact those too if it must not show.
 - **Templates**: save settings as named templates, pick a default, edit or duplicate them from the *Screenshot Mode*
-  suite tab, and import/export them as JSON, choosing which templates to take from a file or put in one. Select
-  several templates (**⌘A** / **Ctrl+A** for all) to delete or export them together. Two built-in templates ship with
+  suite tab, and import/export them as JSON, choosing which templates to take from a file or put in one (an export
+  of one template is named after it, such as `screenshot-mode-report-a4-template.json`). Select several templates (**⌘A** / **Ctrl+A** for all)
+  to delete or export them together. Two built-in templates ship with
   the extension and are updated with it: *Defaults* (noisy headers hidden, secrets redacted) and *Empty* (messages as
   they are). They are marked with a lock and can't be edited, deleted or exported: start a new template from one
   of them, or duplicate it. Your template keeps following its built-in template's hidden headers, except the ones you changed, so new
