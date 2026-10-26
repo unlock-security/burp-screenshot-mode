@@ -72,7 +72,8 @@ Before presenting a step:
   ([.agents/skills/render-ui](.agents/skills/render-ui/SKILL.md): a harness that loads Burp's theme from its jar, and
   its instructions), and also at a narrow window and a larger Burp font when the layout changed. Look at the images.
 - Update this file where behavior or architecture changed. README.md stays short: a feature gets at most a line
-  there, and its details belong in the UI and in this file.
+  there, and its details belong in the UI and in this file. Its images in `assets/` (screenshots and the demo GIF)
+  are rebuilt with the `readme-assets` skill ([.agents/skills/readme-assets](.agents/skills/readme-assets/SKILL.md)).
 
 Headless test gotchas: `ScreenshotDialog` can't be loaded headless (its static shortcut constant needs a Toolkit), so
 put testable logic in `Widgets` or in static nested classes. Headless containers have no peer, so `validate()` does
