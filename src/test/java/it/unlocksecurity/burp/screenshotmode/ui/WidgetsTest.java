@@ -214,4 +214,26 @@ class WidgetsTest {
                 .contains(java.awt.AWTKeyStroke.getAWTKeyStroke(java.awt.event.KeyEvent.VK_TAB, 0))
         );
     }
+
+    @Test
+    void runsWorkInTheBackgroundAndReportsBackOnTheSwingThread() throws Exception {
+        java.util.concurrent.CompletableFuture<String> result = new java.util.concurrent.CompletableFuture<>();
+        Widgets.inBackground(
+            () -> SwingUtilities.isEventDispatchThread() ? "on the Swing thread" : "done",
+            value -> result.complete(SwingUtilities.isEventDispatchThread() ? value : "reported off the Swing thread"),
+            result::completeExceptionally
+        );
+        assertEquals("done", result.get(10, java.util.concurrent.TimeUnit.SECONDS));
+
+        java.io.IOException thrown = new java.io.IOException("disk full");
+        java.util.concurrent.CompletableFuture<Throwable> failure = new java.util.concurrent.CompletableFuture<>();
+        Widgets.inBackground(
+            () -> {
+                throw thrown;
+            },
+            value -> failure.complete(null),
+            e -> failure.complete(SwingUtilities.isEventDispatchThread() ? e : null)
+        );
+        assertEquals(thrown, failure.get(10, java.util.concurrent.TimeUnit.SECONDS), "the task's own exception");
+    }
 }

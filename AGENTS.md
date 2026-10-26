@@ -163,6 +163,8 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 (`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at `Settings.scale` and exports PNG to file
 or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests
 `ImageCapture.fileName`, built from the URL bar's `copyText` so what a rule redacts there stays out of the name.
+Painting stays on the EDT, but PNG encoding and every file read or write (Save, template import/export) run through
+`Widgets.inBackground`, a `SwingWorker` that reports back on the EDT: the BApp Store rejects file I/O on the EDT.
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own

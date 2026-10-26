@@ -31,6 +31,8 @@ import java.awt.geom.Path2D;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.swing.AbstractAction;
@@ -52,6 +54,7 @@ import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.border.Border;
@@ -802,6 +805,34 @@ final class Widgets {
         if (component.getToolTipText() == null) {
             component.setToolTipText(text);
         }
+    }
+
+    /**
+     * Runs {@code task} off the Swing thread, so file and image work never freezes Burp, then {@code done} with its
+     * result or {@code failed} with what it threw, both back on the Swing thread.
+     */
+    static <T> void inBackground(Callable<T> task, Consumer<T> done, Consumer<Throwable> failed) {
+        new SwingWorker<T, Void>() {
+            @Override
+            protected T doInBackground() throws Exception {
+                return task.call();
+            }
+
+            @Override
+            protected void done() {
+                T result;
+                try {
+                    result = get();
+                } catch (ExecutionException e) {
+                    failed.accept(e.getCause());
+                    return;
+                } catch (InterruptedException e) {
+                    failed.accept(e);
+                    return;
+                }
+                done.accept(result);
+            }
+        }.execute();
     }
 
     /** Coalesces bursts of calls (e.g. typing) into one run after a short pause. */
