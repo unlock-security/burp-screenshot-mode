@@ -31,6 +31,21 @@ class WidgetsTest {
     );
 
     @Test
+    void growsSizesWithALargerFontOnly() {
+        Font font = UIManager.getFont("Label.font");
+        try {
+            UIManager.put("Label.font", new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+            assertEquals(300, Widgets.scaled(300));
+            UIManager.put("Label.font", new Font(Font.SANS_SERIF, Font.PLAIN, 20).deriveFont(19.5f));
+            assertEquals(450, Widgets.scaled(300), "the sidebar's narrowest at 1.5 times the font");
+            UIManager.put("Label.font", new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            assertEquals(300, Widgets.scaled(300), "never smaller than at the default font");
+        } finally {
+            UIManager.put("Label.font", font);
+        }
+    }
+
+    @Test
     void reopensWhereTheWindowWasClosed() {
         assertEquals(new Rectangle(100, 50, 1200, 900), Widgets.boundsOnScreen("100,50,1200,900", SCREENS));
         assertEquals(

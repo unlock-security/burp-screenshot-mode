@@ -18,7 +18,6 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
@@ -66,6 +65,7 @@ final class ScreenshotDialog extends JDialog {
     /** Where the window was and how wide its sidebar, when it was last closed: "x,y,width,height" and pixels. */
     private static final String BOUNDS_KEY = "screenshot-mode.window";
     private static final String SIDEBAR_KEY = "screenshot-mode.sidebarWidth";
+    /** The sidebar's width at first and at its narrowest, at Burp's default font: both grow with a larger one. */
     private static final int SIDEBAR_WIDTH = 400;
     private static final int SIDEBAR_MIN_WIDTH = 300;
     /**
@@ -73,7 +73,6 @@ final class ScreenshotDialog extends JDialog {
      * the toolbars and the preview bar wrap, the Appearance tab fits without scrolling. It grows with a larger font.
      */
     private static final Dimension MIN_SIZE = new Dimension(800, 600);
-    private static final float DEFAULT_FONT_SIZE = 13f;
     private static final DateTimeFormatter FILE_NAME = DateTimeFormatter.ofPattern(
         "'screenshot-'yyyyMMdd-HHmmss'.png'"
     );
@@ -126,7 +125,7 @@ final class ScreenshotDialog extends JDialog {
         statusTimer.setRepeats(false);
         renderTimer.setRepeats(false);
 
-        formHolder.setMinimumSize(new Dimension(SIDEBAR_MIN_WIDTH, 0));
+        formHolder.setMinimumSize(new Dimension(Widgets.scaled(SIDEBAR_MIN_WIDTH), 0));
         main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, formHolder, buildPreview());
         main.setDividerLocation(savedSidebarWidth());
         main.setBorder(null);
@@ -214,9 +213,7 @@ final class ScreenshotDialog extends JDialog {
 
     /** {@link #MIN_SIZE}, scaled with Burp's font size, and never larger than the screen. */
     private static Dimension minimumWindowSize() {
-        Font font = UIManager.getFont("Label.font");
-        float scale = font == null ? 1 : Math.max(1, font.getSize2D() / DEFAULT_FONT_SIZE);
-        Dimension size = new Dimension(Math.round(MIN_SIZE.width * scale), Math.round(MIN_SIZE.height * scale));
+        Dimension size = new Dimension(Widgets.scaled(MIN_SIZE.width), Widgets.scaled(MIN_SIZE.height));
         if (!GraphicsEnvironment.isHeadless()) {
             Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
             size.width = Math.min(size.width, screen.width);
@@ -228,9 +225,12 @@ final class ScreenshotDialog extends JDialog {
     private int savedSidebarWidth() {
         try {
             String value = host.preferences().get(SIDEBAR_KEY);
-            return value == null ? SIDEBAR_WIDTH : Math.max(SIDEBAR_MIN_WIDTH, Integer.parseInt(value));
+            // Saved at a smaller font, it may now be too narrow.
+            return value == null
+                ? Widgets.scaled(SIDEBAR_WIDTH)
+                : Math.max(Widgets.scaled(SIDEBAR_MIN_WIDTH), Integer.parseInt(value));
         } catch (NumberFormatException e) {
-            return SIDEBAR_WIDTH;
+            return Widgets.scaled(SIDEBAR_WIDTH);
         }
     }
 

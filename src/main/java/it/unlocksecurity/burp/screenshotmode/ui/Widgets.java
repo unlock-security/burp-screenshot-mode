@@ -378,6 +378,18 @@ final class Widgets {
         return button;
     }
 
+    private static final float DEFAULT_FONT_SIZE = 13f;
+
+    /**
+     * A size in pixels chosen at Burp's default font (13 pt), grown in proportion when the user picks a larger one, so
+     * what fitted at the default size still fits. Never shrunk for a smaller font.
+     */
+    static int scaled(int size) {
+        Font font = UIManager.getFont("Label.font");
+        float scale = font == null ? 1 : Math.max(1, font.getSize2D() / DEFAULT_FONT_SIZE);
+        return Math.round(size * scale);
+    }
+
     /** The menu shortcut of a key as written in tooltips: "⌘Z" on macOS, "Ctrl+Z" elsewhere. */
     static String shortcut(int keyCode) {
         String key = KeyEvent.getKeyText(keyCode);
