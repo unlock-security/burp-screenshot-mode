@@ -320,7 +320,7 @@ class ContentPanelTest {
     @Test
     void redactsSecretsInTheUrlBarByDefault() throws Throwable {
         assertEquals(
-            "https://example.com:443/reset?access_token=[REDACTED]&id=1",
+            "/reset?access_token=[REDACTED]&id=1",
             renderedUrl("https://example.com:443/reset?access_token=abc&id=1", BuiltInTemplates.defaults())
         );
     }

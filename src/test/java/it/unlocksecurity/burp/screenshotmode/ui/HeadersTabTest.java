@@ -101,17 +101,17 @@ class HeadersTabTest {
     @Test
     void togglesAWholeGroup() {
         HeadersTab tab = tab(null);
-        HeadersTab.GroupRow security = (HeadersTab.GroupRow) row(tab, "Security policy");
-        assertEquals(HeadersTab.State.SHOWN, tab.state(security));
-        tab.toggle(security);
-        assertTrue(settings.headers.isGroupHidden("security"));
-        assertEquals(Visibility.HIDE, settings.headers.of("X-Frame-Options", CATALOG));
+        HeadersTab.GroupRow cors = (HeadersTab.GroupRow) row(tab, "CORS");
+        assertEquals(HeadersTab.State.SHOWN, tab.state(cors));
+        tab.toggle(cors);
+        assertTrue(settings.headers.isGroupHidden("cors"));
+        assertEquals(Visibility.HIDE, settings.headers.of("Access-Control-Allow-Origin", CATALOG));
 
-        settings.headers.set("X-Frame-Options", Visibility.SHOW, CATALOG);
-        assertEquals(HeadersTab.State.MIXED, tab.state(security));
-        tab.toggle(security);
-        assertFalse(settings.headers.isGroupHidden("security"), "a mixed group shows all its headers");
-        assertTrue(settings.headers.headers.isEmpty());
+        settings.headers.set("Access-Control-Allow-Origin", Visibility.SHOW, CATALOG);
+        assertEquals(HeadersTab.State.MIXED, tab.state(cors));
+        tab.toggle(cors);
+        assertFalse(settings.headers.isGroupHidden("cors"), "a mixed group shows all its headers");
+        assertFalse(settings.headers.headers.containsKey("Access-Control-Allow-Origin"));
     }
 
     @Test
@@ -251,12 +251,12 @@ class HeadersTabTest {
         assertTrue(texts(tab).contains("Based on Defaults · no changes"));
         assertFalse(restore.isEnabled(), "nothing to restore");
 
-        tab.toggle((HeadersTab.GroupRow) row(tab, "Security policy"));
+        tab.toggle((HeadersTab.GroupRow) row(tab, "CORS"));
         assertTrue(texts(tab).contains("Based on Defaults · 1 change"));
         assertTrue(restore.isEnabled());
 
         restore.doClick();
-        assertTrue(settings.headers.isGroupHidden("security"), "declined");
+        assertTrue(settings.headers.isGroupHidden("cors"), "declined");
         restore.doClick();
         assertEquals(
             "Show and hide the headers as \"Defaults\" does?\nYour change to the headers will be lost.",
@@ -267,13 +267,14 @@ class HeadersTabTest {
     }
 
     @Test
-    void countsEveryHiddenGroupAsAChangeFromEmpty() {
+    void countsEveryHiddenGroupAndHeaderAsAChangeFromEmpty() {
         settings.basedOn = null;
         HeadersTab tab = tab(null);
-        assertTrue(texts(tab).contains("Based on Empty · 8 changes"), texts(tab).toString());
+        assertTrue(texts(tab).contains("Based on Empty · 19 changes"), texts(tab).toString());
         tab.setRestoreConfirmation(message -> true);
         restoreButton(tab).doClick();
         assertTrue(settings.headers.groups.isEmpty(), "Empty hides nothing");
+        assertTrue(settings.headers.headers.isEmpty());
     }
 
     private static javax.swing.AbstractButton restoreButton(Container container) {

@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 /** The settings form wired to a history, as the screenshot window and the template editor do. */
 class SettingsFormUndoTest {
 
-    private final Settings settings = BuiltInTemplates.defaults();
+    private final Settings settings = plainDefaults();
     private final SettingsHistory history = new SettingsHistory(() -> settings);
     private final SettingsForm form = new SettingsForm(
         settings,
@@ -39,6 +39,13 @@ class SettingsFormUndoTest {
 
     {
         form.setUndo(() -> undo(false));
+    }
+
+    /** The rules and headers of Defaults, with the appearance of new settings that these tests change. */
+    private static Settings plainDefaults() {
+        Settings settings = BuiltInTemplates.defaults();
+        settings.copyAppearance(new Settings());
+        return settings;
     }
 
     private void undo(boolean redo) {

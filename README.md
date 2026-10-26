@@ -25,10 +25,10 @@ No external tools, no manual cropping and blurring.
 - **Hide noisy headers** from a catalog of about 150 common headers in groups (content negotiation, caching, client
   hints, fetch metadata, CDNs, …): uncheck a header, or a whole group, to hide it. The screenshot window lists the
   headers of the message on screen, and the tab title counts how many it hides. Headers that aren't in the catalog are
-  listed first, as custom headers; one used in both messages can be hidden in only one of them. By default, security
-  headers and anything that can take part in request smuggling stay visible, as they can be the finding. Each header
-  also says in words whether a rule redacts or highlights it, and links to that rule, or adds one with **Redact
-  value…** or **Highlight…**.
+  listed first, as custom headers; one used in both messages can be hidden in only one of them. By default,
+  Content-Length, Transfer-Encoding, Host, cookies, CORS and most security policy headers stay visible, as they can be
+  the finding. Each header also says in words whether a rule redacts or highlights it, and links to that rule, or adds
+  one with **Redact value…** or **Highlight…**.
 - **Highlights**: painted as a translucent marker or as a rectangle, in any color.
 - **Redactions**: replacement text (`[REDACTED]`), a black box or blur.
 - **Two kinds of rules**, chosen when you add one with **+**: a **header** rule names one or more headers and
@@ -76,8 +76,8 @@ No external tools, no manual cropping and blurring.
   suite tab, and import/export them as JSON, choosing which templates to take from a file or put in one (an export
   of one template is named after it, such as `screenshot-mode-report-a4-template.json`). Select several templates (**⌘A** / **Ctrl+A** for all)
   to delete or export them together. Two built-in templates ship with
-  the extension and are updated with it: *Defaults* (noisy headers hidden, secrets redacted) and *Empty* (messages as
-  they are). They are marked with a lock and can't be edited, deleted or exported: start a new template from one
+  the extension and are updated with it: *Defaults* (noisy headers hidden, secrets redacted, laid out for an A4
+  report) and *Empty* (messages as they are). They are marked with a lock and can't be edited, deleted or exported: start a new template from one
   of them, or duplicate it. Your template keeps following its built-in template's hidden headers, except the ones you changed, so new
   releases can hide more noise for you; its rules and appearance are yours and never change by themselves. Template
   names are unique, ignoring case: an imported template whose name is taken is added as "name (imported)", so nothing

@@ -98,13 +98,13 @@ class SettingsFormRestoreTest {
         assertEquals("Based on Defaults · no changes", form.appearanceBasis().getText());
         assertFalse(form.restoreAppearanceButton().isEnabled());
 
-        settings.disposition = Disposition.VERTICAL;
-        settings.showTimestamp = true;
+        settings.disposition = Disposition.HORIZONTAL;
+        settings.showTimestamp = false;
         form = form();
         assertEquals("Based on Defaults · 2 changes", form.appearanceBasis().getText());
         answer = "Cancel";
         form.restoreAppearanceButton().doClick();
-        assertEquals(Disposition.VERTICAL, settings.disposition);
+        assertEquals(Disposition.HORIZONTAL, settings.disposition);
 
         answer = "Restore";
         form.restoreAppearanceButton().doClick();
@@ -113,8 +113,8 @@ class SettingsFormRestoreTest {
                 "footer will be lost. [Restore | Cancel]",
             asked.getLast()
         );
-        assertEquals(Disposition.HORIZONTAL, settings.disposition);
-        assertFalse(settings.showTimestamp);
+        assertEquals(Disposition.VERTICAL, settings.disposition);
+        assertTrue(settings.showTimestamp);
         assertEquals(10, settings.redactions.size(), "rules untouched");
         assertEquals("Based on Defaults · no changes", form.appearanceBasis().getText());
     }

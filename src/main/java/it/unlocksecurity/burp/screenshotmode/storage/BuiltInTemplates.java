@@ -20,14 +20,17 @@ import java.util.List;
  * <ul>
  *   <li>Hidden headers are split by the messages each is defined for; vendor headers added by servers and CDNs are only
  *       hidden in responses. Headers that can take part in request smuggling or other desync attacks stay visible, as
- *       they can be the evidence: Content-Length, Transfer-Encoding, TE, Trailer, Connection, Keep-Alive, Upgrade,
- *       Expect, Host, HTTP2-Settings and Proxy-Connection.</li>
+ *       they can be the evidence: Content-Length, Transfer-Encoding, TE, Trailer, Keep-Alive, Upgrade, Expect, Host,
+ *       HTTP2-Settings and Proxy-Connection. Connection, the server and technology headers, Strict-Transport-Security
+ *       and X-XSS-Protection are hidden as noise: show them when they are the finding.</li>
  *   <li>Values that are only noise in a report (User-Agent, Cookie) become {@code [OMITTED]}, secrets
  *       {@code [REDACTED]}. The Authorization scheme and the Set-Cookie name and attributes stay visible: they are often
  *       the finding.</li>
  *   <li>Header patterns are anchored with {@code (?<=\n)} (without the MULTILINE flag, {@code ^} only matches the start
  *       of the message) and match names with {@code (?i:...)}, as Burp shows HTTP/2 headers in lowercase. No repeated
  *       alternation like {@code (?:[^"\\]|\\.)*}, which overflows the stack on long values.</li>
+ *   <li>The screenshot is laid out for a report: A4 width, stacked, as tall as its content, light theme, Pretty view,
+ *       the path only in the URL bar, the request time in the footer, at 1×.</li>
  * </ul>
  */
 public final class BuiltInTemplates {

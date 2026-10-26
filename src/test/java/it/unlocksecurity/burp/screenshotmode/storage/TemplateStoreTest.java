@@ -85,8 +85,8 @@ class TemplateStoreTest {
     void createCopiesSettings() {
         Settings settings = BuiltInTemplates.defaults();
         Template created = store.createTemplate("Copy", settings);
-        settings.showTimestamp = true;
-        assertFalse(created.settings.showTimestamp);
+        settings.showTimestamp = false;
+        assertTrue(created.settings.showTimestamp);
         assertNotSame(settings, created.settings);
     }
 
@@ -96,12 +96,12 @@ class TemplateStoreTest {
         store.addListener(notifications::incrementAndGet);
         Template created = store.createTemplate("A", null);
         Settings settings = BuiltInTemplates.defaults();
-        settings.showTimestamp = true;
+        settings.showTimestamp = false;
         store.updateTemplate(created.id, null, settings);
         store.updateTemplate(created.id, "B", null);
         Template updated = store.getTemplateById(created.id).orElseThrow();
         assertEquals("B", updated.name);
-        assertTrue(updated.settings.showTimestamp);
+        assertFalse(updated.settings.showTimestamp);
         assertEquals(3, notifications.get());
         assertTrue(store.updateTemplate("missing", "x", null).isEmpty());
     }

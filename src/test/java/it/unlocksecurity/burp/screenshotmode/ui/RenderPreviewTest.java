@@ -77,6 +77,7 @@ class RenderPreviewTest {
 
     static Settings sampleSettings() {
         Settings settings = BuiltInTemplates.defaults();
+        settings.copyAppearance(new Settings());
         settings.showTimestamp = true;
 
         HighlightRule role = HighlightRule.create("\"role\": \"admin\"", RuleTarget.REQUEST, MatchMode.STRING);

@@ -24,12 +24,12 @@ class SettingsHistoryTest {
         int count = redactions.size();
         settings.redactions.removeFirst();
         history.changed(false);
-        settings.disposition = Disposition.VERTICAL;
+        settings.disposition = Disposition.HORIZONTAL;
         history.changed(false);
 
         Settings before = history.undo();
-        assertEquals(Disposition.VERTICAL, before.disposition, "what the settings were");
-        assertEquals(Disposition.HORIZONTAL, settings.disposition);
+        assertEquals(Disposition.HORIZONTAL, before.disposition, "what the settings were");
+        assertEquals(Disposition.VERTICAL, settings.disposition);
         assertEquals(count - 1, settings.redactions.size());
 
         history.undo();
@@ -40,7 +40,7 @@ class SettingsHistoryTest {
         history.redo();
         history.redo();
         assertEquals(count - 1, settings.redactions.size());
-        assertEquals(Disposition.VERTICAL, settings.disposition);
+        assertEquals(Disposition.HORIZONTAL, settings.disposition);
         assertNull(history.redo(), "nothing left to redo");
     }
 
@@ -49,23 +49,23 @@ class SettingsHistoryTest {
         history.changed(false);
         assertNull(history.undo(), "nothing changed");
 
-        settings.disposition = Disposition.VERTICAL;
-        history.changed(false);
         settings.disposition = Disposition.HORIZONTAL;
         history.changed(false);
+        settings.disposition = Disposition.VERTICAL;
+        history.changed(false);
         history.undo();
-        assertEquals(Disposition.VERTICAL, settings.disposition);
+        assertEquals(Disposition.HORIZONTAL, settings.disposition);
     }
 
     @Test
     void aNewChangeDropsWhatWasUndone() {
-        settings.disposition = Disposition.VERTICAL;
+        settings.disposition = Disposition.HORIZONTAL;
         history.changed(false);
         history.undo();
-        settings.showTimestamp = true;
+        settings.showTimestamp = false;
         history.changed(false);
         assertNull(history.redo());
-        assertEquals(Disposition.HORIZONTAL, settings.disposition);
+        assertEquals(Disposition.VERTICAL, settings.disposition);
     }
 
     @Test
@@ -101,7 +101,7 @@ class SettingsHistoryTest {
 
     @Test
     void startsAgainFromOtherSettings() {
-        settings.disposition = Disposition.VERTICAL;
+        settings.disposition = Disposition.HORIZONTAL;
         history.changed(false);
         settings = BuiltInTemplates.byId(BuiltInTemplates.EMPTY_ID).settings;
         history.reset();
