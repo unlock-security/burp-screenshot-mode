@@ -81,6 +81,10 @@ nothing: lay out with `RenderPreviewTest.layoutTree` (`WrapLayoutTest.layOut` ru
 wrapping row asks for another layout; `WrapLayoutTest.inView` checks a component isn't cut off). Before creating a test
 file, check that the name isn't taken.
 
+Swing behaves differently under Burp's look and feel than under plain Swing: Burp shows `<html>` label text as plain
+text, for instance. Before reporting a rendering or security issue that depends on Swing, reproduce it with Burp's
+look and feel (the `render-ui` harness loads it) or in Burp itself, and say how it was checked.
+
 ## UI/UX changes
 
 Before making any UI/UX change, even a small one the user asks for, check it against UI/UX guidelines: Nielsen's
@@ -163,6 +167,8 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 (`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at `Settings.scale` and exports PNG to file
 or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests
 `ImageCapture.fileName`, built from the URL bar's `copyText` so what a rule redacts there stays out of the name.
+Painting stays on the EDT, but PNG encoding and every file read or write (Save, template import/export) run through
+`Widgets.inBackground`, a `SwingWorker` that reports back on the EDT: the BApp Store rejects file I/O on the EDT.
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own

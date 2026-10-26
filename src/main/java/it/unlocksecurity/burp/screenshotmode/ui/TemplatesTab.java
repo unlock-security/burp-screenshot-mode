@@ -23,7 +23,6 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.Normalizer;
@@ -792,16 +791,19 @@ public final class TemplatesTab extends JPanel {
             return;
         }
         File file = chooser.getSelectedFile();
+        Widgets.inBackground(
+            () -> Files.readString(file.toPath(), StandardCharsets.UTF_8),
+            json -> importFrom(file, json),
+            this::importFailed
+        );
+    }
+
+    private void importFrom(File file, String json) {
         List<Template> templates;
         try {
-            templates = TemplateStore.readExport(Files.readString(file.toPath(), StandardCharsets.UTF_8));
-        } catch (IOException | IllegalArgumentException e) {
-            JOptionPane.showMessageDialog(
-                this,
-                "Could not import templates:\n" + e.getMessage(),
-                "Import Templates",
-                JOptionPane.ERROR_MESSAGE
-            );
+            templates = TemplateStore.readExport(json);
+        } catch (IllegalArgumentException e) {
+            importFailed(e);
             return;
         }
         if (templates.isEmpty()) {
@@ -821,6 +823,15 @@ public final class TemplatesTab extends JPanel {
         );
         TemplatePicker.show(this, "Import Templates", "Import", picker).ifPresent(chosen ->
             showStatus(importStatus(store.importTemplates(chosen)), false)
+        );
+    }
+
+    private void importFailed(Throwable e) {
+        JOptionPane.showMessageDialog(
+            this,
+            "Could not import templates:\n" + e.getMessage(),
+            "Import Templates",
+            JOptionPane.ERROR_MESSAGE
         );
     }
 
@@ -867,14 +878,10 @@ public final class TemplatesTab extends JPanel {
     private void exportTemplates() {
         TemplatePicker picker = exportPicker();
         TemplatePicker.show(this, "Export Templates", "Export…", picker).ifPresent(chosen -> {
-            File file = writeJson("Export Templates", exportFileName(chosen), store.exportJson(chosen));
-            if (file != null) {
-                int count = chosen.size();
-                showStatus(
-                    "Exported " + count + " template" + (count == 1 ? "" : "s") + " to " + file.getName(),
-                    false
-                );
-            }
+            int count = chosen.size();
+            writeJson("Export Templates", exportFileName(chosen), store.exportJson(chosen), file ->
+                showStatus("Exported " + count + " template" + (count == 1 ? "" : "s") + " to " + file.getName(), false)
+            );
         });
     }
 
@@ -913,10 +920,9 @@ public final class TemplatesTab extends JPanel {
         JButton export = Widgets.button("Export copy…");
         export.setToolTipText("Save the templates that could not be read to a file");
         export.addActionListener(event -> {
-            File file = writeJson("Export Copy", "screenshot-mode-templates-unreadable.json", json);
-            if (file != null) {
-                showStatus("Saved the copy to " + file.getName(), false);
-            }
+            writeJson("Export Copy", "screenshot-mode-templates-unreadable.json", json, file ->
+                showStatus("Saved the copy to " + file.getName(), false)
+            );
         });
         JPanel notice = new JPanel(new BorderLayout(10, 0));
         notice.add(text, BorderLayout.CENTER);
@@ -926,29 +932,29 @@ public final class TemplatesTab extends JPanel {
         return notice;
     }
 
-    /** Asks where to save {@code json} and writes it; {@code null} if cancelled or failed (after saying so). */
-    private File writeJson(String title, String defaultName, String json) {
+    /** Asks where to save {@code json}, writes it in the background, then calls {@code saved} or says it failed. */
+    private void writeJson(String title, String defaultName, String json, Consumer<File> saved) {
         JFileChooser chooser = new JFileChooser();
         chooser.setDialogTitle(title);
         chooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
         chooser.setSelectedFile(new File(defaultName));
         File file = Widgets.chooseSaveFile(this, chooser, "json");
         if (file == null) {
-            return null;
+            return;
         }
-        try {
-            Files.writeString(file.toPath(), json, StandardCharsets.UTF_8);
-            return file;
-        } catch (IOException e) {
-            host.logError().accept(title + " failed: " + e);
-            JOptionPane.showMessageDialog(
-                this,
-                "Could not save the file:\n" + e.getMessage(),
-                title,
-                JOptionPane.ERROR_MESSAGE
-            );
-            return null;
-        }
+        Widgets.inBackground(
+            () -> Files.writeString(file.toPath(), json, StandardCharsets.UTF_8).toFile(),
+            saved,
+            e -> {
+                host.logError().accept(title + " failed: " + e);
+                JOptionPane.showMessageDialog(
+                    this,
+                    "Could not save the file:\n" + e.getMessage(),
+                    title,
+                    JOptionPane.ERROR_MESSAGE
+                );
+            }
+        );
     }
 
     /** Shows the outcome of an action. A success clears after a few seconds; an error stays until the next status. */

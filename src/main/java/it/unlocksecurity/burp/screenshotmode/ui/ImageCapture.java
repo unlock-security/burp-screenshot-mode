@@ -174,10 +174,9 @@ final class ImageCapture {
         }
     }
 
-    static void copyToClipboard(BufferedImage image) throws IOException {
-        Toolkit.getDefaultToolkit()
-            .getSystemClipboard()
-            .setContents(new PngSelection(toPng(image)), null);
+    /** Puts a PNG made by {@link #toPng} on the clipboard; throws {@link IllegalStateException} if it's unavailable. */
+    static void copyToClipboard(byte[] png) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new PngSelection(png), null);
     }
 
     static byte[] toPng(BufferedImage image) throws IOException {

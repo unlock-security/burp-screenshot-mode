@@ -751,24 +751,49 @@ final class ScreenshotDialog extends JDialog {
         if (!confirmFailedRedactions(toClipboard)) {
             return;
         }
+        BufferedImage image;
         try {
-            BufferedImage image = ImageCapture.render(content, state.settings.scale);
-            if (toClipboard) {
-                ImageCapture.copyToClipboard(image);
-                showStatus("Image copied", false);
-                return;
-            }
-
-            File file = chooseFile();
-            if (file != null) {
-                ImageCapture.save(image, file);
-                host.preferences().set(LAST_DIRECTORY_KEY, file.getParent());
-                showStatus("Saved " + file.getName(), false);
-            }
+            image = ImageCapture.render(content, state.settings.scale);
         } catch (Exception e) {
-            host.logError().accept("Screenshot failed: " + e);
-            showStatus("Screenshot failed: " + e.getMessage(), true);
+            screenshotFailed(e);
+            return;
         }
+        // Painting needs the Swing thread; encoding and writing the PNG run in the background.
+        if (toClipboard) {
+            Widgets.inBackground(
+                () -> ImageCapture.toPng(image),
+                png -> {
+                    try {
+                        ImageCapture.copyToClipboard(png);
+                        showStatus("Image copied", false);
+                    } catch (IllegalStateException e) {
+                        screenshotFailed(e);
+                    }
+                },
+                this::screenshotFailed
+            );
+            return;
+        }
+
+        File file = chooseFile();
+        if (file != null) {
+            Widgets.inBackground(
+                () -> {
+                    ImageCapture.save(image, file);
+                    return file;
+                },
+                saved -> {
+                    host.preferences().set(LAST_DIRECTORY_KEY, saved.getParent());
+                    showStatus("Saved " + saved.getName(), false);
+                },
+                this::screenshotFailed
+            );
+        }
+    }
+
+    private void screenshotFailed(Throwable e) {
+        host.logError().accept("Screenshot failed: " + e);
+        showStatus("Screenshot failed: " + e.getMessage(), true);
     }
 
     private File chooseFile() {
