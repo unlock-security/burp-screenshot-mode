@@ -156,6 +156,34 @@ class RuleListTest {
         assertFalse(nothing.isVisible(), "the whole match is redacted again");
     }
 
+    @Test
+    void keepsTheWholeMatchWhileThePatternIsEdited() {
+        RedactionRule rule = RedactionRule.create(
+            "token=(\\w+)",
+            RuleTarget.REQUEST,
+            RedactionMode.REPLACE,
+            MatchMode.REGEX
+        );
+        form.redactionList().addFirst(rule);
+        RuleList<RedactionRule>.Row row = form.redactionList().row(rule);
+        assertFalse(rule.useCaptureGroups, "as created");
+        javax.swing.text.JTextComponent pattern = (javax.swing.text.JTextComponent) find(row.editorPanel(), "Pattern");
+        type(pattern, "&");
+        assertEquals("token=(\\w+)&", rule.regex);
+        assertFalse(rule.useCaptureGroups, "the whole match, as chosen, until groups first appear");
+        type(pattern, "(?<id>\\d+)");
+        assertFalse(rule.useCaptureGroups, "nor when one more group appears");
+    }
+
+    /** Types at the end of a field, as the user does, rather than replacing its text. */
+    private static void type(javax.swing.text.JTextComponent field, String text) {
+        try {
+            field.getDocument().insertString(field.getDocument().getLength(), text, null);
+        } catch (javax.swing.text.BadLocationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private static javax.swing.JTextArea textArea(java.awt.Container container, String start) {
         for (java.awt.Component component : container.getComponents()) {
             if (component instanceof javax.swing.JTextArea area && area.getText().startsWith(start)) {

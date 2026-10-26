@@ -921,7 +921,7 @@ final class RuleList<R extends Rule> extends JPanel {
                 groupLabel.set(fields.addTop("What", groupPanel));
                 rebuildGroups.run();
             };
-            // Selects capture groups as they appear in the pattern.
+            // Selects capture groups as they first appear in the pattern; "The whole match", once chosen, stays.
             patternChanged.add(text -> {
                 List<String> newLabels = RuleEngine.groupLabels(text, rule.matchMode);
                 int oldCount = labels.get().size();
@@ -930,10 +930,10 @@ final class RuleList<R extends Rule> extends JPanel {
                 if (newCount == 0) {
                     groups.useCaptureGroups = false;
                     groups.selectedGroups = new ArrayList<>();
-                } else if (!groups.useCaptureGroups) {
+                } else if (oldCount == 0) {
                     groups.useCaptureGroups = true;
                     groups.selectedGroups = allGroups(1, newCount);
-                } else {
+                } else if (groups.useCaptureGroups) {
                     List<Integer> selected = new ArrayList<>(
                         groups.selectedGroups
                             .stream()
