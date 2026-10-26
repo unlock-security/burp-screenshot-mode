@@ -7,7 +7,8 @@ in [SECURITY.md](SECURITY.md), and accessibility barriers with the accessibility
 ([ACCESSIBILITY.md](ACCESSIBILITY.md)). Everyone taking part agrees to the [code of conduct](CODE_OF_CONDUCT.md).
 
 Pull requests go to `dev` and fill in the [pull request template](.github/pull_request_template.md), whose checklist
-includes the accessibility checks for UI changes.
+includes the accessibility checks for UI changes. If you work with an AI agent, it follows [AGENTS.md](AGENTS.md):
+the architecture, the way changes are made and verified, and the design decisions already taken.
 
 The extension started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
 plugin and is now an independent project, with its own features and UI: changes don't need to match Caido, and the

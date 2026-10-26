@@ -45,13 +45,78 @@ every push to `main`, which only accepts pull requests from `dev`. The version l
 version number in `build.gradle.kts` or elsewhere — Gradle reads it from `-PreleaseVersion`, defaulting to
 `0.0.0-SNAPSHOT`. GitHub Actions in workflows are pinned to commit SHAs with the version in a trailing comment.
 
+## Working process
+
+Work the way the maintainer does:
+
+1. **One change at a time.** Implement one step, verify it (see below), then stop and present it: what changed and
+   why, how it was verified, and a proposed commit message. Wait for approval before committing, and again before
+   starting the next step.
+2. **Ask instead of guessing** when a request is ambiguous, breaks a guideline below or involves a real trade-off:
+   explain it and offer the options, the recommended one first. Don't ask again about the settled decisions below.
+3. **Commit only to `dev`.** Never commit to `main`, push or open a pull request unless asked. Stage files by name,
+   never with `git add -A` or `git add .`: the maintainer may have files of their own in the working tree. Never
+   commit scratch files, renders or harness copies.
+4. **Keep each commit to one change.** When a fix grows beyond the step (a bug found while testing, say), say so and
+   offer to commit it separately, with its own type.
+5. **Commit bodies**, when needed, are plain prose saying what the user gets. A body line starting with `word:` makes
+   commitlint warn about a footer: rephrase it.
+6. **Report plainly**: what was done and verified, what failed (with the output) and what was left undone. Give the
+   absolute path of every render.
+
+Before presenting a step:
+
+- `npm run format`, then `./gradlew build` with every test passing. When Gradle prints nothing useful, count tests and
+  failures from `build/test-results/test/*.xml` (attributes `tests`, `failures`, `errors`).
+- For a UI change, render it in Burp's light and dark themes with the `render-ui` skill
+  ([.agents/skills/render-ui](.agents/skills/render-ui/SKILL.md): a harness that loads Burp's theme from its jar, and
+  its instructions), and also at a narrow window and a larger Burp font when the layout changed. Look at the images.
+- Update this file where behavior or architecture changed. README.md stays short: a feature gets at most a line
+  there, and its details belong in the UI and in this file.
+
+Headless test gotchas: `ScreenshotDialog` can't be loaded headless (its static shortcut constant needs a Toolkit), so
+put testable logic in `Widgets` or in static nested classes. Headless containers have no peer, so `validate()` does
+nothing: lay out with `RenderPreviewTest.layoutTree` (`WrapLayoutTest.layOut` runs it twice, as a window would after a
+wrapping row asks for another layout; `WrapLayoutTest.inView` checks a component isn't cut off). Before creating a test
+file, check that the name isn't taken.
+
 ## UI/UX changes
 
 Before making any UI/UX change, even a small one the user asks for, check it against UI/UX guidelines: Nielsen's
 usability heuristics, the conventions of Swing/FlatLaf and of Burp's own UI (which controls Burp uses for the same job),
-and accessibility (keyboard access, contrast, not relying on color or tooltips alone). If the change violates any of
-them, don't implement it yet: warn the user, explain which guideline it breaks and why, propose an alternative that
-doesn't, and ask which one to implement. Only go ahead directly when nothing is violated.
+and accessibility (keyboard access, text contrast of at least 4.5:1, not relying on color or tooltips alone). If the
+change violates any of them, don't implement it yet: warn the user, explain which guideline it breaks and why, propose
+an alternative that doesn't, and ask which one to implement. Only go ahead directly when nothing is violated.
+Update [ACCESSIBILITY.md](ACCESSIBILITY.md) when a change adds or changes a keyboard shortcut, or adds or removes a
+known limitation.
+
+Conventions of this UI:
+
+- **Keep it simple**: the simplest design that meets the need, with no options, settings or concepts nobody asked for.
+  No warnings or tooltips unless they are needed.
+- **Confirmations** have exactly two options, through `Widgets.confirm` / `Widgets.choose`: the safe choice is the
+  primary (orange) and default button. No "Don't ask me again".
+- **Words, not icons or color alone**: rule status reads "redacted", "Error", "Off"; hidden header rows are muted and
+  unchecked; tri-state checkboxes say "Partly shown" as their accessible description; icon-only buttons have an
+  accessible name.
+- **Names**: the rule target is "URL", the Appearance row is "URL bar".
+- **Nothing disappears** in a narrow window or with a larger font: rows wrap (`WrapLayout`), and the window and sidebar
+  minimum sizes grow with the font (`Widgets.scaled`). Text is cut with an ellipsis only where the full text is also
+  shown elsewhere.
+- **No buttons inside table rows**: row actions live in a details panel and the right-click menu, as in Burp.
+- **Jumps between tabs** move the focus on purpose and can be undone ("‹ Back to Headers", undo).
+
+## Settled decisions
+
+Decided by the maintainer: build on them, and don't propose the alternatives again.
+
+- Header rules stay minimal: a redaction replaces the whole value, a highlight marks the whole line, with no option to
+  pick a part. Defaults that must keep part of a value (the Authorization scheme, the Set-Cookie name and flags) are
+  named pattern rules, as those are often the finding.
+- The Headers tab only shows or hides headers; every redaction and highlight is a rule of the Rules tab.
+- A failed redaction doesn't block Copy or Save: they ask first, in a generic message that never lists rules or regexes.
+- The path-only URL bar has no warning or tooltip about the host still showing in `Host`, `Origin` or `Referer`; the
+  README notes it.
 
 ## Architecture
 
