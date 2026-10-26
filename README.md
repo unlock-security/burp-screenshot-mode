@@ -16,7 +16,7 @@ No external tools, no manual cropping and blurring.
 > Started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode) plugin, it has
 > since grown into an independent project, with its own features and a UI designed for Burp.
 
-![From a Repeater request to a report-ready screenshot: open Screenshot Mode, highlight a leaked token, hide and show headers, switch to A4, pretty and stacked, update the template and copy](assets/demo.gif)
+![From a Repeater request to a report-ready screenshot: open Screenshot Mode from the context menu, highlight the leaked reset token, redact its tail with a named capture group, find the Server header and highlight it, try request only, response only, the full URL, raw and dark, and copy](assets/demo.gif)
 
 ## Features
 
