@@ -26,6 +26,9 @@
         "height": {
           "mode": "full"
         },
+        "text": {
+          "mode": "burp"
+        },
         "scale": 2,
         "highlights": [],
         "redactions": [
@@ -236,6 +239,9 @@
         },
         "height": {
           "mode": "full"
+        },
+        "text": {
+          "mode": "burp"
         },
         "scale": 2,
         "highlights": [],

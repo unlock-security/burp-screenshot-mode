@@ -184,6 +184,22 @@ class ContentPanelTest {
     }
 
     @Test
+    void setsTheTextSizeOfTheMessagesAndScalesTheRest() throws Throwable {
+        Settings settings = new Settings();
+        ContentPanel burp = rendered("https://x/", settings);
+        assertEquals(13f, viewOf(burp.requestPane()).getFont().getSize2D(), "Burp's font");
+        assertEquals(11f, burp.urlLabel().getFont().getSize2D());
+
+        settings.textSizeMode = it.unlocksecurity.burp.screenshotmode.model.TextSizeMode.CUSTOM;
+        settings.textSize = 26;
+        ContentPanel custom = rendered("https://x/", settings);
+        assertEquals(26f, viewOf(custom.requestPane()).getFont().getSize2D());
+        assertEquals(26f, viewOf(custom.responsePane()).getFont().getSize2D());
+        assertEquals(26f, custom.urlView().getFont().getSize2D());
+        assertEquals(24f, custom.urlLabel().getFont().getSize2D(), "twice the size, like the messages");
+    }
+
+    @Test
     void hidesTheLineNumbers() throws Throwable {
         Settings settings = new Settings();
         ContentPanel shown = rendered("https://x/", settings);

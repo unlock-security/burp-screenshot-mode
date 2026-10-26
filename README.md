@@ -56,6 +56,9 @@ No external tools, no manual cropping and blurring.
   the screenshot. Saved in templates like the width. With A4 or Letter, the preview warns when the screenshot is taller
   than one page, and an image over 50 megapixels (about 2,400 × 21,000 px at 2×) can't be exported, as building it
   could run Burp out of memory.
+- **Text size**: Burp's editor font (*Follow Burp*), or a size in points of your own, so a template gives the same
+  screenshot whatever font each colleague uses in Burp. A smaller size makes A4 and Letter screenshots wrap less; the
+  titles and footer keep their proportion.
 - **Scale**: 1×, 2× or 3× image pixels per pixel on screen. 2× is sharp on high-resolution screens and in documents;
   3× stays sharp when zoomed in or printed, 1× makes the smallest files. The bar above the preview shows the size of
   the PNG.
@@ -84,7 +87,8 @@ No external tools, no manual cropping and blurring.
   Burp closes and are never saved in templates; **Restore sample** brings the original back.
 - **Restore defaults** in each tab, from the built-in template yours is based on, after asking: the *Rules* tab adds
   back the rules you deleted (or replaces all your rules), the *Headers* tab drops your header changes, and the
-  *Appearance* tab resets width, height, layout, theme, URL bar, messages, line numbers, body and footer. Each tab says what it would change.
+  *Appearance* tab resets width, height, text size, scale, layout, theme, URL bar, messages, line numbers, body
+  and footer. Each tab says what it would change.
 - **Undo and redo** every change to the settings with **⌘Z** / **⇧⌘Z** (**Ctrl+Z** / **Ctrl+Shift+Z** or **Ctrl+Y**),
   in the screenshot window and in the template editor: deleted rules, restored defaults, rules added from the preview
   or the *Headers* tab, and **Revert** too. Typing counts as one step. Undo shows what it changed: it opens the tab

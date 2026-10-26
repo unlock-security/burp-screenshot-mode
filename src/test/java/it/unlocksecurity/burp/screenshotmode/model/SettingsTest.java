@@ -54,8 +54,11 @@ class SettingsTest {
         settings.messages = MessageMode.REQUEST;
         settings.lineNumbers = false;
         settings.scale = 3;
+        settings.textSize = 9;
+        assertEquals(8, settings.appearanceChanges(parent), "a size not used is no change");
+        settings.textSizeMode = TextSizeMode.CUSTOM;
         settings.redactions.add(named("Kept", "k"));
-        assertEquals(8, settings.appearanceChanges(parent));
+        assertEquals(9, settings.appearanceChanges(parent));
 
         settings.copyAppearance(parent);
         assertEquals(0, settings.appearanceChanges(parent));
@@ -63,6 +66,7 @@ class SettingsTest {
         assertEquals(MessageMode.BOTH, settings.messages);
         assertTrue(settings.lineNumbers);
         assertEquals(Settings.DEFAULT_SCALE, settings.scale);
+        assertEquals(TextSizeMode.BURP, settings.textSizeMode);
     }
 
     @Test

@@ -5,6 +5,7 @@ import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.render.Decorated;
@@ -253,11 +254,19 @@ final class ContentPanel extends JPanel {
         MessageData data,
         Settings settings,
         Palette palette,
-        Font mono,
-        Font ui,
+        Font burpMono,
+        Font burpUi,
         String timestamp,
         String responseInfo
     ) {
+        Font mono = burpMono;
+        Font ui = burpUi;
+        if (settings.textSizeMode == TextSizeMode.CUSTOM) {
+            // The size is the messages'; the titles and footer keep their proportion to it.
+            float ratio = settings.textSize / burpMono.getSize2D();
+            mono = burpMono.deriveFont((float) settings.textSize);
+            ui = burpUi.deriveFont(burpUi.getSize2D() * ratio);
+        }
         setBorder(BorderFactory.createLineBorder(palette.border()));
         setBackground(palette.background());
         ruleStatuses.clear();

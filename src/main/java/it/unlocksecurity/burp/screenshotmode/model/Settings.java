@@ -16,6 +16,9 @@ public final class Settings {
     public static final int DEFAULT_PIXEL_HEIGHT = 600;
     public static final int MIN_PIXEL_HEIGHT = 50;
     public static final int MAX_PIXEL_HEIGHT = 20_000;
+    public static final int DEFAULT_TEXT_SIZE = 13;
+    public static final int MIN_TEXT_SIZE = 6;
+    public static final int MAX_TEXT_SIZE = 36;
     /** The image pixels per pixel on screen that can be chosen. */
     public static final List<Integer> SCALES = List.of(1, 2, 3);
     public static final int DEFAULT_SCALE = 2;
@@ -36,6 +39,9 @@ public final class Settings {
     public HeightMode heightMode = HeightMode.FULL;
     /** Only meaningful when {@link #heightMode} is {@link HeightMode#PIXEL}. */
     public int heightPixels = DEFAULT_PIXEL_HEIGHT;
+    public TextSizeMode textSizeMode = TextSizeMode.BURP;
+    /** The size of the messages' text in points; only meaningful when {@link #textSizeMode} is custom. */
+    public int textSize = DEFAULT_TEXT_SIZE;
     /** Image pixels per pixel on screen: one of {@link #SCALES}. */
     public int scale = DEFAULT_SCALE;
     public List<HighlightRule> highlights = new ArrayList<>();
@@ -92,6 +98,7 @@ public final class Settings {
             disposition != other.disposition,
             !Objects.equals(maxContentWidth(), other.maxContentWidth()) || widthMode != other.widthMode,
             heightMode != other.heightMode || (heightMode == HeightMode.PIXEL && heightPixels != other.heightPixels),
+            textSizeMode != other.textSizeMode || (textSizeMode == TextSizeMode.CUSTOM && textSize != other.textSize),
             scale != other.scale,
             theme != other.theme,
             url != other.url,
@@ -113,6 +120,8 @@ public final class Settings {
         widthPixels = other.widthPixels;
         heightMode = other.heightMode;
         heightPixels = other.heightPixels;
+        textSizeMode = other.textSizeMode;
+        textSize = other.textSize;
         scale = other.scale;
         theme = other.theme;
         url = other.url;

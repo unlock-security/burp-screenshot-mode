@@ -13,6 +13,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
@@ -656,6 +657,16 @@ final class SettingsForm extends JPanel {
             false
         );
 
+        addRow(
+            grid,
+            row++,
+            "Text size",
+            textSizeControl(),
+            "Size of the request and response text: Burp's editor font, or a size of your own, the same for " +
+                "everyone who uses the template",
+            false
+        );
+
         SegmentedControl<Integer> scale = new SegmentedControl<>(
             Settings.SCALES.toArray(Integer[]::new),
             settings.scale,
@@ -860,6 +871,47 @@ final class SettingsForm extends JPanel {
                 row.revalidate();
                 onChange.run();
             }
+        });
+        return row;
+    }
+
+    private JComponent textSizeControl() {
+        JSpinner size = new JSpinner(
+            new SpinnerNumberModel(settings.textSize, Settings.MIN_TEXT_SIZE, Settings.MAX_TEXT_SIZE, 1)
+        );
+        JComboBox<TextSizeMode> mode = new JComboBox<>(TextSizeMode.values());
+        mode.setSelectedItem(settings.textSizeMode);
+        size.setVisible(settings.textSizeMode == TextSizeMode.CUSTOM);
+        JPanel row = flush(mode, size);
+        size.addChangeListener(event -> {
+            if (!showingSize) {
+                settings.textSize = (Integer) size.getValue();
+                onChange.run();
+            }
+        });
+        mode.addActionListener(event -> {
+            TextSizeMode chosen = (TextSizeMode) mode.getSelectedItem();
+            if (chosen == settings.textSizeMode) {
+                return;
+            }
+            if (chosen == TextSizeMode.CUSTOM) {
+                // From the size the screenshot had, so choosing Custom changes nothing until the size does.
+                settings.textSize = Math.clamp(
+                    Math.round(mono.getSize2D()),
+                    Settings.MIN_TEXT_SIZE,
+                    Settings.MAX_TEXT_SIZE
+                );
+                showingSize = true;
+                try {
+                    size.setValue(settings.textSize);
+                } finally {
+                    showingSize = false;
+                }
+            }
+            settings.textSizeMode = chosen;
+            size.setVisible(chosen == TextSizeMode.CUSTOM);
+            row.revalidate();
+            onChange.run();
         });
         return row;
     }

@@ -24,6 +24,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
@@ -163,6 +164,13 @@ public final class TemplateCodec {
             height.addProperty("value", settings.heightPixels);
         }
         object.add("height", height);
+
+        JsonObject text = new JsonObject();
+        text.addProperty("mode", settings.textSizeMode.id());
+        if (settings.textSizeMode == TextSizeMode.CUSTOM) {
+            text.addProperty("size", settings.textSize);
+        }
+        object.add("text", text);
         object.addProperty("scale", settings.scale);
 
         JsonArray highlights = new JsonArray();
@@ -287,6 +295,7 @@ public final class TemplateCodec {
             settings.widthPixels = (int) Math.round(number(width, "value"));
         }
         parseHeight(object.get("height"), settings);
+        parseTextSize(object.get("text"), settings);
         JsonElement scale = object.get("scale");
         // Optional, and a scale this release doesn't offer reads as the default.
         settings.scale =
@@ -333,6 +342,31 @@ public final class TemplateCodec {
             url != null && isString(url) ? lenientEnum(UrlMode.class, url.getAsString(), UrlMode.FULL) : UrlMode.FULL;
         settings.lineNumbers = optionalBoolean(object, "lineNumbers", true);
         return settings;
+    }
+
+    /** The text size is optional: templates saved before it existed, or with one this release can't read, follow Burp. */
+    private static void parseTextSize(JsonElement element, Settings settings) {
+        if (element == null || !element.isJsonObject()) {
+            return;
+        }
+        JsonObject text = element.getAsJsonObject();
+        JsonElement mode = text.get("mode");
+        if (mode == null || !isString(mode)) {
+            return;
+        }
+        settings.textSizeMode = lenientEnum(TextSizeMode.class, mode.getAsString(), TextSizeMode.BURP);
+        if (settings.textSizeMode == TextSizeMode.CUSTOM) {
+            JsonElement size = text.get("size");
+            if (size != null && size.isJsonPrimitive() && size.getAsJsonPrimitive().isNumber()) {
+                settings.textSize = (int) Math.clamp(
+                    Math.round(size.getAsDouble()),
+                    Settings.MIN_TEXT_SIZE,
+                    Settings.MAX_TEXT_SIZE
+                );
+            } else {
+                settings.textSizeMode = TextSizeMode.BURP;
+            }
+        }
     }
 
     /** The height is optional: templates saved before it existed, or with one this release can't read, fill the preview. */

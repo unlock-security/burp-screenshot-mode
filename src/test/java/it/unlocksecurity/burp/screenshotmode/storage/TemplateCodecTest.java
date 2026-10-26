@@ -20,6 +20,7 @@ import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ThemeMode;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
@@ -266,6 +267,44 @@ class TemplateCodecTest {
             v3(V3_SETTINGS.replace("\"disposition\"", "\"messages\": \"later\", \"disposition\""))
         );
         assertEquals(MessageMode.BOTH, later.messages, "a value from a later release");
+    }
+
+    @Test
+    void readsTheTextSizeAndFollowsBurpWithout() {
+        assertEquals(TextSizeMode.BURP, decodeSettings(v3(V3_SETTINGS)).textSizeMode, "saved before it existed");
+        Settings custom = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"showResponseInfo\": true",
+                    "\"showResponseInfo\": true, \"text\": {\"mode\": \"custom\", \"size\": 11}"
+                )
+            )
+        );
+        assertEquals(TextSizeMode.CUSTOM, custom.textSizeMode);
+        assertEquals(11, custom.textSize);
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", custom)), "t1"));
+        assertEquals(11, decodeSettings(encoded).textSize, "round trip");
+
+        Settings huge = decodeSettings(
+            v3(
+                V3_SETTINGS.replace(
+                    "\"showResponseInfo\": true",
+                    "\"showResponseInfo\": true, \"text\": {\"mode\": \"custom\", \"size\": 500}"
+                )
+            )
+        );
+        assertEquals(Settings.MAX_TEXT_SIZE, huge.textSize);
+        for (String unreadable : List.of("{\"mode\": \"custom\"}", "{\"mode\": \"later\"}", "\"big\"")) {
+            Settings settings = decodeSettings(
+                v3(
+                    V3_SETTINGS.replace(
+                        "\"showResponseInfo\": true",
+                        "\"showResponseInfo\": true, \"text\": " + unreadable
+                    )
+                )
+            );
+            assertEquals(TextSizeMode.BURP, settings.textSizeMode, unreadable);
+        }
     }
 
     @Test

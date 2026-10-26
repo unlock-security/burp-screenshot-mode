@@ -11,6 +11,7 @@ import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
+import it.unlocksecurity.burp.screenshotmode.model.TextSizeMode;
 import it.unlocksecurity.burp.screenshotmode.model.ViewMode;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
@@ -183,6 +184,31 @@ class SettingsFormUndoTest {
         undo(false);
         assertEquals(2, settings.scale);
         assertEquals(Integer.valueOf(2), segmented(2).value(), "the reloaded tab shows it");
+    }
+
+    @Test
+    void startsACustomTextSizeFromBurpsAndUndoes() {
+        @SuppressWarnings("unchecked")
+        JComboBox<TextSizeMode> mode = (JComboBox<TextSizeMode>) find(
+            form,
+            JComboBox.class,
+            combo -> combo.getItemAt(0) == TextSizeMode.BURP
+        );
+        JSpinner size = find(form, JSpinner.class, spinner -> spinner.getValue().equals(Settings.DEFAULT_TEXT_SIZE));
+        assertFalse(size.isVisible(), "no size while following Burp");
+
+        mode.setSelectedItem(TextSizeMode.CUSTOM);
+        assertEquals(TextSizeMode.CUSTOM, settings.textSizeMode);
+        assertEquals(12, settings.textSize, "the size of Burp's editor font, so nothing changes yet");
+        assertEquals(12, size.getValue());
+        assertTrue(size.isVisible());
+
+        size.setValue(10);
+        assertEquals(10, settings.textSize);
+        undo(false);
+        assertEquals(12, settings.textSize);
+        undo(false);
+        assertEquals(TextSizeMode.BURP, settings.textSizeMode, "choosing Custom was one step");
     }
 
     /** The segmented control that shows {@code value}. */
