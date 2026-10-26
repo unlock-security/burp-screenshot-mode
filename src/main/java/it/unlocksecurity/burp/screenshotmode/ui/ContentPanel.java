@@ -377,6 +377,7 @@ final class ContentPanel extends JPanel {
                 }
             }
         });
+        pane.setLineNumbers(settings.lineNumbers);
         if (raw == null) {
             pane.renderMissing("No " + target.label().toLowerCase(Locale.ROOT), palette, ui);
         } else {

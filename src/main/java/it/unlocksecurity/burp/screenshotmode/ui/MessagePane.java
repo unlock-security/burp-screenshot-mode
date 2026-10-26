@@ -51,6 +51,8 @@ final class MessagePane extends JPanel {
         void onSelectionAction(SelectionAction action, String text, RuleTarget target);
     }
 
+    private static final int TITLE_INSET = 12;
+
     private final RuleTarget target;
     private final JPanel titleBar = new JPanel(new BorderLayout());
     private final JLabel title;
@@ -134,7 +136,7 @@ final class MessagePane extends JPanel {
         titleBar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, palette.border()),
-                BorderFactory.createEmptyBorder(7, 12, 7, 12)
+                BorderFactory.createEmptyBorder(7, TITLE_INSET, 7, TITLE_INSET)
             )
         );
     }
@@ -188,19 +190,29 @@ final class MessagePane extends JPanel {
         }
     }
 
+    /** Shows or hides the line numbers beside the text. */
+    void setLineNumbers(boolean shown) {
+        if ((scroll.getRowHeader() != null && scroll.getRowHeader().getView() == gutter) != shown) {
+            scroll.setRowHeaderView(shown ? gutter : null);
+            // Without numbers, the text lines up with the title above it.
+            view.setBorder(BorderFactory.createEmptyBorder(6, shown ? 10 : TITLE_INSET, 6, 10));
+        }
+    }
+
     void setFitting(boolean fitting) {
         scroll.setVerticalScrollBarPolicy(
             fitting ? ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER : ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
         );
     }
 
-    /** The width that shows every line whole: line numbers, text and the scrollbar when there is one. */
+    /** The width that shows every line whole: line numbers when shown, text and the scrollbar when there is one. */
     int unwrappedWidth() {
         Insets insets = getInsets();
         int scrollbar = scroll.getVerticalScrollBar().isVisible()
             ? scroll.getVerticalScrollBar().getPreferredSize().width
             : 0;
-        return insets.left + gutter.getPreferredSize().width + view.unwrappedWidth() + scrollbar + insets.right;
+        int numbers = gutter.getParent() != null ? gutter.getPreferredSize().width : 0;
+        return insets.left + numbers + view.unwrappedWidth() + scrollbar + insets.right;
     }
 
     /** Extra height the view needs to show everything without scrolling (negative when there is spare room). */

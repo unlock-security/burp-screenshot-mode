@@ -189,6 +189,7 @@ public final class TemplateCodec {
         object.addProperty("theme", settings.theme.id());
         object.addProperty("view", settings.view.id());
         object.addProperty("url", settings.url.id());
+        object.addProperty("lineNumbers", settings.lineNumbers);
         return object;
     }
 
@@ -319,6 +320,7 @@ public final class TemplateCodec {
         JsonElement url = object.get("url");
         settings.url =
             url != null && isString(url) ? lenientEnum(UrlMode.class, url.getAsString(), UrlMode.FULL) : UrlMode.FULL;
+        settings.lineNumbers = optionalBoolean(object, "lineNumbers", true);
         return settings;
     }
 

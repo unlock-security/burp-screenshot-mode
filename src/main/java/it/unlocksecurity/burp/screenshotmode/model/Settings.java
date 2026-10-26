@@ -42,6 +42,8 @@ public final class Settings {
     /** Raw or Pretty, like the tabs of Burp's message editor. */
     public ViewMode view = ViewMode.RAW;
     public UrlMode url = UrlMode.FULL;
+    /** Numbers beside the lines of the messages. */
+    public boolean lineNumbers = true;
 
     /** The fixed width of the captured content in pixels, or {@code null} when it follows the preview or the content. */
     public Integer maxContentWidth() {
@@ -87,6 +89,7 @@ public final class Settings {
             heightMode != other.heightMode || (heightMode == HeightMode.PIXEL && heightPixels != other.heightPixels),
             theme != other.theme,
             url != other.url,
+            lineNumbers != other.lineNumbers,
             view != other.view,
             showTimestamp != other.showTimestamp,
             showResponseInfo != other.showResponseInfo
@@ -106,6 +109,7 @@ public final class Settings {
         heightPixels = other.heightPixels;
         theme = other.theme;
         url = other.url;
+        lineNumbers = other.lineNumbers;
         view = other.view;
         showTimestamp = other.showTimestamp;
         showResponseInfo = other.showResponseInfo;

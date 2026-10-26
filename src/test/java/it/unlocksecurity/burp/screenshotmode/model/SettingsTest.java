@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,13 +52,15 @@ class SettingsTest {
         settings.heightMode = HeightMode.PIXEL;
         settings.heightPixels = 640;
         settings.messages = MessageMode.REQUEST;
+        settings.lineNumbers = false;
         settings.redactions.add(named("Kept", "k"));
-        assertEquals(6, settings.appearanceChanges(parent));
+        assertEquals(7, settings.appearanceChanges(parent));
 
         settings.copyAppearance(parent);
         assertEquals(0, settings.appearanceChanges(parent));
         assertEquals(1, settings.redactions.size(), "rules are not appearance");
         assertEquals(MessageMode.BOTH, settings.messages);
+        assertTrue(settings.lineNumbers);
     }
 
     @Test

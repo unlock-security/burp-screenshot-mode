@@ -269,6 +269,17 @@ class TemplateCodecTest {
     }
 
     @Test
+    void readsTheLineNumbersAndShowsThemWithout() {
+        assertTrue(decodeSettings(v3(V3_SETTINGS)).lineNumbers, "saved before the setting existed");
+        Settings hidden = decodeSettings(
+            v3(V3_SETTINGS.replace("\"showResponseInfo\": true", "\"showResponseInfo\": true, \"lineNumbers\": false"))
+        );
+        assertFalse(hidden.lineNumbers);
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", hidden)), "t1"));
+        assertFalse(decodeSettings(encoded).lineNumbers, "round trip");
+    }
+
+    @Test
     void metadataTogglesDefaultWhenMissingInV2() {
         Settings settings = decodeSettings(
             v2(

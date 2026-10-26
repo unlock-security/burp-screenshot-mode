@@ -216,7 +216,8 @@
         "showResponseInfo": true,
         "theme": "auto",
         "view": "raw",
-        "url": "full"
+        "url": "full",
+        "lineNumbers": true
       }
     },
     {
@@ -241,7 +242,8 @@
         "showResponseInfo": true,
         "theme": "auto",
         "view": "raw",
-        "url": "full"
+        "url": "full",
+        "lineNumbers": true
       }
     }
   ],

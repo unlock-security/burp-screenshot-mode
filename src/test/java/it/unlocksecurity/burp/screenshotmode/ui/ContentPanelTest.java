@@ -162,6 +162,54 @@ class ContentPanelTest {
         assertTrue(split.getDividerSize() > 0, "between the two messages");
     }
 
+    @Test
+    void hidesTheLineNumbers() throws Throwable {
+        Settings settings = new Settings();
+        ContentPanel shown = rendered("https://x/", settings);
+        settings.lineNumbers = false;
+        ContentPanel hidden = rendered("https://x/", settings);
+        for (ContentPanel content : List.of(shown, hidden)) {
+            javax.swing.JScrollPane scroll = (javax.swing.JScrollPane) javax.swing.SwingUtilities.getAncestorOfClass(
+                javax.swing.JScrollPane.class,
+                viewOf(content.requestPane())
+            );
+            boolean numbered = scroll.getRowHeader() != null && scroll.getRowHeader().getView() != null;
+            assertEquals(content == shown, numbered);
+        }
+        assertTrue(
+            hidden.requestPane().unwrappedWidth() < shown.requestPane().unwrappedWidth(),
+            "fitting the width leaves no room for them"
+        );
+
+        onEdt(() -> {
+            settings.lineNumbers = true;
+            hidden.render(
+                new MessageData("key", "https://x/", "GET / HTTP/1.1\n", "HTTP/1.1 200 OK\n", 0, null, null),
+                settings,
+                Palette.LIGHT,
+                FONT,
+                FONT,
+                null,
+                null
+            );
+        });
+        assertEquals(shown.requestPane().unwrappedWidth(), hidden.requestPane().unwrappedWidth(), "shown again");
+    }
+
+    private static MessageView viewOf(MessagePane pane) {
+        java.util.ArrayDeque<java.awt.Component> queue = new java.util.ArrayDeque<>(List.of(pane));
+        while (!queue.isEmpty()) {
+            java.awt.Component component = queue.poll();
+            if (component instanceof MessageView view) {
+                return view;
+            }
+            if (component instanceof java.awt.Container container) {
+                queue.addAll(List.of(container.getComponents()));
+            }
+        }
+        throw new AssertionError("no view");
+    }
+
     private static RedactionRule named(Settings settings, String name) {
         return settings.redactions
             .stream()

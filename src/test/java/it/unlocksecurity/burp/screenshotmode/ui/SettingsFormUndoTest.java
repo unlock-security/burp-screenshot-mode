@@ -166,6 +166,16 @@ class SettingsFormUndoTest {
         assertFalse(segmented(Disposition.HORIZONTAL).isEnabled(), "as the reloaded tab is built");
     }
 
+    @Test
+    void hidesTheLineNumbersAndUndoes() {
+        segmented(true).click(false);
+        assertFalse(settings.lineNumbers);
+        undo(false);
+        assertTrue(settings.lineNumbers);
+        assertEquals(SettingsForm.APPEARANCE, form.tabs().getSelectedIndex());
+        assertEquals(true, segmented(true).value(), "the reloaded tab shows it");
+    }
+
     /** The segmented control that shows {@code value}. */
     @SuppressWarnings("unchecked")
     private <E> SegmentedControl<E> segmented(E value) {

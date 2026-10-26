@@ -695,6 +695,17 @@ final class SettingsForm extends JPanel {
         });
         addRow(grid, row++, "Messages", messages, "The request, the response or both", false);
 
+        SegmentedControl<Boolean> lineNumbers = new SegmentedControl<>(
+            new Boolean[] { true, false },
+            settings.lineNumbers,
+            shown -> shown ? "Shown" : "Hidden",
+            value -> {
+                settings.lineNumbers = value;
+                onChange.run();
+            }
+        );
+        addRow(grid, row++, "Line numbers", lineNumbers, null, false);
+
         SegmentedControl<ViewMode> view = Widgets.segmented(ViewMode.values(), settings.view, value -> {
             settings.view = value;
             onChange.run();
