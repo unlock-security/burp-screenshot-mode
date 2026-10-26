@@ -775,9 +775,10 @@ final class RuleList<R extends Rule> extends JPanel {
     /** Name; what to match; then how to highlight it. */
     static void highlightEditor(HighlightRule rule, RuleList<HighlightRule>.Fields fields, HeaderCatalog catalog) {
         nameField(rule, fields);
-        matchFields(rule, fields, catalog, null);
+        Runnable groupsRow = matchFields(rule, fields, catalog);
 
         fields.heading("Highlight");
+        groupsRow.run();
         JComboBox<HighlightMode> mode = combo(HighlightMode.values(), rule.mode, value -> {
             rule.mode = value;
             fields.changed();
@@ -799,7 +800,7 @@ final class RuleList<R extends Rule> extends JPanel {
     /** Name; what to match; then what to redact of a match, and with what. */
     static void redactionEditor(RedactionRule rule, RuleList<RedactionRule>.Fields fields, HeaderCatalog catalog) {
         nameField(rule, fields);
-        Runnable groupsRow = matchFields(rule, fields, catalog, rule);
+        Runnable groupsRow = matchFields(rule, fields, catalog);
 
         fields.heading("Redact");
         groupsRow.run();
@@ -841,15 +842,10 @@ final class RuleList<R extends Rule> extends JPanel {
     /**
      * The Match section: the headers of a header rule; the pattern, its options and where it applies for a pattern rule.
      *
-     * @param groups the redaction whose capture groups to choose, or {@code null}
-     * @return adds the choice of which part of a match to redact, for the Redact section; does nothing without groups
+     * @return adds the choice of which part of a match to redact or highlight, for the section after Match; does
+     *     nothing for a header rule
      */
-    private static Runnable matchFields(
-        Rule rule,
-        RuleList<?>.Fields fields,
-        HeaderCatalog catalog,
-        RedactionRule groups
-    ) {
+    private static Runnable matchFields(Rule rule, RuleList<?>.Fields fields, HeaderCatalog catalog) {
         fields.heading("Match");
         if (rule.type == RuleType.HEADER) {
             JTextArea headers = Widgets.wrappingField(String.join(", ", rule.headers), 12);
@@ -907,57 +903,47 @@ final class RuleList<R extends Rule> extends JPanel {
         fields.addProblem();
         fields.add("Options", wrapRow(regex, matchCase, wholeWord));
 
-        Runnable groupsRow = () -> {};
-        if (groups != null) {
-            JPanel groupPanel = new JPanel(new BorderLayout(0, 2));
-            groupPanel.setOpaque(false);
-            AtomicReference<List<String>> labels = new AtomicReference<>(
-                RuleEngine.groupLabels(rule.regex, rule.matchMode)
-            );
-            AtomicReference<JLabel> groupLabel = new AtomicReference<>();
-            Runnable rebuildGroups = () ->
-                rebuildGroups(groupPanel, groupLabel.get(), groups, labels.get(), fields::changed);
-            groupsRow = () -> {
-                groupLabel.set(fields.addTop("What", groupPanel));
+        JPanel groupPanel = new JPanel(new BorderLayout(0, 2));
+        groupPanel.setOpaque(false);
+        AtomicReference<List<String>> labels = new AtomicReference<>(
+            RuleEngine.groupLabels(rule.regex, rule.matchMode)
+        );
+        AtomicReference<JLabel> groupLabel = new AtomicReference<>();
+        Runnable rebuildGroups = () -> rebuildGroups(groupPanel, groupLabel.get(), rule, labels.get(), fields::changed);
+        Runnable groupsRow = () -> {
+            groupLabel.set(fields.addTop("What", groupPanel));
+            rebuildGroups.run();
+        };
+        // Selects capture groups as they first appear in the pattern; "The whole match", once chosen, stays.
+        patternChanged.add(text -> {
+            List<String> newLabels = RuleEngine.groupLabels(text, rule.matchMode);
+            int oldCount = labels.get().size();
+            int newCount = newLabels.size();
+            rule.regex = text;
+            if (newCount == 0) {
+                rule.useCaptureGroups = false;
+                rule.selectedGroups = new ArrayList<>();
+            } else if (oldCount == 0) {
+                rule.useCaptureGroups = true;
+                rule.selectedGroups = allGroups(1, newCount);
+            } else if (rule.useCaptureGroups) {
+                List<Integer> selected = new ArrayList<>(
+                    rule.selectedGroups
+                        .stream()
+                        .filter(g -> g <= newCount)
+                        .toList()
+                );
+                selected.addAll(allGroups(oldCount + 1, newCount));
+                rule.selectedGroups = selected;
+            }
+            // Also on a renamed group, whose checkbox is labelled with the name.
+            if (!newLabels.equals(labels.get())) {
+                labels.set(newLabels);
                 rebuildGroups.run();
-            };
-            // Selects capture groups as they first appear in the pattern; "The whole match", once chosen, stays.
-            patternChanged.add(text -> {
-                List<String> newLabels = RuleEngine.groupLabels(text, rule.matchMode);
-                int oldCount = labels.get().size();
-                int newCount = newLabels.size();
-                rule.regex = text;
-                if (newCount == 0) {
-                    groups.useCaptureGroups = false;
-                    groups.selectedGroups = new ArrayList<>();
-                } else if (oldCount == 0) {
-                    groups.useCaptureGroups = true;
-                    groups.selectedGroups = allGroups(1, newCount);
-                } else if (groups.useCaptureGroups) {
-                    List<Integer> selected = new ArrayList<>(
-                        groups.selectedGroups
-                            .stream()
-                            .filter(g -> g <= newCount)
-                            .toList()
-                    );
-                    selected.addAll(allGroups(oldCount + 1, newCount));
-                    groups.selectedGroups = selected;
-                }
-                // Also on a renamed group, whose checkbox is labelled with the name.
-                if (!newLabels.equals(labels.get())) {
-                    labels.set(newLabels);
-                    rebuildGroups.run();
-                }
-                validate(pattern, rule);
-                fields.changed();
-            });
-        } else {
-            patternChanged.add(text -> {
-                rule.regex = text;
-                validate(pattern, rule);
-                fields.changed();
-            });
-        }
+            }
+            validate(pattern, rule);
+            fields.changed();
+        });
         Widgets.onTextChange(pattern, text -> patternChanged.getFirst().accept(text));
 
         // Every place can be unticked: with none, the card says so rather than greying out the last one.
@@ -1013,18 +999,12 @@ final class RuleList<R extends Rule> extends JPanel {
     }
 
     /**
-     * What a match of a pattern with capture groups redacts: the whole match, or only the chosen groups, listed under
-     * that choice. Shown, with its label, only when the pattern has groups.
+     * What a match of a pattern with capture groups redacts or highlights: the whole match, or only the chosen groups,
+     * listed under that choice. Shown, with its label, only when the pattern has groups.
      *
      * @param labels label of each capture group, see {@link RuleEngine#groupLabels}
      */
-    private static void rebuildGroups(
-        JPanel panel,
-        JLabel label,
-        RedactionRule rule,
-        List<String> labels,
-        Runnable onChange
-    ) {
+    private static void rebuildGroups(JPanel panel, JLabel label, Rule rule, List<String> labels, Runnable onChange) {
         int count = labels.size();
         panel.removeAll();
         panel.setVisible(count > 0);
@@ -1044,8 +1024,9 @@ final class RuleList<R extends Rule> extends JPanel {
             options.add(option);
         }
 
-        // Only some groups, but none ticked: a match redacts nothing. Said in words, as for Applies to.
-        JTextArea nothing = Widgets.wrappingHint("Tick at least one group: the rule redacts nothing now.", 260);
+        // Only some groups, but none ticked: a match changes nothing. Said in words, as for Applies to.
+        String does = rule instanceof RedactionRule ? "redacts" : "highlights";
+        JTextArea nothing = Widgets.wrappingHint("Tick at least one group: the rule " + does + " nothing now.", 260);
         nothing.setForeground(Widgets.errorColor());
         Runnable updateNothing = () -> nothing.setVisible(rule.useCaptureGroups && rule.selectedGroups.isEmpty());
         updateNothing.run();

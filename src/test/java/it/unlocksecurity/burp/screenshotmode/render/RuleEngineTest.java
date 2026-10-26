@@ -198,6 +198,53 @@ class RuleEngineTest {
     }
 
     @Test
+    void captureGroupsHighlightOnlySelectedGroups() {
+        HighlightRule rule = highlight("(?<name>session)=(?<value>\\w+)|theme=(?<theme>\\w+)", MatchMode.REGEX);
+        rule.useCaptureGroups = true;
+        rule.selectedGroups = List.of(2, 3);
+        Decorated result = RuleEngine.apply(TEXT, List.of(rule), List.of());
+        assertEquals(
+            List.of("s3cr3t", "dark"),
+            result
+                .spans(Decorated.Kind.HIGHLIGHT)
+                .stream()
+                .map(s -> slice(result, s))
+                .toList(),
+            "a group that took no part in a match highlights nothing there"
+        );
+
+        rule.selectedGroups = List.of();
+        assertTrue(RuleEngine.apply(TEXT, List.of(rule), List.of()).spans().isEmpty(), "no group chosen");
+        rule.useCaptureGroups = false;
+        Decorated whole = RuleEngine.apply(TEXT, List.of(rule), List.of());
+        assertEquals(
+            List.of("session=s3cr3t", "theme=dark"),
+            whole
+                .spans()
+                .stream()
+                .map(s -> slice(whole, s))
+                .toList()
+        );
+    }
+
+    @Test
+    void aHighlightedGroupStaysClearOfRedactionsOnItsOwn() {
+        HighlightRule rule = highlight("(session)=(\\w+)", MatchMode.REGEX);
+        rule.useCaptureGroups = true;
+        rule.selectedGroups = List.of(1, 2);
+        Decorated result = RuleEngine.apply(TEXT, List.of(rule), List.of(redaction("s3cr3t", RedactionMode.BLUR)));
+        assertEquals(
+            List.of("session"),
+            result
+                .spans(Decorated.Kind.HIGHLIGHT)
+                .stream()
+                .map(s -> slice(result, s))
+                .toList(),
+            "the redacted group is not highlighted, the other one still is"
+        );
+    }
+
+    @Test
     void aRedactionOfNoChosenGroupRedactsNothing() {
         RedactionRule rule = RedactionRule.create(
             "token=(\\w+)",

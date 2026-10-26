@@ -175,7 +175,7 @@ public final class TemplateCodec {
 
         JsonArray highlights = new JsonArray();
         for (HighlightRule rule : settings.highlights) {
-            JsonObject json = encodeRule(rule, null);
+            JsonObject json = encodeRule(rule, rule.useCaptureGroups ? rule.selectedGroups : null);
             json.addProperty("mode", rule.mode.id());
             json.addProperty("color", rule.color);
             highlights.add(json);
@@ -480,7 +480,11 @@ public final class TemplateCodec {
 
     private static HighlightRule parseHighlight(JsonObject object) {
         HighlightRule rule = new HighlightRule();
-        parseRule(object, rule);
+        List<Integer> groups = parseRule(object, rule);
+        if (groups != null) {
+            rule.useCaptureGroups = true;
+            rule.selectedGroups = groups;
+        }
         rule.color = string(object, "color");
         rule.mode = enumValue(HighlightMode.class, object, "mode");
         return rule;

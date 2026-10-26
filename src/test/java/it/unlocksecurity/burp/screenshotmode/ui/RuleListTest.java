@@ -157,6 +157,35 @@ class RuleListTest {
     }
 
     @Test
+    void choosesTheCaptureGroupsAHighlightMarks() {
+        HighlightRule rule = HighlightRule.create("role", RuleTarget.RESPONSE, MatchMode.REGEX);
+        form.highlightList().addFirst(rule);
+        RuleList<HighlightRule>.Row row = form.highlightList().row(rule);
+        javax.swing.JLabel what = label(row.editorPanel(), "What");
+        assertFalse(what.isVisible(), "no capture groups, nothing to choose");
+
+        ((javax.swing.text.JTextComponent) find(row.editorPanel(), "Pattern")).setText("\"role\": \"(?<role>\\w+)\"");
+        assertTrue(what.isVisible());
+        assertTrue(rule.useCaptureGroups, "a new group is highlighted on its own, as for redactions");
+        assertEquals(List.of(1), rule.selectedGroups);
+
+        button(row.editorPanel(), "role").doClick();
+        assertTrue(
+            textArea(row.editorPanel(), "Tick at least one group: the rule highlights nothing now.").isVisible()
+        );
+        button(row.editorPanel(), "The whole match").doClick();
+        assertFalse(rule.useCaptureGroups);
+
+        List<String> order = new java.util.ArrayList<>();
+        for (java.awt.Component component : row.editorPanel().getComponents()) {
+            if (component instanceof javax.swing.JLabel label && label.isVisible()) {
+                order.add(label.getText());
+            }
+        }
+        assertEquals(List.of("Name", "MATCH", "Pattern", "Options", "Applies to", "HIGHLIGHT", "What", "Style"), order);
+    }
+
+    @Test
     void keepsTheWholeMatchWhileThePatternIsEdited() {
         RedactionRule rule = RedactionRule.create(
             "token=(\\w+)",

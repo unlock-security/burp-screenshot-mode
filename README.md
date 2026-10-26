@@ -33,8 +33,9 @@ No external tools, no manual cropping and blurring.
 - **Redactions**: replacement text (`[REDACTED]`), a black box or blur.
 - **Two kinds of rules**, chosen when you add one with **+**: a **header** rule names one or more headers and
   redacts their whole value (a highlight marks the whole line), in requests and responses; a **text pattern** rule
-  matches a regex or literal text in the request, the response, the URL or any of them, and a redaction can be
-  limited to selected capture groups (e.g. `session=([0-9a-f]+)` redacts only the value).
+  matches a regex or literal text in the request, the response, the URL or any of them, and a redaction or a
+  highlight can be limited to selected capture groups (e.g. `session=([0-9a-f]+)` redacts or highlights only the
+  value).
 - **One list of rules**: each rule has an optional name, an on/off checkbox and a one-line summary, and opens into
   its editor when clicked: what it matches (pattern, options, where it applies), then what it does with a match.
   Long patterns and header lists wrap in their field, so they are always shown whole. The built-in *Defaults* template comes with named redactions for credentials, cookies, API keys,

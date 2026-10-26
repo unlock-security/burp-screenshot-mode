@@ -26,6 +26,9 @@ public abstract sealed class Rule permits HighlightRule, RedactionRule {
     public boolean matchCase = true;
     /** {@link RuleType#PATTERN} only: a match must not start or end inside a word. */
     public boolean wholeWord = false;
+    /** {@link RuleType#PATTERN} only: apply to the {@link #selectedGroups} instead of the whole match. */
+    public boolean useCaptureGroups = false;
+    public List<Integer> selectedGroups = new ArrayList<>();
 
     /** Whether the rule is on and matches in {@code target}: header rules match the headers of both messages. */
     public boolean appliesTo(RuleTarget target) {
@@ -46,5 +49,7 @@ public abstract sealed class Rule permits HighlightRule, RedactionRule {
         copy.matchMode = matchMode;
         copy.matchCase = matchCase;
         copy.wholeWord = wholeWord;
+        copy.useCaptureGroups = useCaptureGroups;
+        copy.selectedGroups = new ArrayList<>(selectedGroups);
     }
 }

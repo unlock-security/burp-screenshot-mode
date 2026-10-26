@@ -14,9 +14,6 @@ public final class RedactionRule extends Rule {
 
     public RedactionMode mode = RedactionMode.BLUR;
     public String replacementText = DEFAULT_REPLACEMENT;
-    /** {@link RuleType#PATTERN} only: redact the {@link #selectedGroups} instead of the whole match. */
-    public boolean useCaptureGroups = false;
-    public List<Integer> selectedGroups = new ArrayList<>();
 
     public static RedactionRule create(String pattern, RuleTarget target, RedactionMode mode, MatchMode matchMode) {
         RedactionRule rule = new RedactionRule();
@@ -41,8 +38,6 @@ public final class RedactionRule extends Rule {
         copyInto(copy);
         copy.mode = mode;
         copy.replacementText = replacementText;
-        copy.useCaptureGroups = useCaptureGroups;
-        copy.selectedGroups = new ArrayList<>(selectedGroups);
         return copy;
     }
 }

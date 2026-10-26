@@ -270,6 +270,22 @@ class TemplateCodecTest {
     }
 
     @Test
+    void roundTripsTheCaptureGroupsOfAHighlight() {
+        Settings settings = new Settings();
+        HighlightRule groups = HighlightRule.create("(a)(?<b>b)", RuleTarget.RESPONSE, MatchMode.REGEX);
+        groups.useCaptureGroups = true;
+        groups.selectedGroups = List.of(2);
+        HighlightRule whole = HighlightRule.create("(a)b", RuleTarget.RESPONSE, MatchMode.REGEX);
+        settings.highlights.addAll(List.of(groups, whole));
+        String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", settings)), "t1"));
+        List<HighlightRule> decoded = decodeSettings(encoded).highlights;
+        assertTrue(decoded.getFirst().useCaptureGroups);
+        assertEquals(List.of(2), decoded.getFirst().selectedGroups);
+        assertFalse(decoded.getLast().useCaptureGroups, "the whole match");
+        assertTrue(TemplateCodec.sameSettings(settings, decodeSettings(encoded)));
+    }
+
+    @Test
     void readsTheTextSizeAndFollowsBurpWithout() {
         assertEquals(TextSizeMode.BURP, decodeSettings(v3(V3_SETTINGS)).textSizeMode, "saved before it existed");
         Settings custom = decodeSettings(

@@ -86,7 +86,7 @@ public final class RuleEngine {
                 ranges.addAll(
                     rule.type == RuleType.HEADER
                         ? List.of(new Range(match.from(), match.to()))
-                        : redactionRanges(match, rule.useCaptureGroups, rule.selectedGroups)
+                        : ranges(match, rule.useCaptureGroups, rule.selectedGroups)
                 );
             }
             redactionRanges.add(ranges);
@@ -105,10 +105,16 @@ public final class RuleEngine {
             Found found = find(text, rule, true);
             statuses.accept(rule, status(found, rule));
             for (Match match : found.matches()) {
-                Range range = new Range(match.from(), match.to());
-                if (redacted.stream().noneMatch(range::overlaps)) {
-                    sourceSpans.add(new Decorated.Span(match.from(), match.to(), kind, color));
-                    hits.hit(rule, match.from(), match.to());
+                // A header rule highlights the whole line, whatever groups its pattern has.
+                List<Range> ranges =
+                    rule.type == RuleType.HEADER
+                        ? List.of(new Range(match.from(), match.to()))
+                        : ranges(match, rule.useCaptureGroups, rule.selectedGroups);
+                for (Range range : ranges) {
+                    if (range.to() > range.from() && redacted.stream().noneMatch(range::overlaps)) {
+                        sourceSpans.add(new Decorated.Span(range.from(), range.to(), kind, color));
+                        hits.hit(rule, range.from(), range.to());
+                    }
                 }
             }
         }
@@ -201,7 +207,8 @@ public final class RuleEngine {
         return display;
     }
 
-    static List<Range> redactionRanges(Match match, boolean useCaptureGroups, List<Integer> selectedGroups) {
+    /** What a rule applies to in a match: the whole match, or only the chosen capture groups that took part in it. */
+    static List<Range> ranges(Match match, boolean useCaptureGroups, List<Integer> selectedGroups) {
         if (!useCaptureGroups || match.groups().isEmpty()) {
             return List.of(new Range(match.from(), match.to()));
         }
