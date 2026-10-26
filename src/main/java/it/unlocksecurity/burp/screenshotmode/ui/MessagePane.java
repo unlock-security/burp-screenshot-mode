@@ -208,6 +208,9 @@ final class MessagePane extends JPanel {
     /** The width that shows every line whole: line numbers when shown, text and the scrollbar when there is one. */
     int unwrappedWidth() {
         Insets insets = getInsets();
+        if (missingPanel.getParent() == this) {
+            return insets.left + missingPanel.getPreferredSize().width + insets.right;
+        }
         int scrollbar = scroll.getVerticalScrollBar().isVisible()
             ? scroll.getVerticalScrollBar().getPreferredSize().width
             : 0;
@@ -217,6 +220,10 @@ final class MessagePane extends JPanel {
 
     /** Extra height the view needs to show everything without scrolling (negative when there is spare room). */
     int overflow() {
+        // Without a message the text view is not shown: measured, its empty viewport would always ask for more.
+        if (missingPanel.getParent() == this) {
+            return missingPanel.getPreferredSize().height - missingPanel.getHeight();
+        }
         return view.getPreferredSize().height - scroll.getViewport().getExtentSize().height;
     }
 

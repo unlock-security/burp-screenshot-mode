@@ -155,6 +155,56 @@ class PreviewAreaTest {
     }
 
     @Test
+    void fitsARequestWithoutResponseAndStops() throws Exception {
+        for (Disposition disposition : Disposition.values()) {
+            SwingUtilities.invokeAndWait(() -> {
+                ContentPanel content = rendered(disposition, "GET / HTTP/1.1\nHost: x\n", null);
+                PreviewArea area = new PreviewArea(content);
+                preview(area);
+                area.setHeight(HeightMode.CONTENT, 0);
+                settle(area);
+                int fitted = content.getHeight();
+                settle(area);
+                settle(area);
+
+                assertEquals(fitted, content.getHeight(), disposition + ": fitting again changes nothing");
+                assertFalse(area.fit(), disposition + ": settled");
+                assertTrue(fitted < 300, disposition + ": no spare room left: " + fitted);
+                assertEquals(0, content.requestPane().overflow(), disposition + ": the request shows whole");
+            });
+        }
+    }
+
+    @Test
+    void fitsTheWidthToSayThereIsNoResponse() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            ContentPanel content = rendered(Disposition.HORIZONTAL, "GET / HTTP/1.1\n", null);
+            PreviewArea area = new PreviewArea(content);
+            preview(area);
+            area.setWidth(WidthMode.CONTENT, null);
+            settle(area);
+
+            javax.swing.JLabel missing = label(content.responsePane(), "No response");
+            assertTrue(missing.getWidth() >= missing.getPreferredSize().width, "not cut: " + missing.getWidth());
+        });
+    }
+
+    private static javax.swing.JLabel label(java.awt.Container root, String text) {
+        for (java.awt.Component child : root.getComponents()) {
+            if (child instanceof javax.swing.JLabel label && text.equals(label.getText())) {
+                return label;
+            }
+            if (child instanceof java.awt.Container container) {
+                javax.swing.JLabel found = label(container, text);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Test
     void fitsBothMessagesOneAboveTheOther() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             ContentPanel content = rendered(Disposition.VERTICAL);
