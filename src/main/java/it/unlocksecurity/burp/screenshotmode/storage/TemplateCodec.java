@@ -16,6 +16,7 @@ import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.Labeled;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
@@ -146,6 +147,7 @@ public final class TemplateCodec {
         headers.add("headers", visibilityMap(visibility.headers));
         object.add("headers", headers);
 
+        object.addProperty("messages", settings.messages.id());
         object.addProperty("disposition", settings.disposition.id());
 
         JsonObject width = new JsonObject();
@@ -270,6 +272,11 @@ public final class TemplateCodec {
         } else {
             settings.headers = migrateHiddenHeaders(object.get("headersToHide"), version, HeaderCatalogFile.bundled());
         }
+        JsonElement messages = object.get("messages");
+        settings.messages =
+            messages != null && isString(messages)
+                ? lenientEnum(MessageMode.class, messages.getAsString(), MessageMode.BOTH)
+                : MessageMode.BOTH;
         settings.disposition = enumValue(Disposition.class, object, "disposition");
 
         JsonObject width = asObject(object.get("width"), "width");

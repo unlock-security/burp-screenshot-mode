@@ -344,6 +344,18 @@ class TemplatesTabTest {
     }
 
     @Test
+    void listsAOneMessageTemplateByTheMessageItShowsInsteadOfItsLayout() throws Exception {
+        TemplateStore store = store();
+        it.unlocksecurity.burp.screenshotmode.model.Settings settings = BuiltInTemplates.defaults();
+        settings.messages = it.unlocksecurity.burp.screenshotmode.model.MessageMode.RESPONSE;
+        store.createTemplate("Responses", settings);
+        SwingUtilities.invokeAndWait(() -> {
+            JTable table = find(new TemplatesTab(store, host()), JTable.class, t -> true).get();
+            assertEquals("Response only", table.getValueAt(2, table.getColumn("Layout").getModelIndex()));
+        });
+    }
+
+    @Test
     void listsWhatEachTemplateLooksLikeInTheOrderOfTheAppearanceTab() throws Exception {
         TemplateStore store = store();
         it.unlocksecurity.burp.screenshotmode.model.Settings settings = BuiltInTemplates.defaults();

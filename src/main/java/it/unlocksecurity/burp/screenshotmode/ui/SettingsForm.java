@@ -5,6 +5,7 @@ import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
@@ -37,6 +38,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -658,7 +660,20 @@ final class SettingsForm extends JPanel {
             settings.disposition = value;
             onChange.run();
         });
-        addRow(grid, row++, "Layout", layout, "Request and response side by side, or one above the other", false);
+        JLabel layoutLabel = addRow(
+            grid,
+            row++,
+            "Layout",
+            layout,
+            "Request and response side by side, or one above the other, when both are shown",
+            false
+        );
+        // Kept, not reset, while one message is shown: showing both again brings back the layout chosen before.
+        Consumer<MessageMode> enableLayout = messages -> {
+            layout.setEnabled(messages == MessageMode.BOTH);
+            layoutLabel.setEnabled(messages == MessageMode.BOTH);
+        };
+        enableLayout.accept(settings.messages);
 
         SegmentedControl<ThemeMode> theme = Widgets.segmented(ThemeMode.values(), settings.theme, value -> {
             settings.theme = value;
@@ -672,6 +687,13 @@ final class SettingsForm extends JPanel {
             onChange.run();
         });
         addRow(grid, row++, "URL bar", url, null, true);
+
+        SegmentedControl<MessageMode> messages = Widgets.segmented(MessageMode.values(), settings.messages, value -> {
+            settings.messages = value;
+            enableLayout.accept(value);
+            onChange.run();
+        });
+        addRow(grid, row++, "Messages", messages, "The request, the response or both", false);
 
         SegmentedControl<ViewMode> view = Widgets.segmented(ViewMode.values(), settings.view, value -> {
             settings.view = value;
@@ -697,7 +719,14 @@ final class SettingsForm extends JPanel {
         grid.add(Widgets.title(text), at);
     }
 
-    private static void addRow(JPanel grid, int row, String label, JComponent control, String tooltip, boolean first) {
+    private static JLabel addRow(
+        JPanel grid,
+        int row,
+        String label,
+        JComponent control,
+        String tooltip,
+        boolean first
+    ) {
         int top = first ? 8 : 12;
         GridBagConstraints labelAt = new GridBagConstraints();
         labelAt.gridx = 0;
@@ -721,6 +750,7 @@ final class SettingsForm extends JPanel {
         cell.setOpaque(false);
         cell.add(control);
         grid.add(cell, controlAt);
+        return title;
     }
 
     /**

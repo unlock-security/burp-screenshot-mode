@@ -168,7 +168,10 @@ final class TemplatePreview extends JPanel {
         showWhole(false);
     }
 
-    /** Called after each render with the sample and the whole screenshot, for the rules' and headers' results. */
+    /**
+     * Called after each render with the sample and the panel of one part, for the rules' and headers' results: it
+     * renders every part, so a rule shows what it does also in a message the screenshot leaves out.
+     */
     void setRenderListener(BiConsumer<MessageData, ContentPanel> listener) {
         rendered = listener;
     }
@@ -244,7 +247,7 @@ final class TemplatePreview extends JPanel {
         wholeArea.setBackground(palette.canvas());
         wholeScroll.getViewport().setBackground(palette.canvas());
         restore.setEnabled(sample.isEdited());
-        rendered.accept(data, whole);
+        rendered.accept(data, part);
         revalidate();
         repaint();
     }

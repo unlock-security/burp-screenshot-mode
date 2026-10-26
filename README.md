@@ -58,6 +58,9 @@ No external tools, no manual cropping and blurring.
   Burp out of memory.
 - **Metadata footer**: request timestamp and response size/round-trip time. The timestamp shows only when Burp knows
   when the request was sent (not for an unsent Repeater edit), and a message with no response says so.
+- **Messages**: the request and the response, or only one of them, so a screenshot of just the request needs no
+  cropping. The one left out takes no part: its rules don't run and can't make Copy or Save ask about a failed
+  redaction. *Layout* (side by side or stacked) applies again when both are shown.
 - **URL bar**: the full URL, only the path and query (the label reads *Path*), or no URL bar at all. Path only leaves
   out the scheme, host and port; the host can still appear in headers such as `Host`, `Origin` and `Referer`, so hide or
   redact those too if it must not show.
@@ -77,7 +80,7 @@ No external tools, no manual cropping and blurring.
   Burp closes and are never saved in templates; **Restore sample** brings the original back.
 - **Restore defaults** in each tab, from the built-in template yours is based on, after asking: the *Rules* tab adds
   back the rules you deleted (or replaces all your rules), the *Headers* tab drops your header changes, and the
-  *Appearance* tab resets width, height, layout, theme, URL bar, body and footer. Each tab says what it would change.
+  *Appearance* tab resets width, height, layout, theme, URL bar, messages, body and footer. Each tab says what it would change.
 - **Undo and redo** every change to the settings with **⌘Z** / **⇧⌘Z** (**Ctrl+Z** / **Ctrl+Shift+Z** or **Ctrl+Y**),
   in the screenshot window and in the template editor: deleted rules, restored defaults, rules added from the preview
   or the *Headers* tab, and **Revert** too. Typing counts as one step. Undo shows what it changed: it opens the tab

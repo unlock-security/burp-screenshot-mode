@@ -6,12 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
 import java.awt.Font;
+import java.util.List;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
@@ -91,8 +93,18 @@ class PreviewAreaTest {
     }
 
     private static ContentPanel rendered(Disposition disposition, String request, String response) {
+        return rendered(disposition, MessageMode.BOTH, request, response);
+    }
+
+    private static ContentPanel rendered(
+        Disposition disposition,
+        MessageMode messages,
+        String request,
+        String response
+    ) {
         Settings settings = BuiltInTemplates.defaults();
         settings.disposition = disposition;
+        settings.messages = messages;
         ContentPanel content = new ContentPanel();
         content.render(
             new MessageData("k", "https://x/", request, response, 0, null, null),
@@ -118,6 +130,28 @@ class PreviewAreaTest {
             assertTrue(content.getHeight() > 500, "taller than the preview: " + content.getHeight());
             assertEquals(0, Math.max(content.requestPane().overflow(), content.responsePane().overflow()));
         });
+    }
+
+    @Test
+    void fitsAShortMessageShownAlone() throws Exception {
+        for (MessageMode messages : List.of(MessageMode.REQUEST, MessageMode.RESPONSE)) {
+            SwingUtilities.invokeAndWait(() -> {
+                ContentPanel content = rendered(
+                    Disposition.HORIZONTAL,
+                    messages,
+                    "GET / HTTP/1.1\nHost: x\n",
+                    "HTTP/1.1 200 OK\n\nshort\n"
+                );
+                PreviewArea area = new PreviewArea(content);
+                preview(area);
+                area.setHeight(HeightMode.CONTENT, 0);
+                settle(area);
+
+                MessagePane shown = messages == MessageMode.REQUEST ? content.requestPane() : content.responsePane();
+                assertTrue(content.getHeight() < 300, messages + ", no spare room left: " + content.getHeight());
+                assertEquals(0, shown.overflow(), messages + " shows whole");
+            });
+        }
     }
 
     @Test

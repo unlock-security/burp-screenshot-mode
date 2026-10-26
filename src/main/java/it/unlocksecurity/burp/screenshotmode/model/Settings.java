@@ -24,6 +24,8 @@ public final class Settings {
     public String basedOn;
     /** The headers shown and hidden, the built-in template's included. */
     public HeaderVisibility headers = new HeaderVisibility();
+    public MessageMode messages = MessageMode.BOTH;
+    /** Only meaningful when {@link #messages} shows both. */
     public Disposition disposition = Disposition.HORIZONTAL;
     public WidthMode widthMode = WidthMode.FULL;
     /** Only meaningful when {@link #widthMode} is {@link WidthMode#PIXEL}. */
@@ -79,6 +81,7 @@ public final class Settings {
     /** How many settings of the Appearance tab differ from {@code other}'s. */
     public int appearanceChanges(Settings other) {
         return (int) List.of(
+            messages != other.messages,
             disposition != other.disposition,
             !Objects.equals(maxContentWidth(), other.maxContentWidth()) || widthMode != other.widthMode,
             heightMode != other.heightMode || (heightMode == HeightMode.PIXEL && heightPixels != other.heightPixels),
@@ -95,6 +98,7 @@ public final class Settings {
 
     /** Takes the settings of the Appearance tab from {@code other}. */
     public void copyAppearance(Settings other) {
+        messages = other.messages;
         disposition = other.disposition;
         widthMode = other.widthMode;
         widthPixels = other.widthPixels;

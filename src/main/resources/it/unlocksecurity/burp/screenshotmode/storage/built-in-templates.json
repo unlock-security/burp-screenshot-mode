@@ -18,6 +18,7 @@
           },
           "headers": {}
         },
+        "messages": "both",
         "disposition": "horizontal",
         "width": {
           "mode": "full"
@@ -226,6 +227,7 @@
           "groups": {},
           "headers": {}
         },
+        "messages": "both",
         "disposition": "horizontal",
         "width": {
           "mode": "full"

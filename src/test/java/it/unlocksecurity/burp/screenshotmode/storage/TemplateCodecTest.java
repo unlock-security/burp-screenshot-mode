@@ -13,6 +13,7 @@ import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightMode;
 import it.unlocksecurity.burp.screenshotmode.model.HighlightRule;
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
@@ -248,6 +249,23 @@ class TemplateCodecTest {
             );
             assertEquals(HeightMode.FULL, settings.heightMode, unreadable);
         }
+    }
+
+    @Test
+    void readsWhichMessagesAreShownAndBothWithout() {
+        assertEquals(MessageMode.BOTH, decodeSettings(v3(V3_SETTINGS)).messages, "saved before the setting existed");
+        for (MessageMode mode : MessageMode.values()) {
+            Settings settings = decodeSettings(
+                v3(V3_SETTINGS.replace("\"disposition\"", "\"messages\": \"" + mode.id() + "\", \"disposition\""))
+            );
+            assertEquals(mode, settings.messages);
+            String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", settings)), "t1"));
+            assertEquals(mode, decodeSettings(encoded).messages, "round trip");
+        }
+        Settings later = decodeSettings(
+            v3(V3_SETTINGS.replace("\"disposition\"", "\"messages\": \"later\", \"disposition\""))
+        );
+        assertEquals(MessageMode.BOTH, later.messages, "a value from a later release");
     }
 
     @Test

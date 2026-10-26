@@ -70,7 +70,8 @@ suppliers/consumers (fonts, dark theme, owner window, logging, preferences) the 
 tests construct the full UI and render images without Burp — keep new Burp dependencies behind `Host` or
 `PreferenceStore`.
 
-**Rendering pipeline** (per message half, in `ui.ContentPanel`):
+**Rendering pipeline** (per message half, in `ui.ContentPanel`; a half that `Settings.messages` leaves out is not
+rendered at all, so its rules report nothing):
 `MessageText.fromBytes` (UTF-8 with ISO-8859-1 fallback, `\n` line breaks, truncation) →
 `pretty.PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`; only adds line breaks
 and indentation) →
@@ -130,7 +131,8 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
   `storage.SampleMessage`; something for every rule of Defaults to match, and a request time for the footer), edited in place and kept in memory by
   `TemplatesTab` (`TemplatePreview.Sample`), never stored. With the Rules and Headers tabs it shows one part beside its
   source (`ContentPanel.showOnly`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
-  the screenshot window and feeds the form the rule statuses, header hits and the sample's headers.
+  the screenshot window and feeds the form the rule statuses and header hits of the one-part panel (it renders every
+  part, whichever messages the template shows) and the sample's headers.
 - Undo/redo: the screenshot window and the template editor each own a `ui.SettingsHistory` of `Settings` snapshots,
   told of every change through the form's `onChange` (a no-op change is no step; typing in a text field is one step,
   taken when it pauses). Undo restores the snapshot **in place** (`Settings.copyFrom`, which keeps the rule lists that
@@ -150,7 +152,7 @@ migrates v2, v1 and unversioned v0 payloads; the same codec handles template imp
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules
 there (in Defaults), never change the built-in ids, and update the file whenever `VERSION` changes
 (`BuiltInTemplatesTest` fails otherwise). Optional settings fields
-(`theme`, `view`, `url`, `height`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
+(`theme`, `view`, `url`, `height`, `messages`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
 none, with the stored headers taken as the template's own. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced

@@ -290,8 +290,16 @@ final class ContentPanel extends JPanel {
         url.render(decoratedUrl, List.of(), palette, mono);
         url.setBackground(palette.codeBackground());
 
-        renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
-        renderPane(responsePane, data.responseText(), RuleTarget.RESPONSE, settings, palette, mono, ui);
+        // A message left out of the screenshot is not rendered, so its rules match nothing there and can't fail. A
+        // single part is shown with every part rendered, for the statuses of all the rules it edits.
+        boolean request = only == null ? settings.messages.shows(RuleTarget.REQUEST) : only == RuleTarget.REQUEST;
+        boolean response = only == null ? settings.messages.shows(RuleTarget.RESPONSE) : only == RuleTarget.RESPONSE;
+        if (request || only != null) {
+            renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
+        }
+        if (response || only != null) {
+            renderPane(responsePane, data.responseText(), RuleTarget.RESPONSE, settings, palette, mono, ui);
+        }
 
         int orientation =
             settings.disposition == Disposition.HORIZONTAL ? JSplitPane.HORIZONTAL_SPLIT : JSplitPane.VERTICAL_SPLIT;
@@ -302,9 +310,16 @@ final class ContentPanel extends JPanel {
         split.setDividerColor(palette.border());
         split.setBackground(palette.background());
 
-        requestPane.setVisible(only == null || only == RuleTarget.REQUEST);
-        responsePane.setVisible(only == null || only == RuleTarget.RESPONSE);
-        split.setVisible(only != RuleTarget.URL);
+        requestPane.setVisible(request);
+        responsePane.setVisible(response);
+        split.setVisible(request || response);
+        // The split pane keeps its divider beside a hidden side: a message shown alone has none, only the thin line
+        // below the URL bar.
+        int dividerSize = request && response ? DIVIDER_SIZE : 0;
+        if (split.getDividerSize() != dividerSize) {
+            split.setDividerSize(dividerSize);
+            SwingUtilities.invokeLater(this::applySplitRatio);
+        }
         footer.setVisible(only == null && (timestamp != null || responseInfo != null));
         footer.setBackground(palette.background());
         footer.setBorder(

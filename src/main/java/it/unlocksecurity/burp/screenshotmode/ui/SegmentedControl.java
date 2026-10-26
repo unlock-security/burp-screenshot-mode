@@ -33,6 +33,14 @@ import javax.swing.border.AbstractBorder;
  */
 final class SegmentedControl<E> extends JPanel {
 
+    /**
+     * Disabled, the selected option would get the panel's background and Burp's near-black disabled text, standing out
+     * from the faded others as if it alone were enabled: fade its fill and text instead, so it still shows as chosen.
+     */
+    private static final String DISABLED_SELECTED =
+        ";toolbar.disabledSelectedBackground: mix($Button.toolbar.selectedBackground,$Panel.background,35%)" +
+        ";toolbar.disabledSelectedForeground: mix($Button.toolbar.selectedForeground,$Panel.background,45%)";
+
     private final List<E> values;
     private final List<JToggleButton> buttons = new ArrayList<>();
     private final Consumer<E> onChange;
@@ -85,6 +93,7 @@ final class SegmentedControl<E> extends JPanel {
         for (int i = 0; i < values.length; i++) {
             int index = i;
             JToggleButton button = Widgets.greyedWhenDisabled(new JToggleButton(label.apply(values[i])));
+            button.putClientProperty("FlatLaf.style", button.getClientProperty("FlatLaf.style") + DISABLED_SELECTED);
             button.putClientProperty("JButton.buttonType", "toolBarButton");
             button.setMargin(new Insets(2, 10, 2, 10));
             button.addActionListener(event -> select(index, true));

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.MatchMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
@@ -112,6 +113,53 @@ class ContentPanelTest {
             content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
         });
         assertEquals(new RuleStatus(2, null, null), content[0].ruleStatuses().get(rule), "one in each message");
+    }
+
+    @Test
+    void leavesOutTheMessageNotShownAndWhatItsRulesWouldDo() throws Throwable {
+        Settings settings = new Settings();
+        settings.messages = MessageMode.REQUEST;
+        RedactionRule header = RedactionRule.forHeaders(List.of("X-Trace"), RedactionMode.REPLACE);
+        RedactionRule invalid = RedactionRule.create("(", RuleTarget.RESPONSE, RedactionMode.BLUR, MatchMode.REGEX);
+        settings.redactions.addAll(List.of(header, invalid));
+        MessageData data = new MessageData(
+            "k",
+            "https://x/",
+            "GET / HTTP/1.1\nX-Trace: 1\n",
+            "HTTP/1.1 200 OK\nX-Trace: 2\n",
+            0,
+            null,
+            null
+        );
+        ContentPanel[] content = new ContentPanel[1];
+        onEdt(() -> {
+            content[0] = new ContentPanel();
+            content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
+        });
+        assertTrue(content[0].requestPane().isVisible());
+        assertFalse(content[0].responsePane().isVisible());
+        assertEquals(new RuleStatus(1, null, null), content[0].ruleStatuses().get(header), "the request's only");
+        assertEquals(null, content[0].ruleStatuses().get(invalid), "nothing to fail on in the screenshot");
+        assertFalse(content[0].headerHits().containsKey(RuleTarget.RESPONSE));
+        javax.swing.JSplitPane split = (javax.swing.JSplitPane) content[0].requestPane().getParent();
+        assertEquals(0, split.getDividerSize(), "no divider beside the message left out");
+
+        onEdt(() -> {
+            content[0].showOnly(RuleTarget.RESPONSE);
+            content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
+        });
+        assertFalse(content[0].requestPane().isVisible());
+        assertTrue(content[0].responsePane().isVisible(), "the part edited, whichever messages the screenshot shows");
+        assertEquals(new RuleStatus(2, null, null), content[0].ruleStatuses().get(header), "every part rendered");
+        assertTrue(content[0].ruleStatuses().get(invalid).failed());
+        assertEquals(0, split.getDividerSize(), "nor beside a part shown alone");
+
+        onEdt(() -> {
+            content[0].showOnly(null);
+            settings.messages = MessageMode.BOTH;
+            content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
+        });
+        assertTrue(split.getDividerSize() > 0, "between the two messages");
     }
 
     private static RedactionRule named(Settings settings, String name) {

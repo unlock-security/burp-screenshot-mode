@@ -249,7 +249,8 @@ final class PreviewArea extends JPanel implements Scrollable {
         int responseOverflow = response.isVisible() ? response.overflow() : 0;
         int fitted;
         boolean dividerMoved = false;
-        if (content.isSideBySide()) {
+        // A message shown alone gives back its spare room: a hidden one, which needs none, must not take the max.
+        if (content.isSideBySide() && request.isVisible() && response.isVisible()) {
             fitted = height + Math.max(requestOverflow, responseOverflow);
         } else {
             int requestHeight = request.getHeight() + requestOverflow;

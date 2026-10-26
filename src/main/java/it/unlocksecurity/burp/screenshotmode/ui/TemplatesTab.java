@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
 import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
@@ -982,7 +983,9 @@ public final class TemplatesTab extends JPanel {
                 case NAME -> template.name;
                 // A built-in template is based on nothing.
                 case BASED_ON -> template.builtIn ? "—" : BuiltInTemplates.byId(template.settings.basedOn).name;
-                case LAYOUT -> template.settings.disposition.label();
+                case LAYOUT -> template.settings.messages == MessageMode.BOTH
+                    ? template.settings.disposition.label()
+                    : template.settings.messages.label() + " only";
                 case WIDTH -> template.settings.widthMode == WidthMode.PIXEL
                     ? template.settings.widthPixels + "px"
                     : template.settings.widthMode.label();

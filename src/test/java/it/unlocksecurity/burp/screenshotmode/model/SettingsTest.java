@@ -50,12 +50,14 @@ class SettingsTest {
         settings.showTimestamp = true;
         settings.heightMode = HeightMode.PIXEL;
         settings.heightPixels = 640;
+        settings.messages = MessageMode.REQUEST;
         settings.redactions.add(named("Kept", "k"));
-        assertEquals(5, settings.appearanceChanges(parent));
+        assertEquals(6, settings.appearanceChanges(parent));
 
         settings.copyAppearance(parent);
         assertEquals(0, settings.appearanceChanges(parent));
         assertEquals(1, settings.redactions.size(), "rules are not appearance");
+        assertEquals(MessageMode.BOTH, settings.messages);
     }
 
     @Test

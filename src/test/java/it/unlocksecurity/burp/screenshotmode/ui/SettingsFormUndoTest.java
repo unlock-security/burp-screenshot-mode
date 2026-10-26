@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeightMode;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.RedactionRule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleType;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
@@ -148,6 +149,27 @@ class SettingsFormUndoTest {
         undo(false);
         undo(false);
         assertEquals(WidthMode.FULL, settings.widthMode, "the drag was one step");
+    }
+
+    @Test
+    void disablesTheLayoutWhileOneMessageIsShown() {
+        segmented(MessageMode.BOTH).click(MessageMode.REQUEST);
+        assertEquals(MessageMode.REQUEST, settings.messages);
+        assertFalse(segmented(Disposition.HORIZONTAL).isEnabled(), "it would change nothing");
+        assertEquals(Disposition.HORIZONTAL, settings.disposition, "kept for when both are shown again");
+
+        undo(false);
+        assertEquals(MessageMode.BOTH, settings.messages);
+        assertTrue(segmented(Disposition.HORIZONTAL).isEnabled());
+
+        undo(true);
+        assertFalse(segmented(Disposition.HORIZONTAL).isEnabled(), "as the reloaded tab is built");
+    }
+
+    /** The segmented control that shows {@code value}. */
+    @SuppressWarnings("unchecked")
+    private <E> SegmentedControl<E> segmented(E value) {
+        return (SegmentedControl<E>) find(form, SegmentedControl.class, control -> control.value() == value);
     }
 
     @SuppressWarnings("unchecked")
