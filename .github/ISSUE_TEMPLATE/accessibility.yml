@@ -1,0 +1,92 @@
+name: Accessibility issue
+description: Something in Screenshot Mode is hard or impossible to use with your setup
+labels: ["accessibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for telling us! You don't need to know the cause or the fix: describe what got in the way.
+        See [ACCESSIBILITY.md](https://github.com/unlock-security/burp-screenshot-mode/blob/main/ACCESSIBILITY.md)
+        for what we aim for and the known limitations.
+
+        > [!WARNING]
+        > If you attach screenshots or example requests, remove any client or otherwise sensitive data first.
+
+  - type: textarea
+    id: barrier
+    attributes:
+      label: What were you trying to do, and what got in the way?
+      description: For example, a control you couldn't reach with the keyboard, or one your screen reader didn't name.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Where you were in Screenshot Mode and what you pressed or clicked. A screen recording helps too.
+      placeholder: |
+        1. Open the screenshot window with Ctrl+Shift+S
+        2. Press Tab until the Rules tab
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How much does it get in the way?
+      options:
+        - Critical - I can't complete the task at all
+        - Serious - the task is very hard, though there is a workaround
+        - Moderate - the task is slower or inconsistent
+        - Minor - a small annoyance
+    validations:
+      required: true
+
+  - type: textarea
+    id: assistive-technology
+    attributes:
+      label: Assistive technology and settings
+      description: |
+        The screen reader, magnifier, voice control or other tool you use, with its version, and settings that matter
+        (keyboard only, a larger font size in Burp, high contrast, ...). Write "none" if you don't use any.
+      placeholder: NVDA 2025.1 with the Java Access Bridge enabled
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Screenshot Mode version
+      description: From the jar name (`screenshot-mode-<version>.jar`) or the release you downloaded.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: burp-version
+    attributes:
+      label: Burp Suite edition and version
+      description: From **Help › About**.
+      placeholder: "Professional 2026.7"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true

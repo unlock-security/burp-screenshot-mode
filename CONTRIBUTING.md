@@ -2,7 +2,12 @@
 
 Thanks for helping improve the extension! To report a bug or ask for a feature, open an
 [issue](https://github.com/unlock-security/burp-screenshot-mode/issues/new/choose) using one of the templates.
-Please remove client data from any screenshot or request you attach.
+Please remove client data from any screenshot or request you attach. Report vulnerabilities privately, as described
+in [SECURITY.md](SECURITY.md), and accessibility barriers with the accessibility issue template
+([ACCESSIBILITY.md](ACCESSIBILITY.md)). Everyone taking part agrees to the [code of conduct](CODE_OF_CONDUCT.md).
+
+Pull requests go to `dev` and fill in the [pull request template](.github/pull_request_template.md), whose checklist
+includes the accessibility checks for UI changes.
 
 The extension started as a port of Caido's [Screenshot Mode](https://github.com/caido-community/screenshot-mode)
 plugin and is now an independent project, with its own features and UI: changes don't need to match Caido, and the

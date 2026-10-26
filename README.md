@@ -157,7 +157,12 @@ This compiles against the Montoya API, runs the tests and produces a self-contai
 ## Contributing
 
 Bug reports, feature requests and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
-development setup, code formatting, commit conventions and how releases work.
+development setup, code formatting, commit conventions and how releases work, and the
+[code of conduct](CODE_OF_CONDUCT.md) that everyone taking part agrees to.
+
+- **Security**: report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md), not in a public issue.
+- **Accessibility**: what we aim for, what works today and how to report a barrier are in
+  [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 ## License
 
