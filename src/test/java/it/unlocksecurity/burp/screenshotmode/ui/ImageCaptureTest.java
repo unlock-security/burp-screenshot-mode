@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
+import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.WidthMode;
 import java.awt.image.BufferedImage;
 import java.util.Arrays;
@@ -102,7 +103,9 @@ class ImageCaptureTest {
         Locale before = Locale.getDefault();
         Locale.setDefault(Locale.US);
         try {
-            assertEquals("2,400 × 1,522 px PNG (2×)", ImageCapture.sizeLabel(1200, 761));
+            assertEquals("2,400 × 1,522 px PNG (2×)", ImageCapture.sizeLabel(1200, 761, 2));
+            assertEquals("1,200 × 761 px PNG (1×)", ImageCapture.sizeLabel(1200, 761, 1));
+            assertEquals("3,600 × 2,283 px PNG (3×)", ImageCapture.sizeLabel(1200, 761, 3));
         } finally {
             Locale.setDefault(before);
         }
@@ -110,8 +113,25 @@ class ImageCaptureTest {
 
     @Test
     void refusesImagesTooLargeToBuild() {
-        assertFalse(ImageCapture.tooLarge(1200, 10_000), "2,400 × 20,000 px: 48 megapixels");
-        assertTrue(ImageCapture.tooLarge(1200, 10_500), "2,400 × 21,000 px: 50.4 megapixels");
+        assertFalse(ImageCapture.tooLarge(1200, 10_000, 2), "2,400 × 20,000 px: 48 megapixels");
+        assertTrue(ImageCapture.tooLarge(1200, 10_500, 2), "2,400 × 21,000 px: 50.4 megapixels");
+        assertTrue(ImageCapture.tooLarge(1200, 10_000, 3), "3,600 × 30,000 px: 108 megapixels");
+        assertFalse(ImageCapture.tooLarge(1200, 20_000, 1), "1,200 × 20,000 px: 24 megapixels");
+    }
+
+    @Test
+    void rendersAtTheChosenScale() throws Exception {
+        for (int scale : Settings.SCALES) {
+            java.util.concurrent.atomic.AtomicReference<BufferedImage> image =
+                new java.util.concurrent.atomic.AtomicReference<>();
+            javax.swing.SwingUtilities.invokeAndWait(() -> {
+                ContentPanel content = new ContentPanel();
+                content.setSize(300, 200);
+                image.set(ImageCapture.render(content, scale));
+            });
+            assertEquals(300 * scale, image.get().getWidth());
+            assertEquals(200 * scale, image.get().getHeight());
+        }
     }
 
     @Test

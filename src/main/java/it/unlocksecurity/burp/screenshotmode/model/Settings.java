@@ -16,6 +16,9 @@ public final class Settings {
     public static final int DEFAULT_PIXEL_HEIGHT = 600;
     public static final int MIN_PIXEL_HEIGHT = 50;
     public static final int MAX_PIXEL_HEIGHT = 20_000;
+    /** The image pixels per pixel on screen that can be chosen. */
+    public static final List<Integer> SCALES = List.of(1, 2, 3);
+    public static final int DEFAULT_SCALE = 2;
 
     /**
      * The id of the built-in template these settings are based on: the headers that {@link #headers} doesn't set
@@ -33,6 +36,8 @@ public final class Settings {
     public HeightMode heightMode = HeightMode.FULL;
     /** Only meaningful when {@link #heightMode} is {@link HeightMode#PIXEL}. */
     public int heightPixels = DEFAULT_PIXEL_HEIGHT;
+    /** Image pixels per pixel on screen: one of {@link #SCALES}. */
+    public int scale = DEFAULT_SCALE;
     public List<HighlightRule> highlights = new ArrayList<>();
     public List<RedactionRule> redactions = new ArrayList<>();
     public boolean showTimestamp = false;
@@ -87,6 +92,7 @@ public final class Settings {
             disposition != other.disposition,
             !Objects.equals(maxContentWidth(), other.maxContentWidth()) || widthMode != other.widthMode,
             heightMode != other.heightMode || (heightMode == HeightMode.PIXEL && heightPixels != other.heightPixels),
+            scale != other.scale,
             theme != other.theme,
             url != other.url,
             lineNumbers != other.lineNumbers,
@@ -107,6 +113,7 @@ public final class Settings {
         widthPixels = other.widthPixels;
         heightMode = other.heightMode;
         heightPixels = other.heightPixels;
+        scale = other.scale;
         theme = other.theme;
         url = other.url;
         lineNumbers = other.lineNumbers;

@@ -53,14 +53,16 @@ class SettingsTest {
         settings.heightPixels = 640;
         settings.messages = MessageMode.REQUEST;
         settings.lineNumbers = false;
+        settings.scale = 3;
         settings.redactions.add(named("Kept", "k"));
-        assertEquals(7, settings.appearanceChanges(parent));
+        assertEquals(8, settings.appearanceChanges(parent));
 
         settings.copyAppearance(parent);
         assertEquals(0, settings.appearanceChanges(parent));
         assertEquals(1, settings.redactions.size(), "rules are not appearance");
         assertEquals(MessageMode.BOTH, settings.messages);
         assertTrue(settings.lineNumbers);
+        assertEquals(Settings.DEFAULT_SCALE, settings.scale);
     }
 
     @Test

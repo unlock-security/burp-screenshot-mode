@@ -656,6 +656,24 @@ final class SettingsForm extends JPanel {
             false
         );
 
+        SegmentedControl<Integer> scale = new SegmentedControl<>(
+            Settings.SCALES.toArray(Integer[]::new),
+            settings.scale,
+            value -> value + "×",
+            value -> {
+                settings.scale = value;
+                onChange.run();
+            }
+        );
+        addRow(
+            grid,
+            row++,
+            "Scale",
+            scale,
+            "Image pixels per pixel on screen: a higher scale is sharper when zoomed in or printed, and a larger file",
+            false
+        );
+
         SegmentedControl<Disposition> layout = Widgets.segmented(Disposition.values(), settings.disposition, value -> {
             settings.disposition = value;
             onChange.run();

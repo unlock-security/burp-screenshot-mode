@@ -94,7 +94,7 @@ final class ScreenshotDialog extends JDialog {
     private final JLabel output = Widgets.hint("");
     private final JLabel failedRules = new JLabel();
     private final JLabel pageNote = new JLabel();
-    private final JLabel tooLarge = new JLabel("⚠ Too large to export: choose a smaller height");
+    private final JLabel tooLarge = new JLabel("⚠ Too large to export: choose a smaller height or scale");
     private final JLabel prettyFailed = new JLabel("⚠ Pretty view failed: showing raw");
     // Not warnings: nothing is wrong with the export. The footer can't show a time Burp doesn't have, and a very long
     // message shows only its start.
@@ -521,9 +521,9 @@ final class ScreenshotDialog extends JDialog {
 
     /** The size of the image Copy and Save produce: the content as laid out, at the capture scale. */
     private void updateOutputLabel() {
-        output.setText(ImageCapture.sizeLabel(content.getWidth(), content.getHeight()));
+        output.setText(ImageCapture.sizeLabel(content.getWidth(), content.getHeight(), state.settings.scale));
         String note = ImageCapture.pageNote(state.settings.widthMode, content.getHeight());
-        boolean large = ImageCapture.tooLarge(content.getWidth(), content.getHeight());
+        boolean large = ImageCapture.tooLarge(content.getWidth(), content.getHeight(), state.settings.scale);
         pageNote.setText(note == null ? "" : "⚠ " + note);
         // An image too large to export is taller than a page anyway: one warning is enough.
         pageNote.setVisible(note != null && !large);
@@ -743,7 +743,7 @@ final class ScreenshotDialog extends JDialog {
 
     private void takeScreenshot(boolean toClipboard) {
         flushRender();
-        if (ImageCapture.tooLarge(content.getWidth(), content.getHeight())) {
+        if (ImageCapture.tooLarge(content.getWidth(), content.getHeight(), state.settings.scale)) {
             // The preview bar says why and what to do.
             showStatus("Too large to export", true);
             return;
@@ -752,7 +752,7 @@ final class ScreenshotDialog extends JDialog {
             return;
         }
         try {
-            BufferedImage image = ImageCapture.render(content);
+            BufferedImage image = ImageCapture.render(content, state.settings.scale);
             if (toClipboard) {
                 ImageCapture.copyToClipboard(image);
                 showStatus("Image copied", false);

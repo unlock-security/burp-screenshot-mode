@@ -163,6 +163,7 @@ public final class TemplateCodec {
             height.addProperty("value", settings.heightPixels);
         }
         object.add("height", height);
+        object.addProperty("scale", settings.scale);
 
         JsonArray highlights = new JsonArray();
         for (HighlightRule rule : settings.highlights) {
@@ -286,6 +287,16 @@ public final class TemplateCodec {
             settings.widthPixels = (int) Math.round(number(width, "value"));
         }
         parseHeight(object.get("height"), settings);
+        JsonElement scale = object.get("scale");
+        // Optional, and a scale this release doesn't offer reads as the default.
+        settings.scale =
+            scale != null &&
+            scale.isJsonPrimitive() &&
+            scale.getAsJsonPrimitive().isNumber() &&
+            scale.getAsDouble() == scale.getAsInt() &&
+            Settings.SCALES.contains(scale.getAsInt())
+                ? scale.getAsInt()
+                : Settings.DEFAULT_SCALE;
 
         for (JsonElement element : asArray(object.get("highlights"), "highlights")) {
             settings.highlights.add(parseHighlight(asObject(element, "highlight")));

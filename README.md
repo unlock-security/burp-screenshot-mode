@@ -54,8 +54,11 @@ No external tools, no manual cropping and blurring.
 - **Height**: as tall as the preview (*Full Height*), **Fit to content** to show every line of the request and
   response, which keeps fitting as you change the settings, or a custom height you set by dragging the handle below
   the screenshot. Saved in templates like the width. With A4 or Letter, the preview warns when the screenshot is taller
-  than one page, and an image over 50 megapixels (about 2,400 × 21,000 px) can't be exported, as building it could run
-  Burp out of memory.
+  than one page, and an image over 50 megapixels (about 2,400 × 21,000 px at 2×) can't be exported, as building it
+  could run Burp out of memory.
+- **Scale**: 1×, 2× or 3× image pixels per pixel on screen. 2× is sharp on high-resolution screens and in documents;
+  3× stays sharp when zoomed in or printed, 1× makes the smallest files. The bar above the preview shows the size of
+  the PNG.
 - **Metadata footer**: request timestamp and response size/round-trip time. The timestamp shows only when Burp knows
   when the request was sent (not for an unsent Repeater edit), and a message with no response says so.
 - **Messages**: the request and the response, or only one of them, so a screenshot of just the request needs no
@@ -86,7 +89,7 @@ No external tools, no manual cropping and blurring.
   in the screenshot window and in the template editor: deleted rules, restored defaults, rules added from the preview
   or the *Headers* tab, and **Revert** too. Typing counts as one step. Undo shows what it changed: it opens the tab
   and the rule it brought back. Deleting a rule also offers **Undo** right above the rules.
-- **Export** as a 2× PNG file or straight to the clipboard.
+- **Export** as a PNG file or straight to the clipboard.
 
 ## Screenshots
 

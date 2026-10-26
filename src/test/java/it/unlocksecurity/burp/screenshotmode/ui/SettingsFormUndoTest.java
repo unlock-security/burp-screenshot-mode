@@ -176,6 +176,15 @@ class SettingsFormUndoTest {
         assertEquals(true, segmented(true).value(), "the reloaded tab shows it");
     }
 
+    @Test
+    void setsTheScaleAndUndoes() {
+        segmented(2).click(3);
+        assertEquals(3, settings.scale);
+        undo(false);
+        assertEquals(2, settings.scale);
+        assertEquals(Integer.valueOf(2), segmented(2).value(), "the reloaded tab shows it");
+    }
+
     /** The segmented control that shows {@code value}. */
     @SuppressWarnings("unchecked")
     private <E> SegmentedControl<E> segmented(E value) {

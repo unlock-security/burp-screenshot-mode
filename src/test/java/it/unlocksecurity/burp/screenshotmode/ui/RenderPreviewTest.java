@@ -133,7 +133,7 @@ class RenderPreviewTest {
             layoutTree(content);
             content.setSplitRatio(0.5);
             layoutTree(content);
-            image.set(ImageCapture.render(content));
+            image.set(ImageCapture.render(content, settings.scale));
         });
         return image.get();
     }

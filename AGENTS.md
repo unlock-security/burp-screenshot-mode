@@ -94,9 +94,9 @@ in user patterns. Message bodies come from servers under test and are processed 
 `HttpSyntax` scan them by hand in linear time, with the helpers in `render.Scan`: don't run `java.util.regex` patterns
 with a repeated group, like `(?:"[^"]*"|[^>])*`, over a body, since they recurse once per character and overflow the
 stack on long input. Blur has no Swing equivalent: `MessageView` post-processes the affected rows on an offscreen image
-(`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at 2× and exports PNG to file or clipboard
-(custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests `ImageCapture.fileName`, built
-from the URL bar's `copyText` so what a rule redacts there stays out of the name.
+(`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at `Settings.scale` and exports PNG to file
+or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests
+`ImageCapture.fileName`, built from the URL bar's `copyText` so what a rule redacts there stays out of the name.
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own
@@ -153,7 +153,7 @@ migrates v2, v1 and unversioned v0 payloads; the same codec handles template imp
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules
 there (in Defaults), never change the built-in ids, and update the file whenever `VERSION` changes
 (`BuiltInTemplatesTest` fails otherwise). Optional settings fields
-(`theme`, `view`, `url`, `height`, `messages`, `lineNumbers`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
+(`theme`, `view`, `url`, `height`, `scale`, `messages`, `lineNumbers`, `basedOn`) default sensibly when missing; a `basedOn` this release doesn't ship reads as
 none, with the stored headers taken as the template's own. Any schema change must keep loading the templates users already saved
 or exported: bump `VERSION` with a migration when needed, and keep the migration chain working (covered by
 `TemplateCodecTest`). Templates saved before version 3 have their exact copies of the old default redactions replaced

@@ -27,9 +27,6 @@ import javax.imageio.ImageIO;
 /** Renders the screenshot content to an image and exports it (port of {@code utils/screenshot.ts}). */
 final class ImageCapture {
 
-    /** Same pixel density as the Caido plugin's {@code domToPng(..., { scale: 2 })}. */
-    static final double SCALE = 2;
-
     /**
      * PNG bytes under the platform's native PNG clipboard type. {@link DataFlavor#imageFlavor} can't be used: on
      * macOS the JDK always converts it to TIFF.
@@ -38,19 +35,20 @@ final class ImageCapture {
 
     private ImageCapture() {}
 
-    static BufferedImage render(ContentPanel content) {
+    /** @param scale image pixels per pixel on screen */
+    static BufferedImage render(ContentPanel content, int scale) {
         content.setCaptureMode(true);
         try {
             BufferedImage image = new BufferedImage(
-                pixels(content.getWidth()),
-                pixels(content.getHeight()),
+                pixels(content.getWidth(), scale),
+                pixels(content.getHeight(), scale),
                 BufferedImage.TYPE_INT_RGB
             );
             Graphics2D g = image.createGraphics();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g.scale(SCALE, SCALE);
+            g.scale(scale, scale);
             content.printAll(g);
             g.dispose();
             return image;
@@ -140,19 +138,19 @@ final class ImageCapture {
     }
 
     /** The image pixels for {@code size} on screen. */
-    static int pixels(int size) {
-        return (int) Math.ceil(size * SCALE);
+    static int pixels(int size, int scale) {
+        return size * scale;
     }
 
     /** The size of the PNG for content of {@code width} × {@code height} on screen, such as "2,400 × 1,520 px PNG (2×)". */
-    static String sizeLabel(int width, int height) {
+    static String sizeLabel(int width, int height, int scale) {
         NumberFormat number = NumberFormat.getIntegerInstance();
         return (
-            number.format(pixels(width)) +
+            number.format(pixels(width, scale)) +
             " × " +
-            number.format(pixels(height)) +
+            number.format(pixels(height, scale)) +
             " px PNG (" +
-            NumberFormat.getInstance().format(SCALE) +
+            scale +
             "×)"
         );
     }
@@ -161,8 +159,8 @@ final class ImageCapture {
     static final long MAX_PIXELS = 50_000_000;
 
     /** Whether content of {@code width} × {@code height} on screen makes an image too large to build. */
-    static boolean tooLarge(int width, int height) {
-        return (long) pixels(width) * pixels(height) > MAX_PIXELS;
+    static boolean tooLarge(int width, int height, int scale) {
+        return (long) pixels(width, scale) * pixels(height, scale) > MAX_PIXELS;
     }
 
     /** A note when content {@code height} tall won't fit on one page of the paper width chosen, or {@code null}. */

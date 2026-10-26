@@ -269,6 +269,30 @@ class TemplateCodecTest {
     }
 
     @Test
+    void readsTheScaleAndTakesTwoWithout() {
+        assertEquals(2, decodeSettings(v3(V3_SETTINGS)).scale, "saved before the setting existed");
+        for (int scale : Settings.SCALES) {
+            Settings settings = decodeSettings(
+                v3(V3_SETTINGS.replace("\"showResponseInfo\": true", "\"showResponseInfo\": true, \"scale\": " + scale))
+            );
+            assertEquals(scale, settings.scale);
+            String encoded = TemplateCodec.encode(new StoredData(List.of(new Template("t1", "Mine", settings)), "t1"));
+            assertEquals(scale, decodeSettings(encoded).scale, "round trip");
+        }
+        for (String unknown : List.of("4", "2.5", "0", "\"2\"", "null")) {
+            Settings settings = decodeSettings(
+                v3(
+                    V3_SETTINGS.replace(
+                        "\"showResponseInfo\": true",
+                        "\"showResponseInfo\": true, \"scale\": " + unknown
+                    )
+                )
+            );
+            assertEquals(2, settings.scale, unknown);
+        }
+    }
+
+    @Test
     void readsTheLineNumbersAndShowsThemWithout() {
         assertTrue(decodeSettings(v3(V3_SETTINGS)).lineNumbers, "saved before the setting existed");
         Settings hidden = decodeSettings(
