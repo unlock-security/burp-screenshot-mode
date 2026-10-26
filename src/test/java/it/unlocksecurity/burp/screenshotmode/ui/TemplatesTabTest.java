@@ -68,13 +68,91 @@ class TemplatesTabTest {
     }
 
     @Test
-    void cancelDiscardsAnUntouchedDuplicate() throws Exception {
+    void savesAndKeepsEditingWhatItSaved() throws Exception {
+        TemplateStore store = store();
+        List<String> asked = new java.util.ArrayList<>();
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            tab.setDiscardConfirmation(message -> {
+                asked.add(message);
+                return false;
+            });
+            button(tab, "New template").doClick();
+            JTextField name = find(tab, JTextField.class, f -> f.getText().isEmpty() && isShowing(f, tab)).get();
+            name.setText("Report");
+            assertTrue(find(tab, JComboBox.class, c -> c.getSelectedItem() instanceof Template).isPresent());
+            button(tab, "Save").doClick();
+
+            assertEquals(BuiltInTemplates.all().size() + 1, store.templates().size(), "created");
+            Template created = store.templateNamed("Report").get();
+            assertTrue(isShowing(button(tab, "Save"), tab), "still editing");
+            assertTrue(isShowing(label(tab, "Edit \"Report\""), tab), "now an edit of the saved template");
+            assertTrue(isShowing(label(tab, "Template created"), tab));
+            assertFalse(label(tab, "Unsaved").isVisible());
+            assertFalse(button(tab, "Save").isEnabled(), "nothing left to save");
+            assertFalse(
+                find(tab, JComboBox.class, c -> c.getSelectedItem() instanceof Template).isPresent(),
+                "Based on is fixed once the template exists"
+            );
+
+            name.setText("Report A4");
+            assertTrue(label(tab, "Unsaved").isVisible());
+            assertTrue(button(tab, "Save").isEnabled());
+            name.setText("Report");
+            assertFalse(button(tab, "Save").isEnabled(), "back as saved");
+            name.setText("Report A4");
+            button(tab, "Save").doClick();
+            assertEquals(BuiltInTemplates.all().size() + 1, store.templates().size(), "saved again, not created again");
+            assertEquals("Report A4", store.getTemplateById(created.id).get().name);
+            assertTrue(isShowing(label(tab, "Template saved"), tab));
+
+            button(tab, "Close").doClick();
+            assertEquals(List.of(), asked, "nothing unsaved to ask about");
+            assertTrue(isShowing(button(tab, "New template"), tab), "back to the list");
+        });
+    }
+
+    @Test
+    void savesWithTheMenuShortcut() throws Exception {
+        TemplateStore store = store();
+        Template custom = store.createTemplate("Report", RenderPreviewTest.sampleSettings());
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatesTab tab = new TemplatesTab(store, host());
+            select(tab, custom);
+            button(tab, "Edit").doClick();
+            JTextField name = find(tab, JTextField.class, field -> field.getText().equals("Report")).get();
+            assertFalse(button(tab, "Save").isEnabled(), "an untouched template has nothing to save");
+            name.setText("Renamed");
+            javax.swing.KeyStroke key = javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_S,
+                Widgets.menuShortcutMask()
+            );
+            JComponent editor = (JComponent) SwingUtilities.getAncestorOfClass(JComponent.class, name);
+            while (editor.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key) == null) {
+                editor = (JComponent) editor.getParent();
+            }
+            Object action = editor.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).get(key);
+            editor.getActionMap().get(action).actionPerformed(null);
+            assertEquals("Renamed", store.getTemplateById(custom.id).get().name);
+            assertTrue(isShowing(button(tab, "Save"), tab), "still editing");
+        });
+    }
+
+    /** The label with this text. */
+    private static JLabel label(java.awt.Container root, String text) {
+        return find(root, JLabel.class, label -> text.equals(label.getText())).orElseThrow(() ->
+            new AssertionError("no label " + text)
+        );
+    }
+
+    @Test
+    void closeDiscardsAnUntouchedDuplicate() throws Exception {
         TemplateStore store = store();
         SwingUtilities.invokeAndWait(() -> {
             TemplatesTab tab = new TemplatesTab(store, host());
             select(tab, store.getDefaultTemplate());
             button(tab, "Duplicate").doClick();
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
         });
         assertEquals(BuiltInTemplates.all().size(), store.templates().size());
     }
@@ -142,7 +220,7 @@ class TemplatesTabTest {
     }
 
     @Test
-    void cancelAsksBeforeDiscardingChanges() throws Exception {
+    void closeAsksBeforeDiscardingChanges() throws Exception {
         TemplateStore store = store();
         Template original = store.createTemplate("Report", null);
         SwingUtilities.invokeAndWait(() -> {
@@ -155,26 +233,26 @@ class TemplatesTabTest {
             });
             select(tab, original);
             button(tab, "Edit").doClick();
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
             assertTrue(asked.isEmpty(), "nothing to discard yet");
             assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
 
             button(tab, "Edit").doClick();
             JTextField name = find(tab, JTextField.class, f -> f.getText().equals(original.name)).get();
             name.setText("Renamed");
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
             assertEquals(List.of("Your changes to \"" + original.name + "\" haven't been saved."), asked);
             button(tab, "Save"); // still editing: throws if the Save button is not showing
 
             discard[0] = true;
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
             assertTrue(find(tab, JTable.class, t -> isShowing(t, tab)).isPresent(), "back to the list");
         });
         assertEquals(original.name, store.getTemplateById(original.id).orElseThrow().name, "nothing was saved");
     }
 
     @Test
-    void templatesInTheHeadingLeadBackToTheListLikeCancel() throws Exception {
+    void templatesInTheHeadingLeadBackToTheListLikeClose() throws Exception {
         TemplateStore store = store();
         Template original = store.createTemplate("Report", null);
         SwingUtilities.invokeAndWait(() -> {
@@ -559,11 +637,11 @@ class TemplatesTabTest {
 
             // Its own name is not taken.
             tab.setDiscardConfirmation(message -> true);
-            button(tab, "Cancel").doClick();
+            button(tab, "Close").doClick();
             select(tab, report);
             button(tab, "Edit").doClick();
             name = find(tab, JTextField.class, field -> "Template name".equals(placeholder(field))).get();
-            assertTrue(button(tab, "Save").isEnabled());
+            assertFalse(button(tab, "Save").isEnabled(), "nothing changed yet");
             name.setText("REPORT");
             assertTrue(button(tab, "Save").isEnabled());
         });

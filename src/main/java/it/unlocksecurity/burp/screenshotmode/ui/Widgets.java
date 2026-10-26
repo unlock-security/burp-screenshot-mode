@@ -375,6 +375,8 @@ final class Widgets {
     /** Burp's orange call-to-action style ({@code [style]Button.primary} in its theme); one per view. */
     static JButton primary(JButton button) {
         button.putClientProperty("FlatLaf.styleClass", "primary");
+        // Borderless: disabled, it keeps Burp's grey fill rather than the panel's, or it would read as plain text.
+        button.putClientProperty("FlatLaf.style", "disabledText: mix($Button.foreground,$Panel.background,35%)");
         return button;
     }
 

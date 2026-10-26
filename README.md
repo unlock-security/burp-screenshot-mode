@@ -80,7 +80,9 @@ No external tools, no manual cropping and blurring.
   of them, or duplicate it. Your template keeps following its built-in template's hidden headers, except the ones you changed, so new
   releases can hide more noise for you; its rules and appearance are yours and never change by themselves. Template
   names are unique, ignoring case: an imported template whose name is taken is added as "name (imported)", so nothing
-  is overwritten, and the import dialog says so before you import.
+  is overwritten, and the import dialog says so before you import. In the template editor, **Save** (**⌘S** /
+  **Ctrl+S**) saves and keeps the editor open, and is greyed out when there is nothing to save; **Close** goes back to
+  the list, asking first if something is unsaved.
 - **Template editor preview** on a made-up sample message, laid out like the screenshot window. With the *Rules* and
   *Headers* tabs, pick the URL, the request or the response: it is shown as written, and editable, beside how the
   screenshot shows it, so you can change a rule and the text it must match side by side. Each rule shows its matches

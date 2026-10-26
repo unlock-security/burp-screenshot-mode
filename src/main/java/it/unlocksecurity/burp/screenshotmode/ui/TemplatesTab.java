@@ -17,6 +17,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Insets;
+import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -36,6 +37,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.InputMap;
@@ -292,16 +294,21 @@ public final class TemplatesTab extends JPanel {
         JLabel unsaved = Widgets.chip("Unsaved");
         unsaved.setToolTipText("This template has changes that are not saved yet");
         JButton save = Widgets.primary(Widgets.button("Save"));
+        save.setToolTipText("Save the template and keep editing (" + Widgets.shortcut(KeyEvent.VK_S) + ")");
+        // What was saved last: Save keeps the editor open, and a new template, once saved, is edited like any other.
+        String[] savedId = { editing ? template.id : null };
+        String[] savedName = { originalName };
+        Settings[] saved = { original };
         BooleanSupplier dirty = () ->
-            !name.getText().trim().equals(originalName) || !TemplateCodec.sameSettings(original, working);
-        String ownId = editing ? template.id : null;
+            !name.getText().trim().equals(savedName[0]) || !TemplateCodec.sameSettings(saved[0], working);
         JLabel nameError = new JLabel();
         nameError.setForeground(Widgets.errorColor());
         Runnable updateState = () -> {
             // A taken name is said in words next to the field, not only with the outline.
-            String problem = nameProblem(store, name.getText(), ownId);
+            String problem = nameProblem(store, name.getText(), savedId[0]);
             boolean shown = problem != null && !problem.isEmpty();
-            save.setEnabled(problem == null);
+            // Nothing to save once saved and unchanged; a template not created yet, even an untouched duplicate, is.
+            save.setEnabled(problem == null && (savedId[0] == null || dirty.getAsBoolean()));
             nameError.setText(shown ? problem : "");
             nameError.setVisible(shown);
             name.putClientProperty("JComponent.outline", shown ? "error" : null);
@@ -310,30 +317,22 @@ public final class TemplatesTab extends JPanel {
         };
         updateState.run();
         Widgets.onTextChange(name, text -> updateState.run());
-        save.addActionListener(event -> {
-            String trimmed = name.getText().trim();
-            if (nameProblem(store, trimmed, ownId) != null) {
-                return;
-            }
-            if (editing) {
-                store.updateTemplate(template.id, trimmed, working);
-                showStatus("Template updated", false);
-            } else {
-                store.createTemplate(trimmed, working);
-                showStatus("Template created", false);
-            }
-            showList();
-        });
-        JButton cancel = Widgets.button("Cancel");
-        String displayName = originalName.isBlank() ? "this template" : "\"" + originalName + "\"";
+        JButton close = Widgets.button("Close");
+        close.setToolTipText("Back to the templates list");
         Runnable leave = () -> {
+            String displayName = savedName[0].isBlank() ? "this template" : "\"" + savedName[0] + "\"";
             if (
                 !dirty.getAsBoolean() || confirmDiscard.test("Your changes to " + displayName + " haven't been saved.")
             ) {
                 showList();
             }
         };
-        cancel.addActionListener(event -> leave.run());
+        close.addActionListener(event -> leave.run());
+        // Said next to the buttons, as the list and its status line are out of sight while editing.
+        JLabel savedNote = new JLabel();
+        savedNote.setForeground(Widgets.successColor());
+        Timer savedTimer = new Timer(4000, event -> savedNote.setText(""));
+        savedTimer.setRepeats(false);
 
         JLabel title = new JLabel(
             switch (mode) {
@@ -343,6 +342,27 @@ public final class TemplatesTab extends JPanel {
             }
         );
         title.setFont(title.getFont().deriveFont(Font.BOLD, title.getFont().getSize2D() + 3));
+        // The Based on choice of a new template, fixed once it is saved; set below.
+        Runnable[] fixBase = { () -> {} };
+        save.addActionListener(event -> {
+            String trimmed = name.getText().trim();
+            if (nameProblem(store, trimmed, savedId[0]) != null) {
+                return;
+            }
+            boolean created = savedId[0] == null;
+            if (created) {
+                savedId[0] = store.createTemplate(trimmed, working).id;
+                fixBase[0].run();
+            } else {
+                store.updateTemplate(savedId[0], trimmed, working);
+            }
+            savedName[0] = trimmed;
+            saved[0] = working.copy();
+            title.setText("Edit \"" + trimmed + "\"");
+            updateState.run();
+            savedNote.setText(created ? "Template created" : "Template saved");
+            savedTimer.restart();
+        });
         // The way back to the list, like Cancel: it asks before discarding the changes.
         JButton back = new JButton("Templates") {
             @Override
@@ -366,7 +386,8 @@ public final class TemplatesTab extends JPanel {
         heading.add(title);
         heading.add(unsaved);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        actions.add(cancel);
+        actions.add(savedNote);
+        actions.add(close);
         actions.add(save);
         JPanel bar = new JPanel(new BorderLayout(12, 0));
         bar.add(heading, BorderLayout.CENTER);
@@ -419,6 +440,19 @@ public final class TemplatesTab extends JPanel {
             baseLabel.setLabelFor(base);
             nameRow.add(base);
             basedOn = base;
+            fixBase[0] = () -> {
+                JLabel fixed = new JLabel(BuiltInTemplates.byId(working.basedOn).name);
+                fixed.setToolTipText(
+                    "The built-in template this one started from. The headers you didn't change follow it."
+                );
+                int at = nameRow.getComponentZOrder(base);
+                nameRow.remove(base);
+                nameRow.add(fixed, at);
+                baseLabel.setLabelFor(fixed);
+                basedOn = null;
+                nameRow.revalidate();
+                nameRow.repaint();
+            };
         } else {
             // Chosen once, when the template is created.
             JLabel base = new JLabel(BuiltInTemplates.byId(working.basedOn).name);
@@ -483,6 +517,24 @@ public final class TemplatesTab extends JPanel {
         panel.setBorder(BorderFactory.createEmptyBorder(16, 16, 0, 16));
         panel.add(bar, BorderLayout.NORTH);
         panel.add(body, BorderLayout.CENTER);
+        // Anywhere in the editor, as in any document: saves and keeps editing. A name that can't be saved beeps (the
+        // reason is beside it); with nothing to save, nothing happens.
+        panel
+            .getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+            .put(KeyStroke.getKeyStroke(KeyEvent.VK_S, Widgets.menuShortcutMask()), "screenshot-mode.save");
+        panel.getActionMap().put(
+            "screenshot-mode.save",
+            new AbstractAction() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    if (save.isEnabled()) {
+                        save.doClick();
+                    } else if (nameProblem(store, name.getText(), savedId[0]) != null) {
+                        UIManager.getLookAndFeel().provideErrorFeedback(panel);
+                    }
+                }
+            }
+        );
         return panel;
     }
 
