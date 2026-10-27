@@ -209,7 +209,8 @@ template import/export) run through `Widgets.inBackground`, a `SwingWorker` that
 - The template editor previews `ui.TemplatePreview`: the sample message (`storage/sample-message.json`, read by
   `storage.SampleMessage`; something for every rule of Defaults to match, and a request time for the footer), edited in place and kept in memory by
   `TemplatesTab` (`TemplatePreview.Sample`), never stored. With the Rules and Headers tabs it shows one part beside its
-  source (`ContentPanel.showOnly`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
+  source (`ContentPanel.showOnly`), side by side, stacked or in two tabs (`TemplatePreview.Arrangement`, the icons of
+  Burp's Repeater, kept under `screenshot-mode.sampleLayout`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
   the screenshot window and feeds the form the rule statuses and header hits of the one-part panel (it renders every
   part, whichever messages the template shows) and the sample's headers.
 - Undo/redo: the screenshot window and the template editor each own a `ui.SettingsHistory` of `Settings` snapshots,
@@ -225,7 +226,8 @@ preference key `screenshot-mode.templates`; exports leave the built-in ones out 
 startup, it is copied to `screenshot-mode.templates.unreadable` before the store starts with the built-in templates
 only, and the templates panel offers to export the copy. Window state is not part of templates: the screenshot window keeps
 its bounds and sidebar width under `screenshot-mode.window` and `screenshot-mode.sidebarWidth`, saved when it closes
-and ignored if the bounds no longer fit on a screen. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
+and ignored if the bounds no longer fit on a screen, and the template editor its preview layout under
+`screenshot-mode.sampleLayout`. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
 migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. The built-in templates are
 `storage/built-in-templates.json` in `src/main/resources`, an ordinary template export read by
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules

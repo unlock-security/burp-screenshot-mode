@@ -992,14 +992,27 @@ final class Widgets {
         /** The magnifier of a search field, muted like FlatLaf's own. */
         SEARCH,
         /** Read-only: marks the built-in templates, which can't be edited or deleted. */
-        LOCK;
+        LOCK,
+        /** Two panes side by side, two stacked, one at a time: the layouts of Burp's Repeater, with its icons. */
+        SIDE_BY_SIDE,
+        STACKED,
+        SINGLE;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean hot = c instanceof AbstractButton button && button.getModel().isRollover() && button.isEnabled();
-            g.setColor(this == TRASH && hot ? errorColor() : this == SEARCH ? mutedColor() : c.getForeground());
+            Color selected = UIManager.getColor("Button.toolbar.selectedForeground");
+            g.setColor(
+                this == TRASH && hot
+                    ? errorColor()
+                    : this == SEARCH
+                      ? mutedColor()
+                      : c instanceof AbstractButton button && button.isSelected() && selected != null
+                        ? selected
+                        : c.getForeground()
+            );
             g.translate(x, y);
             switch (this) {
                 case PLUS -> {
@@ -1040,6 +1053,15 @@ final class Widgets {
                     g.draw(shackle);
                     g.fill(new java.awt.geom.RoundRectangle2D.Float(2.5f, 6.5f, 9, 6.5f, 2, 2));
                 }
+                case SIDE_BY_SIDE -> {
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 2, 4.5f, 10, 1.5f, 1.5f));
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(7.5f, 2, 4.5f, 10, 1.5f, 1.5f));
+                }
+                case STACKED -> {
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 2, 10, 4.5f, 1.5f, 1.5f));
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 7.5f, 10, 4.5f, 1.5f, 1.5f));
+                }
+                case SINGLE -> g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 2, 10, 10, 1.5f, 1.5f));
                 case CHEVRON_DOWN, CHEVRON_UP -> {
                     g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     float tip = this == CHEVRON_DOWN ? 9.5f : 4.5f;

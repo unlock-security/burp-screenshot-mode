@@ -1,5 +1,6 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.model.Labeled;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.UrlMode;
@@ -9,6 +10,8 @@ import it.unlocksecurity.burp.screenshotmode.storage.SampleMessage;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Font;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.Map;
@@ -20,6 +23,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.Timer;
 import javax.swing.UIManager;
@@ -30,10 +34,13 @@ import javax.swing.undo.UndoManager;
 /**
  * The template editor's preview of the sample message. With the Rules and Headers tabs, one part of it (URL, request
  * or response) as written, editable, beside the same part as the screenshot shows it, so a rule and the text it must
- * match can be changed together. With the Appearance tab, the whole screenshot.
+ * match can be changed together, side by side, stacked or in tabs, as the user last chose. With the Appearance tab,
+ * the whole screenshot.
  */
 final class TemplatePreview extends JPanel {
 
+    /** Where the editor's choice of {@link Arrangement} is kept, for every template editor. */
+    static final String ARRANGEMENT_KEY = "screenshot-mode.sampleLayout";
     private static final String PARTS = "parts";
     private static final String WHOLE = "whole";
     private static final RuleTarget[] PART_ORDER = { RuleTarget.URL, RuleTarget.REQUEST, RuleTarget.RESPONSE };
@@ -89,6 +96,41 @@ final class TemplatePreview extends JPanel {
         }
     }
 
+    /** How the part as written and as in the screenshot share the preview, like the layouts of Burp's Repeater. */
+    enum Arrangement implements Labeled {
+        SIDE_BY_SIDE("side-by-side", "Show the sample and the screenshot side by side", Widgets.Glyph.SIDE_BY_SIDE),
+        STACKED("stacked", "Show the sample above the screenshot", Widgets.Glyph.STACKED),
+        TABS("tabs", "Show the sample and the screenshot in tabs", Widgets.Glyph.SINGLE);
+
+        private final String id;
+        private final String label;
+        final Widgets.Glyph icon;
+
+        Arrangement(String id, String label, Widgets.Glyph icon) {
+            this.id = id;
+            this.label = label;
+            this.icon = icon;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public String label() {
+            return label;
+        }
+
+        static Arrangement stored(String id) {
+            try {
+                return id == null ? SIDE_BY_SIDE : Labeled.fromId(Arrangement.class, id);
+            } catch (IllegalArgumentException e) {
+                return SIDE_BY_SIDE;
+            }
+        }
+    }
+
     private final Sample sample;
     private final Settings settings;
     private final Host host;
@@ -103,6 +145,14 @@ final class TemplatePreview extends JPanel {
     private final JPanel editors = new JPanel(editorCards);
     private final Map<RuleTarget, Source> sources = new EnumMap<>(RuleTarget.class);
     private final SegmentedControl<RuleTarget> parts;
+    private final SegmentedControl<Arrangement> arrangement;
+    private final JPanel written;
+    private final JPanel shown;
+    private final JSplitPane split = new JSplitPane();
+    private final JTabbedPane tabs = new JTabbedPane();
+    private final JPanel partsArea = new JPanel(new BorderLayout());
+    /** Splits the panes evenly once the split pane has a size: before that, a proportional location is lost. */
+    private boolean centerDivider;
     private final JButton restore = Widgets.button("Restore sample");
     private final JLabel partsLabel = new JLabel("Show");
     private final Timer renderTimer = new Timer(150, event -> render());
@@ -125,6 +175,19 @@ final class TemplatePreview extends JPanel {
         restore.putClientProperty("JButton.buttonType", "borderless");
         restore.setToolTipText("Bring back the sample message as it was, in every part");
         restore.addActionListener(event -> restoreSample());
+        arrangement = new SegmentedControl<>(
+            Arrangement.values(),
+            Arrangement.stored(host.preferences().get(ARRANGEMENT_KEY)),
+            Arrangement::label,
+            value -> {
+                arrange(value);
+                host.preferences().set(ARRANGEMENT_KEY, value.id());
+            }
+        );
+        for (Arrangement value : Arrangement.values()) {
+            arrangement.showIcon(value, value.icon);
+        }
+        arrangement.getAccessibleContext().setAccessibleName("Preview layout");
 
         // In a narrow preview Restore sample goes to a row of its own, then the parts below their label: the bar grows
         // to show them whole.
@@ -132,10 +195,13 @@ final class TemplatePreview extends JPanel {
         partsLabel.setLabelFor(parts);
         left.add(partsLabel);
         left.add(parts);
+        JPanel right = new JPanel(new WrapLayout(8, 0, true));
+        right.add(restore);
+        right.add(arrangement);
         JPanel bar = new JPanel();
-        bar.setLayout(new ToolbarLayout(left, restore));
+        bar.setLayout(new ToolbarLayout(left, right));
         bar.add(left);
-        bar.add(restore);
+        bar.add(right);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
@@ -154,18 +220,29 @@ final class TemplatePreview extends JPanel {
         editorCards.show(editors, sample.part.id());
 
         partHolder.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
-        JSplitPane split = new JSplitPane(
-            JSplitPane.HORIZONTAL_SPLIT,
-            headed("As written (editable)", editors),
-            headed("In the screenshot", partHolder)
-        );
+        written = headed("As written (editable)", editors);
+        shown = headed("In the screenshot", partHolder);
+        split.setLeftComponent(written);
+        split.setRightComponent(shown);
         split.setResizeWeight(0.5);
         split.setBorder(null);
+        split.addComponentListener(
+            new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    if (centerDivider && split.getWidth() > 0 && split.getHeight() > 0) {
+                        centerDivider = false;
+                        split.setDividerLocation(0.5);
+                    }
+                }
+            }
+        );
+        arrange(arrangement.value());
 
         wholeArea.hideHandles();
         wholeScroll.setBorder(null);
         wholeScroll.getVerticalScrollBar().setUnitIncrement(16);
-        center.add(split, PARTS);
+        center.add(partsArea, PARTS);
         center.add(wholeScroll, WHOLE);
 
         add(bar, BorderLayout.NORTH);
@@ -191,6 +268,7 @@ final class TemplatePreview extends JPanel {
         cards.show(center, show ? WHOLE : PARTS);
         parts.setVisible(!show);
         partsLabel.setVisible(!show);
+        arrangement.setVisible(!show);
     }
 
     /** Renders again shortly: the settings changed. */
@@ -204,6 +282,10 @@ final class TemplatePreview extends JPanel {
 
     SegmentedControl<RuleTarget> parts() {
         return parts;
+    }
+
+    SegmentedControl<Arrangement> arrangement() {
+        return arrangement;
     }
 
     JButton restoreButton() {
@@ -258,7 +340,36 @@ final class TemplatePreview extends JPanel {
         repaint();
     }
 
-    private static JComponent headed(String title, JComponent content) {
+    /**
+     * Puts the part as written and as in the screenshot in a split pane, or in two tabs, the screenshot first: the tab
+     * titles then say what the headings say.
+     */
+    private void arrange(Arrangement arrangement) {
+        partsArea.removeAll();
+        if (arrangement == Arrangement.TABS) {
+            tabs.removeAll();
+            tabs.addTab("As written (editable)", editors);
+            tabs.addTab("In the screenshot", partHolder);
+            tabs.setSelectedComponent(partHolder);
+            partsArea.add(tabs);
+        } else {
+            written.add(editors, BorderLayout.CENTER);
+            shown.add(partHolder, BorderLayout.CENTER);
+            split.setOrientation(
+                arrangement == Arrangement.SIDE_BY_SIDE ? JSplitPane.HORIZONTAL_SPLIT : JSplitPane.VERTICAL_SPLIT
+            );
+            partsArea.add(split);
+            if (split.getWidth() > 0 && split.getHeight() > 0) {
+                split.setDividerLocation(0.5);
+            } else {
+                centerDivider = true;
+            }
+        }
+        partsArea.revalidate();
+        partsArea.repaint();
+    }
+
+    private static JPanel headed(String title, JComponent content) {
         JLabel label = Widgets.hint(title);
         label.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
         JPanel panel = new JPanel(new BorderLayout());
