@@ -438,14 +438,18 @@ public final class TemplatesTab extends JPanel {
 
         JLabel nameLabel = Widgets.title("Name");
         nameLabel.setLabelFor(name);
-        JPanel nameRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        nameRow.setBorder(BorderFactory.createEmptyBorder(14, 0, 10, 0));
+        // In a narrow editor Based on goes to a row of its own, with its choice, and the row grows to show it whole.
+        // The border makes up for the gap the layout adds above and below the rows.
+        JPanel nameRow = new JPanel(new WrapLayout(10, 6));
+        nameRow.setBorder(BorderFactory.createEmptyBorder(8, 0, 4, 0));
         nameRow.add(nameLabel);
         nameRow.add(name);
         basedOn = null;
         JLabel baseLabel = Widgets.title("Based on");
-        baseLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
-        nameRow.add(baseLabel);
+        baseLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 10));
+        JPanel baseGroup = new JPanel(new WrapLayout(0, 0, true));
+        baseGroup.add(baseLabel);
+        nameRow.add(baseGroup);
         if (mode == Mode.NEW) {
             JComboBox<Template> base = new JComboBox<>(
                 store
@@ -475,20 +479,19 @@ public final class TemplatesTab extends JPanel {
                 }
             });
             baseLabel.setLabelFor(base);
-            nameRow.add(base);
+            baseGroup.add(base);
             basedOn = base;
             fixBase[0] = () -> {
                 JLabel fixed = new JLabel(BuiltInTemplates.byId(working.basedOn).name);
                 fixed.setToolTipText(
                     "The built-in template this one started from. The headers you didn't change follow it."
                 );
-                int at = nameRow.getComponentZOrder(base);
-                nameRow.remove(base);
-                nameRow.add(fixed, at);
+                baseGroup.remove(base);
+                baseGroup.add(fixed);
                 baseLabel.setLabelFor(fixed);
                 basedOn = null;
-                nameRow.revalidate();
-                nameRow.repaint();
+                baseGroup.revalidate();
+                baseGroup.repaint();
             };
         } else {
             // Chosen once, when the template is created.
@@ -497,7 +500,7 @@ public final class TemplatesTab extends JPanel {
                 "The built-in template this one started from. The headers you didn't change follow it."
             );
             baseLabel.setLabelFor(base);
-            nameRow.add(base);
+            baseGroup.add(base);
         }
 
         nameRow.add(nameError);

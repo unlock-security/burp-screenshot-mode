@@ -68,6 +68,23 @@ class TemplatesTabTest {
     }
 
     @Test
+    void showsTheNameAndBasedOnWholeInANarrowEditor() throws Exception {
+        TemplatesTab[] tab = new TemplatesTab[1];
+        SwingUtilities.invokeAndWait(() -> {
+            tab[0] = new TemplatesTab(store(), host());
+            button(tab[0], "New template").doClick();
+            tab[0].setSize(400, 800);
+        });
+        WrapLayoutTest.layOut(tab[0]);
+        SwingUtilities.invokeAndWait(() -> {
+            JComboBox<?> base = find(tab[0], JComboBox.class, c -> c.getSelectedItem() instanceof Template).get();
+            JTextField name = find(tab[0], JTextField.class, f -> f.getText().isEmpty() && isShowing(f, tab[0])).get();
+            assertTrue(WrapLayoutTest.inView(name, tab[0]), "the name field in view");
+            assertTrue(WrapLayoutTest.inView(base, tab[0]), "Based on in view");
+        });
+    }
+
+    @Test
     void savesAndKeepsEditingWhatItSaved() throws Exception {
         TemplateStore store = store();
         List<String> asked = new java.util.ArrayList<>();
