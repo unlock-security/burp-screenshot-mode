@@ -13,11 +13,14 @@ import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -70,7 +73,7 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableRowSorter;
 
-/** Suite tab managing screenshot templates (port of the Caido plugin's Settings page). */
+/** Burp settings panel managing screenshot templates. */
 public final class TemplatesTab extends JPanel {
 
     private static final String LIST = "list";
@@ -129,6 +132,14 @@ public final class TemplatesTab extends JPanel {
     private Predicate<String> confirmDiscard = this::askDiscard;
     /** The template editor's sample message, as edited: kept until Burp closes. */
     private final TemplatePreview.Sample sample = new TemplatePreview.Sample();
+    /** The scroll pane of Burp's settings page, which this panel fills; {@code null} outside one. */
+    private JViewport viewport;
+    private final ComponentAdapter viewportResized = new ComponentAdapter() {
+        @Override
+        public void componentResized(ComponentEvent e) {
+            revalidate();
+        }
+    };
 
     public TemplatesTab(TemplateStore store, Host host) {
         this.store = store;
@@ -141,9 +152,34 @@ public final class TemplatesTab extends JPanel {
         refresh();
     }
 
+    /** As large as what shows of Burp's settings page, which scrolls only when smaller than this panel can be. */
+    @Override
+    public Dimension getPreferredSize() {
+        Dimension fill = isPreferredSizeSet() ? null : Widgets.viewportFill(this);
+        return fill != null ? fill : super.getPreferredSize();
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        viewport = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+        if (viewport != null) {
+            viewport.addComponentListener(viewportResized);
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        if (viewport != null) {
+            viewport.removeComponentListener(viewportResized);
+            viewport = null;
+        }
+        super.removeNotify();
+    }
+
     private JComponent buildList() {
-        // The suite tab is already named "Screenshot Mode": no title, just how to take a screenshot. It wraps in a
-        // narrow tab, so the shortcut at the end is never cut off.
+        // No title, just how to take a screenshot. It wraps in a narrow panel, so the shortcut at the end is never
+        // cut off.
         JTextArea header = Widgets.wrappingHint(
             "Templates for request/response screenshots. Right-click a request anywhere in Burp and choose " +
                 "Extensions › Screenshot Mode › Screenshot, or press Ctrl+Shift+S.",

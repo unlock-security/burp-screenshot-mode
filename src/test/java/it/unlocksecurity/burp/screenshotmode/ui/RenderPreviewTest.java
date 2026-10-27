@@ -36,7 +36,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Renders screenshots without Burp and writes them to {@code build/preview} for visual inspection. Run with
- * {@code ./gradlew test -PpreviewUi} on a desktop to also render the screenshot window and the suite tab.
+ * {@code ./gradlew test -PpreviewUi} on a desktop to also render the screenshot window and the templates panel.
  */
 class RenderPreviewTest {
 

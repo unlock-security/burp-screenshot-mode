@@ -38,6 +38,7 @@ import java.util.function.Function;
 import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -51,6 +52,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
@@ -833,6 +835,43 @@ final class Widgets {
                 done.accept(result);
             }
         }.execute();
+    }
+
+    /**
+     * The preferred size that has {@code panel} fill what shows of the scroll pane it is placed in, such as a page of
+     * Burp's settings window, so that the page doesn't scroll: the viewport's height less the borders and the
+     * components stacked around the panel, and no width of its own, as the page stretches it to the viewport's width
+     * and its rows wrap to fit. Only a viewport shorter than the panel's minimum height scrolls. {@code null} outside
+     * a scroll pane.
+     */
+    static Dimension viewportFill(JComponent panel) {
+        if (
+            !(SwingUtilities.getAncestorOfClass(JViewport.class, panel) instanceof JViewport viewport) ||
+            viewport.getView() == null
+        ) {
+            return null;
+        }
+        int around = 0;
+        Component child = panel;
+        for (
+            Container parent = panel.getParent();
+            child != viewport.getView();
+            child = parent, parent = parent.getParent()
+        ) {
+            Insets insets = parent.getInsets();
+            around += insets.top + insets.bottom;
+            if (
+                parent.getLayout() instanceof BoxLayout box &&
+                (box.getAxis() == BoxLayout.Y_AXIS || box.getAxis() == BoxLayout.PAGE_AXIS)
+            ) {
+                for (Component sibling : parent.getComponents()) {
+                    if (sibling != child && sibling.isVisible()) {
+                        around += sibling.getPreferredSize().height;
+                    }
+                }
+            }
+        }
+        return new Dimension(0, Math.max(panel.getMinimumSize().height, viewport.getExtentSize().height - around));
     }
 
     /** Coalesces bursts of calls (e.g. typing) into one run after a short pause. */

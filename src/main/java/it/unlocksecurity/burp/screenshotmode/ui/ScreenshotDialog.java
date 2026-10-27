@@ -452,7 +452,7 @@ final class ScreenshotDialog extends JDialog {
         boolean differs = template
             .map(selected -> !TemplateCodec.sameSettings(selected.settings, state.settings))
             .orElse(false);
-        // Deleted in the suite tab while this window is open: these settings now exist only here.
+        // Deleted in Burp's settings while this window is open: these settings now exist only here.
         boolean deleted = template.isEmpty();
         modified.setText(deleted ? "Template deleted" : "Modified");
         modified.setToolTipText(
@@ -681,7 +681,7 @@ final class ScreenshotDialog extends JDialog {
         } finally {
             updatingCombo = false;
         }
-        // The template may have been edited in the suite tab while this window is open.
+        // The template may have been edited in Burp's settings while this window is open.
         updateTemplateState();
     }
 
