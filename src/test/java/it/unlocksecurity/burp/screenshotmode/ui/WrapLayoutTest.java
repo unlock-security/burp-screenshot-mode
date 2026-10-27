@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.awt.Dimension;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +26,22 @@ class WrapLayoutTest {
         assertEquals(300, panel.getPreferredSize().width, "so a form grid gives it the room to unwrap");
         assertEquals(40, panel.getPreferredSize().height, "wrapped at the width it has");
         assertEquals(100, panel.getMinimumSize().width);
+    }
+
+    @Test
+    void prefersOneWholeRowInAScrollPaneToo() {
+        // Laid out in a window, as in the settings sidebar: a row 1 px short of its components wraps the last one.
+        JPanel panel = fill(
+            new JPanel(new WrapLayout(0, 0, true)) {
+                @Override
+                public boolean isValid() {
+                    return true;
+                }
+            }
+        );
+        new JScrollPane(panel);
+        panel.setSize(250, 20);
+        assertEquals(300, panel.getPreferredSize().width);
     }
 
     @Test
@@ -86,7 +103,10 @@ class WrapLayoutTest {
 
     /** Three components 100 × 20 px. */
     private static JPanel panel(WrapLayout layout) {
-        JPanel panel = new JPanel(layout);
+        return fill(new JPanel(layout));
+    }
+
+    private static JPanel fill(JPanel panel) {
         for (int i = 0; i < 3; i++) {
             JPanel box = new JPanel();
             box.setPreferredSize(new Dimension(100, 20));

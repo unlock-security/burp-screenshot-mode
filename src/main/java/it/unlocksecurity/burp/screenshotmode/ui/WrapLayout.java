@@ -123,8 +123,10 @@ final class WrapLayout extends FlowLayout {
             dimension.width += insets.left + insets.right + hgap * 2;
             dimension.height += insets.top + insets.bottom + vgap * 2;
 
+            // Lets a container that fills a scroll pane shrink with it. Not for one row, which must fit its components
+            // exactly or the last one wraps.
             Container scrollPane = SwingUtilities.getAncestorOfClass(JScrollPane.class, target);
-            if (scrollPane != null && target.isValid()) {
+            if (scrollPane != null && target.isValid() && !oneRow) {
                 dimension.width -= hgap + 1;
             }
             return dimension;
