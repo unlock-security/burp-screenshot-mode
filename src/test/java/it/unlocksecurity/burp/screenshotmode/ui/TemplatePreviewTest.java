@@ -32,6 +32,16 @@ class TemplatePreviewTest {
     }
 
     @Test
+    void showsThePartsAndRestoreWholeInANarrowPreview() throws Exception {
+        preview.setSize(300, 600);
+        WrapLayoutTest.layOut(preview);
+        for (java.awt.Component part : preview.parts().getComponents()) {
+            assertTrue(WrapLayoutTest.inView(part, preview), part + " in view");
+        }
+        assertTrue(WrapLayoutTest.inView(preview.restoreButton(), preview), "Restore sample in view");
+    }
+
+    @Test
     void everyRuleOfDefaultsMatchesInTheSample() {
         // A message has one body: the sample's is JSON, so the rule for form bodies has nothing to match.
         Stream.concat(settings.highlights.stream(), settings.redactions.stream())
@@ -65,10 +75,16 @@ class TemplatePreviewTest {
 
     @Test
     void theAppearanceTabShowsTheWholeScreenshot() {
+        java.awt.Component label = Stream.of(preview.parts().getParent().getComponents())
+            .filter(c -> c instanceof javax.swing.JLabel l && l.getLabelFor() == preview.parts())
+            .findFirst()
+            .orElseThrow();
         preview.showWhole(true);
         assertFalse(preview.parts().isVisible());
+        assertFalse(label.isVisible(), "no \"Show\" without the parts");
         preview.showWhole(false);
         assertTrue(preview.parts().isVisible());
+        assertTrue(label.isVisible());
     }
 
     @Test

@@ -104,6 +104,7 @@ final class TemplatePreview extends JPanel {
     private final Map<RuleTarget, Source> sources = new EnumMap<>(RuleTarget.class);
     private final SegmentedControl<RuleTarget> parts;
     private final JButton restore = Widgets.button("Restore sample");
+    private final JLabel partsLabel = new JLabel("Show");
     private final Timer renderTimer = new Timer(150, event -> render());
     private BiConsumer<MessageData, ContentPanel> rendered = (data, content) -> {};
     private boolean restoring;
@@ -125,12 +126,16 @@ final class TemplatePreview extends JPanel {
         restore.setToolTipText("Bring back the sample message as it was, in every part");
         restore.addActionListener(event -> restoreSample());
 
-        JPanel left = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 10, 0));
-        left.add(Widgets.title("Sample message"));
+        // In a narrow preview Restore sample goes to a row of its own, then the parts below their label: the bar grows
+        // to show them whole.
+        JPanel left = new JPanel(new WrapLayout(10, 0, true));
+        partsLabel.setLabelFor(parts);
+        left.add(partsLabel);
         left.add(parts);
-        JPanel bar = new JPanel(new BorderLayout(8, 0));
-        bar.add(left, BorderLayout.CENTER);
-        bar.add(restore, BorderLayout.EAST);
+        JPanel bar = new JPanel();
+        bar.setLayout(new ToolbarLayout(left, restore));
+        bar.add(left);
+        bar.add(restore);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
@@ -185,6 +190,7 @@ final class TemplatePreview extends JPanel {
     void showWhole(boolean show) {
         cards.show(center, show ? WHOLE : PARTS);
         parts.setVisible(!show);
+        partsLabel.setVisible(!show);
     }
 
     /** Renders again shortly: the settings changed. */
