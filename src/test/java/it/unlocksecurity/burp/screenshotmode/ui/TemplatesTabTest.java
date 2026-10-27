@@ -772,9 +772,9 @@ class TemplatesTabTest {
             assertEquals(RuleList.Pill.Style.FILLED, row.pill().style());
 
             form.tabs().setSelectedIndex(SettingsForm.APPEARANCE);
-            assertFalse(preview.parts().isVisible(), "the whole screenshot");
+            assertFalse(isShowing(preview.parts(), tab), "the whole screenshot");
             form.tabs().setSelectedIndex(SettingsForm.HEADERS);
-            assertTrue(preview.parts().isVisible());
+            assertTrue(isShowing(preview.parts(), tab));
         });
     }
 

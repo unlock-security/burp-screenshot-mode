@@ -126,17 +126,13 @@ class TemplatePreviewTest {
 
     @Test
     void theAppearanceTabShowsTheWholeScreenshot() {
-        java.awt.Component label = Stream.of(preview.parts().getParent().getComponents())
-            .filter(c -> c instanceof javax.swing.JLabel l && l.getLabelFor() == preview.parts())
-            .findFirst()
-            .orElseThrow();
         preview.showWhole(true);
-        assertFalse(preview.parts().isVisible());
-        assertFalse(preview.arrangement().isVisible(), "nothing to arrange");
-        assertFalse(label.isVisible(), "no \"Show\" without the parts");
+        assertFalse(shown(preview.parts()), "no part to choose");
+        assertFalse(shown(preview.arrangement()), "nothing to arrange");
+        assertTrue(shown(preview.restoreButton()));
         preview.showWhole(false);
-        assertTrue(preview.parts().isVisible());
-        assertTrue(label.isVisible());
+        assertTrue(shown(preview.parts()));
+        assertTrue(shown(preview.arrangement()));
     }
 
     @Test
@@ -160,14 +156,26 @@ class TemplatePreviewTest {
         assertEquals("https://other.example.com/?x=1", sample.text(RuleTarget.URL), "no line break in a URL");
         preview.source(RuleTarget.RESPONSE).setText("HTTP/2 404 Not Found");
         preview.render();
+        assertEquals("Sample message · edited", preview.sampleState().getText());
 
         preview.restoreButton().doClick();
         assertEquals(SampleMessage.bundled().url(), preview.source(RuleTarget.URL).getText());
         assertEquals(SampleMessage.bundled().response(), sample.text(RuleTarget.RESPONSE));
         assertFalse(preview.restoreButton().isEnabled());
+        assertEquals("Sample message · no changes", preview.sampleState().getText());
 
         undo(preview.source(RuleTarget.RESPONSE));
         assertEquals("HTTP/2 404 Not Found", sample.text(RuleTarget.RESPONSE), "one undo takes the restore back");
+    }
+
+    /** Whether {@code component} and every ancestor up to the preview are visible. */
+    private boolean shown(java.awt.Component component) {
+        for (java.awt.Component c = component; c != preview; c = c.getParent()) {
+            if (!c.isVisible()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static JSplitPane splitOf(TemplatePreview preview) {

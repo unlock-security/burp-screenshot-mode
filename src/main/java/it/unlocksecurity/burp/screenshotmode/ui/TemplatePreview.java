@@ -146,6 +146,8 @@ final class TemplatePreview extends JPanel {
     private final Map<RuleTarget, Source> sources = new EnumMap<>(RuleTarget.class);
     private final SegmentedControl<RuleTarget> parts;
     private final SegmentedControl<Arrangement> arrangement;
+    /** The parts and the layouts above the preview: nothing to choose on the whole screenshot. */
+    private final JPanel bar = new JPanel();
     private final JPanel written;
     private final JPanel shown;
     private final JSplitPane split = new JSplitPane();
@@ -154,6 +156,8 @@ final class TemplatePreview extends JPanel {
     /** Splits the panes evenly once the split pane has a size: before that, a proportional location is lost. */
     private boolean centerDivider;
     private final JButton restore = Widgets.button("Restore sample");
+    /** Says whether the sample was edited, in the footer beside Restore sample, as the sidebar's footers do. */
+    private final JTextArea sampleState = Widgets.wrappingHint("", Integer.MAX_VALUE);
     private final JLabel partsLabel = new JLabel("Show");
     private final Timer renderTimer = new Timer(150, event -> render());
     private BiConsumer<MessageData, ContentPanel> rendered = (data, content) -> {};
@@ -189,19 +193,15 @@ final class TemplatePreview extends JPanel {
         }
         arrangement.getAccessibleContext().setAccessibleName("Preview layout");
 
-        // In a narrow preview Restore sample goes to a row of its own, then the parts below their label: the bar grows
-        // to show them whole.
+        // In a narrow preview the layouts go to a row of their own, then the parts below their label: the bar grows to
+        // show them whole.
         JPanel left = new JPanel(new WrapLayout(10, 0, true));
         partsLabel.setLabelFor(parts);
         left.add(partsLabel);
         left.add(parts);
-        JPanel right = new JPanel(new WrapLayout(8, 0, true));
-        right.add(restore);
-        right.add(arrangement);
-        JPanel bar = new JPanel();
-        bar.setLayout(new ToolbarLayout(left, right));
+        bar.setLayout(new ToolbarLayout(left, arrangement));
         bar.add(left);
-        bar.add(right);
+        bar.add(arrangement);
         bar.setBorder(
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Widgets.borderColor()),
@@ -245,8 +245,13 @@ final class TemplatePreview extends JPanel {
         center.add(partsArea, PARTS);
         center.add(wholeScroll, WHOLE);
 
+        // On the line of the sidebar's footers, with the same padding.
+        JPanel footer = Widgets.footer(sampleState, restore);
+        footer.setBorder(BorderFactory.createEmptyBorder(6, 14, 8, 8));
+
         add(bar, BorderLayout.NORTH);
         add(center, BorderLayout.CENTER);
+        add(footer, BorderLayout.SOUTH);
         showWhole(false);
     }
 
@@ -266,9 +271,7 @@ final class TemplatePreview extends JPanel {
     /** The whole screenshot (Appearance tab), or one part beside its source (Rules and Headers tabs). */
     void showWhole(boolean show) {
         cards.show(center, show ? WHOLE : PARTS);
-        parts.setVisible(!show);
-        partsLabel.setVisible(!show);
-        arrangement.setVisible(!show);
+        bar.setVisible(!show);
     }
 
     /** Renders again shortly: the settings changed. */
@@ -290,6 +293,10 @@ final class TemplatePreview extends JPanel {
 
     JButton restoreButton() {
         return restore;
+    }
+
+    JTextArea sampleState() {
+        return sampleState;
     }
 
     ContentPanel partView() {
@@ -335,6 +342,7 @@ final class TemplatePreview extends JPanel {
         wholeArea.setBackground(palette.canvas());
         wholeScroll.getViewport().setBackground(palette.canvas());
         restore.setEnabled(sample.isEdited());
+        sampleState.setText("Sample message · " + (sample.isEdited() ? "edited" : "no changes"));
         rendered.accept(data, part);
         revalidate();
         repaint();
