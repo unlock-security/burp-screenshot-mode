@@ -546,8 +546,43 @@ public final class TemplatesTab extends JPanel {
 
         // Laid out like the screenshot window: the settings on the left, the preview on the right.
         form.setMinimumSize(new java.awt.Dimension(300, 0));
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, form, preview);
-        split.setDividerLocation(400);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, form, preview) {
+            /** The sidebar width chosen: the default, or where the divider was dragged. */
+            private int chosen = 400;
+            /** While laying out: the divider moves to fit, which is no choice of the user's. */
+            private boolean fitting;
+
+            {
+                setDividerLocation(chosen);
+                addPropertyChangeListener(DIVIDER_LOCATION_PROPERTY, event -> {
+                    if (!fitting) {
+                        chosen = getDividerLocation();
+                    }
+                });
+            }
+
+            /**
+             * A narrower window takes its width from the sidebar too, down to the sidebar's minimum, so the preview
+             * keeps the room for its controls; a wider one gives the sidebar its chosen width back. The split pane
+             * alone would keep the divider where it is and narrow the preview only.
+             */
+            @Override
+            public void doLayout() {
+                fitting = true;
+                try {
+                    if (getWidth() > 0) {
+                        int most = getWidth() - getInsets().right - getDividerSize() - preview.getMinimumSize().width;
+                        int location = Math.max(getInsets().left + form.getMinimumSize().width, Math.min(chosen, most));
+                        if (location != getDividerLocation()) {
+                            setDividerLocation(location);
+                        }
+                    }
+                    super.doLayout();
+                } finally {
+                    fitting = false;
+                }
+            }
+        };
         split.setBorder(null);
         JPanel body = new JPanel(new BorderLayout());
         body.add(nameRow, BorderLayout.NORTH);

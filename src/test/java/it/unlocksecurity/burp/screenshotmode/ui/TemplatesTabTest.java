@@ -20,9 +20,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 import javax.swing.AbstractButton;
+import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
@@ -82,6 +84,58 @@ class TemplatesTabTest {
             assertTrue(WrapLayoutTest.inView(name, tab[0]), "the name field in view");
             assertTrue(WrapLayoutTest.inView(base, tab[0]), "Based on in view");
         });
+    }
+
+    @Test
+    void keepsThePreviewWideEnoughForItsControlsInANarrowWindow() throws Exception {
+        TemplatesTab[] tab = new TemplatesTab[1];
+        SwingUtilities.invokeAndWait(() -> {
+            tab[0] = new TemplatesTab(store(), host());
+            button(tab[0], "New template").doClick();
+            tab[0].setSize(1300, 800);
+        });
+        WrapLayoutTest.layOut(tab[0]);
+        SwingUtilities.invokeAndWait(() -> tab[0].setSize(520, 800));
+        WrapLayoutTest.layOut(tab[0]);
+        SwingUtilities.invokeAndWait(() -> {
+            TemplatePreview preview = find(tab[0], TemplatePreview.class, p -> true).get();
+            JButton restore = preview.restoreButton();
+            assertTrue(WrapLayoutTest.inView(restore, tab[0]), "Restore sample in view");
+            assertEquals(restore.getPreferredSize().width, restore.getWidth(), "Restore sample whole");
+            SettingsForm form = find(tab[0], SettingsForm.class, f -> true).get();
+            assertTrue(form.getWidth() < 400, "the sidebar gave up some width: " + form.getWidth());
+            assertTrue(form.getWidth() >= form.getMinimumSize().width, "down to its minimum");
+            tab[0].setSize(1300, 800);
+        });
+        WrapLayoutTest.layOut(tab[0]);
+        SwingUtilities.invokeAndWait(() ->
+            assertEquals(
+                400,
+                find(tab[0], JSplitPane.class, s -> s.getLeftComponent() instanceof SettingsForm)
+                    .get()
+                    .getDividerLocation(),
+                "the sidebar gets its width back in a wider window"
+            )
+        );
+
+        // Dragged, as the divider is moved outside a layout: that width is the one it gets back.
+        SwingUtilities.invokeAndWait(() ->
+            find(tab[0], JSplitPane.class, s -> s.getLeftComponent() instanceof SettingsForm)
+                .get()
+                .setDividerLocation(500)
+        );
+        SwingUtilities.invokeAndWait(() -> tab[0].setSize(520, 800));
+        WrapLayoutTest.layOut(tab[0]);
+        SwingUtilities.invokeAndWait(() -> tab[0].setSize(1300, 800));
+        WrapLayoutTest.layOut(tab[0]);
+        SwingUtilities.invokeAndWait(() ->
+            assertEquals(
+                500,
+                find(tab[0], JSplitPane.class, s -> s.getLeftComponent() instanceof SettingsForm)
+                    .get()
+                    .getDividerLocation()
+            )
+        );
     }
 
     @Test
