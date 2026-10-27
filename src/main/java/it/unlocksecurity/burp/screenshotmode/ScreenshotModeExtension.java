@@ -8,7 +8,6 @@ import burp.api.montoya.ui.Theme;
 import burp.api.montoya.ui.hotkey.HotKey;
 import burp.api.montoya.ui.hotkey.HotKeyContext;
 import burp.api.montoya.ui.hotkey.HotKeyEvent;
-import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.storage.PreferenceStore;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import it.unlocksecurity.burp.screenshotmode.ui.Host;
@@ -77,26 +76,7 @@ public final class ScreenshotModeExtension implements BurpExtension {
     }
 
     private static void open(MontoyaApi api, ScreenshotLauncher launcher, HttpRequestResponse requestResponse) {
-        MessageData data;
-        try {
-            data = BurpMessages.toMessageData(requestResponse);
-        } catch (RuntimeException e) {
-            reportOpenError(api, e);
-            return;
-        }
-        // Hotkey handlers may run outside the Swing thread: open the window there, still reporting failures.
-        Runnable show = () -> {
-            try {
-                launcher.open(data);
-            } catch (RuntimeException | StackOverflowError e) {
-                reportOpenError(api, e);
-            }
-        };
-        if (SwingUtilities.isEventDispatchThread()) {
-            show.run();
-        } else {
-            SwingUtilities.invokeLater(show);
-        }
+        launcher.open(() -> BurpMessages.toMessageData(requestResponse), error -> reportOpenError(api, error));
     }
 
     /** Logs the error and says so in a dialog: otherwise nothing at all would seem to happen. */

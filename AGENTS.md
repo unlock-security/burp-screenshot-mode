@@ -130,8 +130,10 @@ Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
 **Burp is kept at the edge.** Only the three top-level classes touch the Montoya API:
 - `ScreenshotModeExtension` wires everything: adapts Burp preferences into a `PreferenceStore`, builds a `Host`,
   registers the suite tab, context menu and Ctrl+Shift+S hotkey (with a fallback for older Burp versions).
-- `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record. Its `key` (SHA-256 of
-  URL + request bytes) identifies "the same message" across invocations.
+- `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record, copying out of Burp
+  only the part of each message that can be shown. Its `key` (SHA-256 of URL + request bytes, read a chunk at a time)
+  identifies "the same message" across invocations. It runs off the EDT: `ScreenshotLauncher.open(read, failed)` reads
+  the message through `Widgets.inBackground` and opens the window for the latest read only.
 - `ScreenshotContextMenu` picks the target message (editor content wins over table selection; a table offers it only
   for one selected row, for the menu and the hotkey alike).
 
@@ -167,8 +169,8 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 (`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at `Settings.scale` and exports PNG to file
 or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests
 `ImageCapture.fileName`, built from the URL bar's `copyText` so what a rule redacts there stays out of the name.
-Painting stays on the EDT, but PNG encoding and every file read or write (Save, template import/export) run through
-`Widgets.inBackground`, a `SwingWorker` that reports back on the EDT: the BApp Store rejects file I/O on the EDT.
+Painting stays on the EDT, but reading the message out of Burp, PNG encoding and every file read or write (Save,
+template import/export) run through `Widgets.inBackground`, a `SwingWorker` that reports back on the EDT: the BApp Store rejects file I/O on the EDT.
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own
