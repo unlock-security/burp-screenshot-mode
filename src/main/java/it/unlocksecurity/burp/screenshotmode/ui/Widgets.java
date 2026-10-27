@@ -38,6 +38,7 @@ import java.util.function.Function;
 import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
 import javax.swing.JButton;
@@ -51,6 +52,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
@@ -835,6 +837,43 @@ final class Widgets {
         }.execute();
     }
 
+    /**
+     * The preferred size that has {@code panel} fill what shows of the scroll pane it is placed in, such as a page of
+     * Burp's settings window, so that the page doesn't scroll: the viewport's height less the borders and the
+     * components stacked around the panel, and no width of its own, as the page stretches it to the viewport's width
+     * and its rows wrap to fit. Only a viewport shorter than the panel's minimum height scrolls. {@code null} outside
+     * a scroll pane.
+     */
+    static Dimension viewportFill(JComponent panel) {
+        if (
+            !(SwingUtilities.getAncestorOfClass(JViewport.class, panel) instanceof JViewport viewport) ||
+            viewport.getView() == null
+        ) {
+            return null;
+        }
+        int around = 0;
+        Component child = panel;
+        for (
+            Container parent = panel.getParent();
+            child != viewport.getView();
+            child = parent, parent = parent.getParent()
+        ) {
+            Insets insets = parent.getInsets();
+            around += insets.top + insets.bottom;
+            if (
+                parent.getLayout() instanceof BoxLayout box &&
+                (box.getAxis() == BoxLayout.Y_AXIS || box.getAxis() == BoxLayout.PAGE_AXIS)
+            ) {
+                for (Component sibling : parent.getComponents()) {
+                    if (sibling != child && sibling.isVisible()) {
+                        around += sibling.getPreferredSize().height;
+                    }
+                }
+            }
+        }
+        return new Dimension(0, Math.max(panel.getMinimumSize().height, viewport.getExtentSize().height - around));
+    }
+
     /** Coalesces bursts of calls (e.g. typing) into one run after a short pause. */
     static Runnable debounce(int millis, Runnable action) {
         Timer timer = new Timer(millis, event -> action.run());
@@ -953,14 +992,27 @@ final class Widgets {
         /** The magnifier of a search field, muted like FlatLaf's own. */
         SEARCH,
         /** Read-only: marks the built-in templates, which can't be edited or deleted. */
-        LOCK;
+        LOCK,
+        /** Two panes side by side, two stacked, one at a time: the layouts of Burp's Repeater, with its icons. */
+        SIDE_BY_SIDE,
+        STACKED,
+        SINGLE;
 
         @Override
         public void paintIcon(Component c, Graphics graphics, int x, int y) {
             Graphics2D g = (Graphics2D) graphics.create();
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             boolean hot = c instanceof AbstractButton button && button.getModel().isRollover() && button.isEnabled();
-            g.setColor(this == TRASH && hot ? errorColor() : this == SEARCH ? mutedColor() : c.getForeground());
+            Color selected = UIManager.getColor("Button.toolbar.selectedForeground");
+            g.setColor(
+                this == TRASH && hot
+                    ? errorColor()
+                    : this == SEARCH
+                      ? mutedColor()
+                      : c instanceof AbstractButton button && button.isSelected() && selected != null
+                        ? selected
+                        : c.getForeground()
+            );
             g.translate(x, y);
             switch (this) {
                 case PLUS -> {
@@ -1001,6 +1053,15 @@ final class Widgets {
                     g.draw(shackle);
                     g.fill(new java.awt.geom.RoundRectangle2D.Float(2.5f, 6.5f, 9, 6.5f, 2, 2));
                 }
+                case SIDE_BY_SIDE -> {
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 2, 4.5f, 10, 1.5f, 1.5f));
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(7.5f, 2, 4.5f, 10, 1.5f, 1.5f));
+                }
+                case STACKED -> {
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 2, 10, 4.5f, 1.5f, 1.5f));
+                    g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 7.5f, 10, 4.5f, 1.5f, 1.5f));
+                }
+                case SINGLE -> g.fill(new java.awt.geom.RoundRectangle2D.Float(2, 2, 10, 10, 1.5f, 1.5f));
                 case CHEVRON_DOWN, CHEVRON_UP -> {
                     g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     float tip = this == CHEVRON_DOWN ? 9.5f : 4.5f;

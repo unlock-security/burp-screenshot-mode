@@ -7,17 +7,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.render.Palette;
 import it.unlocksecurity.burp.screenshotmode.storage.BuiltInTemplates;
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import javax.swing.AbstractButton;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -235,5 +242,43 @@ class WidgetsTest {
             e -> failure.complete(SwingUtilities.isEventDispatchThread() ? e : null)
         );
         assertEquals(thrown, failure.get(10, java.util.concurrent.TimeUnit.SECONDS), "the task's own exception");
+    }
+
+    @Test
+    void fillsWhatShowsOfBurpsSettingsPage() {
+        JPanel panel = new JPanel();
+        panel.setMinimumSize(new Dimension(300, 200));
+        JScrollPane scroll = settingsPage(panel);
+
+        scroll.setSize(1000, 800);
+        RenderPreviewTest.layoutTree(scroll);
+        assertEquals(
+            new Dimension(0, scroll.getViewport().getExtentSize().height - 20 - 20 - 15),
+            Widgets.viewportFill(panel),
+            "the viewport's height less the page's border and the strut below the panel; the page sets the width"
+        );
+
+        scroll.setSize(1000, 150);
+        RenderPreviewTest.layoutTree(scroll);
+        assertEquals(new Dimension(0, 200), Widgets.viewportFill(panel), "a shorter viewport scrolls");
+    }
+
+    @Test
+    void keepsItsOwnSizeOutsideAScrollPane() {
+        JPanel panel = new JPanel();
+        new JPanel(new BorderLayout()).add(panel);
+        assertNull(Widgets.viewportFill(panel));
+    }
+
+    /** A page of Burp's settings window, as Burp builds it for an extension's settings panel. */
+    private static JScrollPane settingsPage(JComponent panel) {
+        JPanel page = new JPanel();
+        page.setLayout(new BoxLayout(page, BoxLayout.Y_AXIS));
+        page.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        page.add(panel);
+        page.add(Box.createVerticalStrut(15));
+        JPanel view = new JPanel(new BorderLayout());
+        view.add(page, BorderLayout.NORTH);
+        return new JScrollPane(view);
     }
 }

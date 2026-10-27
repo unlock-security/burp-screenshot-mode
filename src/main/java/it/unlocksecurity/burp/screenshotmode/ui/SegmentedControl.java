@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.swing.ButtonGroup;
+import javax.swing.Icon;
 import javax.swing.JPanel;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
@@ -125,6 +126,16 @@ final class SegmentedControl<E> extends JPanel {
             revalidate();
             repaint();
         }
+    }
+
+    /** Shows an icon instead of the option's text, which stays its name for screen readers and becomes its tooltip. */
+    void showIcon(E value, Icon icon) {
+        JToggleButton button = button(value);
+        button.getAccessibleContext().setAccessibleName(button.getText());
+        button.setToolTipText(button.getText());
+        button.setText(null);
+        button.setIcon(icon);
+        button.setMargin(new Insets(4, 7, 4, 7));
     }
 
     /** Simulates a click on an option, for tests. */

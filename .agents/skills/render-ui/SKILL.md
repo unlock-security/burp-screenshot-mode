@@ -33,6 +33,11 @@ Burp's real theme classes from its jar, so what you see is what users see in Bur
   offscreen path doesn't run the extra layout that a wrapping row (`WrapLayout`) asks for.
 - **Dialogs** (confirmations, `JFileChooser`): a `javax.swing.Timer` polls `Window.getWindows()`, finds the chooser or
   the option buttons, and calls `approveSelection()` / `doClick()`.
+- **Burp's settings window**: build Burp's own settings page by reflection and add the panel to it, as Burp does
+  for an extension's settings panel; show it in a visible `JFrame`. In Burp 2026.7 the page is
+  `new burp.Zf_t(burp.Zbtw.DEFAULT)` and the panel is added with `Zk(JComponent)` (call `setAccessible(true)` on
+  both). The names are obfuscated and change between Burp releases: find the class again with
+  `javap -c -p` on the classes that call `SettingsPanel.uiComponent`.
 - **Larger fonts**: a larger `defaultFont` in `UIManager` before installing the look and feel, as `installBurpLaf`
   does. Don't scale `UIManager` fonts one by one afterwards: keys such as `CheckBox.font` follow `defaultFont` and get
   scaled twice.

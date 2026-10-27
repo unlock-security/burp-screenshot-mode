@@ -5,6 +5,8 @@ import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 import javax.swing.SwingUtilities;
 
 /** Opens the screenshot window, one at a time, restoring the state previously used for the same message. */
@@ -21,10 +23,43 @@ public final class ScreenshotLauncher {
         }
     };
     private ScreenshotDialog current;
+    /** Counts {@link #open(Callable, Consumer)} and {@link #close()} calls: only the latest read opens a window. */
+    private int reads;
 
     public ScreenshotLauncher(Host host, TemplateStore store) {
         this.host = host;
         this.store = store;
+    }
+
+    /**
+     * Reads the message off the Swing thread, as copying and hashing a large one takes a while, then opens it. A read
+     * that finishes after another {@code open} or a {@link #close()} is dropped.
+     *
+     * @param failed told of a failure to read the message or to open the window, on the Swing thread
+     */
+    public void open(Callable<MessageData> read, Consumer<Throwable> failed) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(() -> open(read, failed));
+            return;
+        }
+        int id = ++reads;
+        Widgets.inBackground(
+            read,
+            data -> {
+                if (id == reads) {
+                    try {
+                        open(data);
+                    } catch (RuntimeException | StackOverflowError e) {
+                        failed.accept(e);
+                    }
+                }
+            },
+            error -> {
+                if (id == reads) {
+                    failed.accept(error);
+                }
+            }
+        );
     }
 
     public void open(MessageData data) {
@@ -42,6 +77,7 @@ public final class ScreenshotLauncher {
     }
 
     public void close() {
+        reads++;
         if (current != null) {
             current.dispose();
             current = null;

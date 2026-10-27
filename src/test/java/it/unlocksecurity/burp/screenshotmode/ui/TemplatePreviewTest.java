@@ -16,7 +16,11 @@ import java.awt.event.KeyEvent;
 import java.util.Map;
 import java.util.stream.Stream;
 import javax.swing.JComponent;
+import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.Test;
 
 class TemplatePreviewTest {
@@ -29,6 +33,63 @@ class TemplatePreviewTest {
     {
         preview.setRenderListener((data, content) -> statuses = Map.copyOf(content.ruleStatuses()));
         preview.render();
+    }
+
+    @Test
+    void arrangesTheSampleAndTheScreenshotAsChosen() {
+        assertEquals(TemplatePreview.Arrangement.SIDE_BY_SIDE, preview.arrangement().value(), "by default");
+        assertEquals(JSplitPane.HORIZONTAL_SPLIT, splitOf(preview).getOrientation());
+
+        preview.arrangement().click(TemplatePreview.Arrangement.STACKED);
+        assertEquals(JSplitPane.VERTICAL_SPLIT, splitOf(preview).getOrientation());
+
+        preview.arrangement().click(TemplatePreview.Arrangement.TABS);
+        JTabbedPane tabs = (JTabbedPane) SwingUtilities.getAncestorOfClass(JTabbedPane.class, preview.partView());
+        assertNotNull(tabs, "the screenshot in a tab");
+        assertEquals("In the screenshot", tabs.getTitleAt(tabs.getSelectedIndex()), "shown first");
+        assertEquals("As written (editable)", tabs.getTitleAt(0));
+        assertTrue(SwingUtilities.isDescendingFrom(preview.source(RuleTarget.REQUEST), tabs), "the sample in a tab");
+
+        preview.arrangement().click(TemplatePreview.Arrangement.SIDE_BY_SIDE);
+        assertEquals(JSplitPane.HORIZONTAL_SPLIT, splitOf(preview).getOrientation());
+        assertTrue(SwingUtilities.isDescendingFrom(preview.source(RuleTarget.REQUEST), splitOf(preview)));
+    }
+
+    @Test
+    void remembersTheArrangementForTheNextEditor() {
+        Host host = TemplatesTabTest.host();
+        new TemplatePreview(new TemplatePreview.Sample(), settings, host)
+            .arrangement()
+            .click(TemplatePreview.Arrangement.TABS);
+        TemplatePreview next = new TemplatePreview(new TemplatePreview.Sample(), settings, host);
+        assertEquals(TemplatePreview.Arrangement.TABS, next.arrangement().value());
+        assertNotNull(SwingUtilities.getAncestorOfClass(JTabbedPane.class, next.source(RuleTarget.REQUEST)));
+
+        host.preferences().set(TemplatePreview.ARRANGEMENT_KEY, "from-a-later-release");
+        assertEquals(
+            TemplatePreview.Arrangement.SIDE_BY_SIDE,
+            new TemplatePreview(new TemplatePreview.Sample(), settings, host).arrangement().value()
+        );
+    }
+
+    @Test
+    void namesTheArrangementButtonsThatOnlyShowAnIcon() {
+        for (TemplatePreview.Arrangement value : TemplatePreview.Arrangement.values()) {
+            JToggleButton button = preview.arrangement().button(value);
+            assertNotNull(button.getIcon());
+            assertEquals(value.label(), button.getAccessibleContext().getAccessibleName());
+            assertEquals(value.label(), button.getToolTipText());
+        }
+    }
+
+    @Test
+    void showsThePartsAndRestoreWholeInANarrowPreview() throws Exception {
+        preview.setSize(300, 600);
+        WrapLayoutTest.layOut(preview);
+        for (java.awt.Component part : preview.parts().getComponents()) {
+            assertTrue(WrapLayoutTest.inView(part, preview), part + " in view");
+        }
+        assertTrue(WrapLayoutTest.inView(preview.restoreButton(), preview), "Restore sample in view");
     }
 
     @Test
@@ -66,9 +127,12 @@ class TemplatePreviewTest {
     @Test
     void theAppearanceTabShowsTheWholeScreenshot() {
         preview.showWhole(true);
-        assertFalse(preview.parts().isVisible());
+        assertFalse(shown(preview.parts()), "no part to choose");
+        assertFalse(shown(preview.arrangement()), "nothing to arrange");
+        assertTrue(shown(preview.restoreButton()));
         preview.showWhole(false);
-        assertTrue(preview.parts().isVisible());
+        assertTrue(shown(preview.parts()));
+        assertTrue(shown(preview.arrangement()));
     }
 
     @Test
@@ -92,14 +156,32 @@ class TemplatePreviewTest {
         assertEquals("https://other.example.com/?x=1", sample.text(RuleTarget.URL), "no line break in a URL");
         preview.source(RuleTarget.RESPONSE).setText("HTTP/2 404 Not Found");
         preview.render();
+        assertEquals("Sample message · edited", preview.sampleState().getText());
 
         preview.restoreButton().doClick();
         assertEquals(SampleMessage.bundled().url(), preview.source(RuleTarget.URL).getText());
         assertEquals(SampleMessage.bundled().response(), sample.text(RuleTarget.RESPONSE));
         assertFalse(preview.restoreButton().isEnabled());
+        assertEquals("Sample message · no changes", preview.sampleState().getText());
 
         undo(preview.source(RuleTarget.RESPONSE));
         assertEquals("HTTP/2 404 Not Found", sample.text(RuleTarget.RESPONSE), "one undo takes the restore back");
+    }
+
+    /** Whether {@code component} and every ancestor up to the preview are visible. */
+    private boolean shown(java.awt.Component component) {
+        for (java.awt.Component c = component; c != preview; c = c.getParent()) {
+            if (!c.isVisible()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static JSplitPane splitOf(TemplatePreview preview) {
+        JSplitPane split = (JSplitPane) SwingUtilities.getAncestorOfClass(JSplitPane.class, preview.partView());
+        assertNotNull(split, "the screenshot in a split pane");
+        return split;
     }
 
     private static void undo(JComponent area) {

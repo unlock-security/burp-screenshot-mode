@@ -135,7 +135,7 @@ public class Screenshots {
             dialog.dispose();
         });
 
-        // The templates tab, as in Burp's suite tab.
+        // The templates panel, as in Burp's settings.
         if (!dark) {
             JFrame frame = new JFrame("Screenshot Mode");
             SwingUtilities.invokeAndWait(() -> {

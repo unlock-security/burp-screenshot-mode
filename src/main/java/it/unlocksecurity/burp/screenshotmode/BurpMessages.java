@@ -15,8 +15,14 @@ import java.time.ZonedDateTime;
 import java.util.HexFormat;
 import java.util.Optional;
 
-/** Converts Montoya request/response pairs into {@link MessageData}. */
+/**
+ * Converts Montoya request/response pairs into {@link MessageData}. Hashing and copying a large message takes a
+ * while: call it off the Swing thread.
+ */
 final class BurpMessages {
+
+    /** How much of the request {@link #key} copies out of Burp at a time. */
+    static final int HASH_CHUNK = 1 << 20;
 
     private BurpMessages() {}
 
@@ -24,7 +30,7 @@ final class BurpMessages {
         HttpRequest request = requestResponse.request();
         HttpResponse response = requestResponse.response();
         String url = url(request, requestResponse.httpService());
-        byte[] requestBytes = request.toByteArray().getBytes();
+        ByteArray requestBytes = request.toByteArray();
         ByteArray responseBytes = response == null ? null : response.toByteArray();
 
         Long roundtrip = null;
@@ -44,7 +50,7 @@ final class BurpMessages {
         return new MessageData(
             key(url, requestBytes),
             url,
-            MessageText.fromBytes(requestBytes),
+            text(requestBytes),
             responseBytes == null ? null : text(responseBytes),
             responseBytes == null ? null : responseBytes.length(),
             roundtrip,
@@ -81,7 +87,7 @@ final class BurpMessages {
         }
     }
 
-    /** Only the part that can be shown is copied out of Burp: responses can be hundreds of megabytes. */
+    /** Only the part that can be shown is copied out of Burp: messages can be hundreds of megabytes. */
     private static String text(ByteArray bytes) {
         int length = bytes.length();
         byte[] head =
@@ -89,12 +95,16 @@ final class BurpMessages {
         return MessageText.fromBytes(head, length);
     }
 
-    private static String key(String url, byte[] request) {
+    /** The whole request counts, so an edited body is another message, but it is copied a chunk at a time. */
+    static String key(String url, ByteArray request) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             digest.update(url.getBytes(StandardCharsets.UTF_8));
             digest.update((byte) 0);
-            digest.update(request);
+            int length = request.length();
+            for (int start = 0; start < length; start += HASH_CHUNK) {
+                digest.update(request.subArray(start, Math.min(length, start + HASH_CHUNK)).getBytes());
+            }
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);

@@ -21,7 +21,7 @@ from Caido" remarks, and drop stale ones when you rewrite the code around them.
 ```bash
 ./gradlew build                      # compile, test, and produce build/libs/screenshot-mode-<version>.jar (fat jar incl. Gson)
 ./gradlew test                       # headless; also writes sample screenshots to build/preview/
-./gradlew test -PpreviewUi           # also renders the screenshot window + suite tab (needs a desktop session)
+./gradlew test -PpreviewUi           # also renders the screenshot window + templates panel (needs a desktop session)
 ./gradlew test --tests '*RuleEngineTest'                   # single test class
 ./gradlew test --tests '*RuleEngineTest.someMethodName'    # single test method
 
@@ -129,9 +129,15 @@ Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
 
 **Burp is kept at the edge.** Only the three top-level classes touch the Montoya API:
 - `ScreenshotModeExtension` wires everything: adapts Burp preferences into a `PreferenceStore`, builds a `Host`,
-  registers the suite tab, context menu and Ctrl+Shift+S hotkey (with a fallback for older Burp versions).
-- `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record. Its `key` (SHA-256 of
-  URL + request bytes) identifies "the same message" across invocations.
+  registers the templates panel (`ui.TemplatesTab`) in Burp's settings window, the context menu and the Ctrl+Shift+S
+  hotkey (each with a fallback for older Burp versions: a suite tab, a hotkey in message editors only). Burp puts a
+  settings panel in a scroll pane at its preferred height (on a vertical `BoxLayout` page, at `North` of the scroll
+  pane's view), so `TemplatesTab` asks for what shows of the scroll pane (`Widgets.viewportFill`): the page scrolls
+  only when shorter than the panel's minimum height.
+- `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record, copying out of Burp
+  only the part of each message that can be shown. Its `key` (SHA-256 of URL + request bytes, read a chunk at a time)
+  identifies "the same message" across invocations. It runs off the EDT: `ScreenshotLauncher.open(read, failed)` reads
+  the message through `Widgets.inBackground` and opens the window for the latest read only.
 - `ScreenshotContextMenu` picks the target message (editor content wins over table selection; a table offers it only
   for one selected row, for the menu and the hotkey alike).
 
@@ -167,8 +173,8 @@ stack on long input. Blur has no Swing equivalent: `MessageView` post-processes 
 (`ui.Blur`, three box-blur passes). `ImageCapture` renders `ContentPanel` at `Settings.scale` and exports PNG to file
 or clipboard (custom PNG `DataFlavor`, because macOS converts `imageFlavor` to TIFF). Save suggests
 `ImageCapture.fileName`, built from the URL bar's `copyText` so what a rule redacts there stays out of the name.
-Painting stays on the EDT, but PNG encoding and every file read or write (Save, template import/export) run through
-`Widgets.inBackground`, a `SwingWorker` that reports back on the EDT: the BApp Store rejects file I/O on the EDT.
+Painting stays on the EDT, but reading the message out of Burp, PNG encoding and every file read or write (Save,
+template import/export) run through `Widgets.inBackground`, a `SwingWorker` that reports back on the EDT: the BApp Store rejects file I/O on the EDT.
 
 **State model:**
 - `model.Settings` / `Template` are mutable POJOs with explicit `copy()`. `TemplateStore` hands out its own
@@ -203,7 +209,8 @@ Painting stays on the EDT, but PNG encoding and every file read or write (Save, 
 - The template editor previews `ui.TemplatePreview`: the sample message (`storage/sample-message.json`, read by
   `storage.SampleMessage`; something for every rule of Defaults to match, and a request time for the footer), edited in place and kept in memory by
   `TemplatesTab` (`TemplatePreview.Sample`), never stored. With the Rules and Headers tabs it shows one part beside its
-  source (`ContentPanel.showOnly`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
+  source (`ContentPanel.showOnly`), side by side, stacked or in two tabs (`TemplatePreview.Arrangement`, the icons of
+  Burp's Repeater, kept under `screenshot-mode.sampleLayout`); with Appearance, the whole screenshot. It renders with the same `ContentPanel` as
   the screenshot window and feeds the form the rule statuses and header hits of the one-part panel (it renders every
   part, whichever messages the template shows) and the sample's headers.
 - Undo/redo: the screenshot window and the template editor each own a `ui.SettingsHistory` of `Settings` snapshots,
@@ -217,9 +224,10 @@ Painting stays on the EDT, but PNG encoding and every file read or write (Save, 
 **Persistence:** `TemplateStore` saves the user's templates (not the built-in ones) as one JSON string under the Burp
 preference key `screenshot-mode.templates`; exports leave the built-in ones out too. If that value can't be read at
 startup, it is copied to `screenshot-mode.templates.unreadable` before the store starts with the built-in templates
-only, and the suite tab offers to export the copy. Window state is not part of templates: the screenshot window keeps
+only, and the templates panel offers to export the copy. Window state is not part of templates: the screenshot window keeps
 its bounds and sidebar width under `screenshot-mode.window` and `screenshot-mode.sidebarWidth`, saved when it closes
-and ignored if the bounds no longer fit on a screen. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
+and ignored if the bounds no longer fit on a screen, and the template editor its preview layout under
+`screenshot-mode.sampleLayout`. `TemplateCodec` reads/writes the JSON storage format (current `VERSION = 3`) and
 migrates v2, v1 and unversioned v0 payloads; the same codec handles template import/export. The built-in templates are
 `storage/built-in-templates.json` in `src/main/resources`, an ordinary template export read by
 `storage.BuiltInTemplates` at every start, so each release ships its own: edit the default hidden headers and rules

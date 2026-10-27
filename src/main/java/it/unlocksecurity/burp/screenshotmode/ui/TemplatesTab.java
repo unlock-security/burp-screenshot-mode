@@ -13,11 +13,14 @@ import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -70,7 +73,7 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableRowSorter;
 
-/** Suite tab managing screenshot templates (port of the Caido plugin's Settings page). */
+/** Burp settings panel managing screenshot templates. */
 public final class TemplatesTab extends JPanel {
 
     private static final String LIST = "list";
@@ -129,6 +132,14 @@ public final class TemplatesTab extends JPanel {
     private Predicate<String> confirmDiscard = this::askDiscard;
     /** The template editor's sample message, as edited: kept until Burp closes. */
     private final TemplatePreview.Sample sample = new TemplatePreview.Sample();
+    /** The scroll pane of Burp's settings page, which this panel fills; {@code null} outside one. */
+    private JViewport viewport;
+    private final ComponentAdapter viewportResized = new ComponentAdapter() {
+        @Override
+        public void componentResized(ComponentEvent e) {
+            revalidate();
+        }
+    };
 
     public TemplatesTab(TemplateStore store, Host host) {
         this.store = store;
@@ -141,9 +152,34 @@ public final class TemplatesTab extends JPanel {
         refresh();
     }
 
+    /** As large as what shows of Burp's settings page, which scrolls only when smaller than this panel can be. */
+    @Override
+    public Dimension getPreferredSize() {
+        Dimension fill = isPreferredSizeSet() ? null : Widgets.viewportFill(this);
+        return fill != null ? fill : super.getPreferredSize();
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        viewport = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+        if (viewport != null) {
+            viewport.addComponentListener(viewportResized);
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        if (viewport != null) {
+            viewport.removeComponentListener(viewportResized);
+            viewport = null;
+        }
+        super.removeNotify();
+    }
+
     private JComponent buildList() {
-        // The suite tab is already named "Screenshot Mode": no title, just how to take a screenshot. It wraps in a
-        // narrow tab, so the shortcut at the end is never cut off.
+        // No title, just how to take a screenshot. It wraps in a narrow panel, so the shortcut at the end is never
+        // cut off.
         JTextArea header = Widgets.wrappingHint(
             "Templates for request/response screenshots. Right-click a request anywhere in Burp and choose " +
                 "Extensions › Screenshot Mode › Screenshot, or press Ctrl+Shift+S.",
@@ -402,14 +438,18 @@ public final class TemplatesTab extends JPanel {
 
         JLabel nameLabel = Widgets.title("Name");
         nameLabel.setLabelFor(name);
-        JPanel nameRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        nameRow.setBorder(BorderFactory.createEmptyBorder(14, 0, 10, 0));
+        // In a narrow editor Based on goes to a row of its own, with its choice, and the row grows to show it whole.
+        // The border makes up for the gap the layout adds above and below the rows.
+        JPanel nameRow = new JPanel(new WrapLayout(10, 6));
+        nameRow.setBorder(BorderFactory.createEmptyBorder(8, 0, 4, 0));
         nameRow.add(nameLabel);
         nameRow.add(name);
         basedOn = null;
         JLabel baseLabel = Widgets.title("Based on");
-        baseLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 0));
-        nameRow.add(baseLabel);
+        baseLabel.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 10));
+        JPanel baseGroup = new JPanel(new WrapLayout(0, 0, true));
+        baseGroup.add(baseLabel);
+        nameRow.add(baseGroup);
         if (mode == Mode.NEW) {
             JComboBox<Template> base = new JComboBox<>(
                 store
@@ -439,20 +479,19 @@ public final class TemplatesTab extends JPanel {
                 }
             });
             baseLabel.setLabelFor(base);
-            nameRow.add(base);
+            baseGroup.add(base);
             basedOn = base;
             fixBase[0] = () -> {
                 JLabel fixed = new JLabel(BuiltInTemplates.byId(working.basedOn).name);
                 fixed.setToolTipText(
                     "The built-in template this one started from. The headers you didn't change follow it."
                 );
-                int at = nameRow.getComponentZOrder(base);
-                nameRow.remove(base);
-                nameRow.add(fixed, at);
+                baseGroup.remove(base);
+                baseGroup.add(fixed);
                 baseLabel.setLabelFor(fixed);
                 basedOn = null;
-                nameRow.revalidate();
-                nameRow.repaint();
+                baseGroup.revalidate();
+                baseGroup.repaint();
             };
         } else {
             // Chosen once, when the template is created.
@@ -461,7 +500,7 @@ public final class TemplatesTab extends JPanel {
                 "The built-in template this one started from. The headers you didn't change follow it."
             );
             baseLabel.setLabelFor(base);
-            nameRow.add(base);
+            baseGroup.add(base);
         }
 
         nameRow.add(nameError);
@@ -507,8 +546,43 @@ public final class TemplatesTab extends JPanel {
 
         // Laid out like the screenshot window: the settings on the left, the preview on the right.
         form.setMinimumSize(new java.awt.Dimension(300, 0));
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, form, preview);
-        split.setDividerLocation(400);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, form, preview) {
+            /** The sidebar width chosen: the default, or where the divider was dragged. */
+            private int chosen = 400;
+            /** While laying out: the divider moves to fit, which is no choice of the user's. */
+            private boolean fitting;
+
+            {
+                setDividerLocation(chosen);
+                addPropertyChangeListener(DIVIDER_LOCATION_PROPERTY, event -> {
+                    if (!fitting) {
+                        chosen = getDividerLocation();
+                    }
+                });
+            }
+
+            /**
+             * A narrower window takes its width from the sidebar too, down to the sidebar's minimum, so the preview
+             * keeps the room for its controls; a wider one gives the sidebar its chosen width back. The split pane
+             * alone would keep the divider where it is and narrow the preview only.
+             */
+            @Override
+            public void doLayout() {
+                fitting = true;
+                try {
+                    if (getWidth() > 0) {
+                        int most = getWidth() - getInsets().right - getDividerSize() - preview.getMinimumSize().width;
+                        int location = Math.max(getInsets().left + form.getMinimumSize().width, Math.min(chosen, most));
+                        if (location != getDividerLocation()) {
+                            setDividerLocation(location);
+                        }
+                    }
+                    super.doLayout();
+                } finally {
+                    fitting = false;
+                }
+            }
+        };
         split.setBorder(null);
         JPanel body = new JPanel(new BorderLayout());
         body.add(nameRow, BorderLayout.NORTH);

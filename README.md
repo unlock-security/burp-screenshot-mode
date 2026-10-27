@@ -45,7 +45,7 @@ The screenshot window, in Burp's light and dark themes:
 ![Screenshot Mode window, light theme](assets/window-light.png)
 ![Screenshot Mode window, dark theme](assets/window-dark.png)
 
-Templates are managed in the *Screenshot Mode* suite tab:
+Templates are managed in Burp's settings, in the *Screenshot Mode* panel:
 
 ![Templates tab](assets/templates.png)
 
@@ -64,7 +64,7 @@ What ends up in your report:
 3. **Copy image** (**⌘C** / **Ctrl+C**) or **Save PNG…** (**⌘S** / **Ctrl+S**).
 
 Changes made in the screenshot window apply to that message only: **Update template** or **Save as new…** keeps
-them. The *Screenshot Mode* suite tab manages the templates.
+them. The *Screenshot Mode* panel of Burp's settings manages the templates.
 
 > [!NOTE]
 > The path-only URL bar hides the host from the URL, not from headers such as `Host` or `Referer`.

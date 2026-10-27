@@ -8,18 +8,20 @@ import burp.api.montoya.ui.Theme;
 import burp.api.montoya.ui.hotkey.HotKey;
 import burp.api.montoya.ui.hotkey.HotKeyContext;
 import burp.api.montoya.ui.hotkey.HotKeyEvent;
-import it.unlocksecurity.burp.screenshotmode.render.MessageData;
+import burp.api.montoya.ui.settings.SettingsPanel;
 import it.unlocksecurity.burp.screenshotmode.storage.PreferenceStore;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
 import it.unlocksecurity.burp.screenshotmode.ui.Host;
 import it.unlocksecurity.burp.screenshotmode.ui.ScreenshotLauncher;
 import it.unlocksecurity.burp.screenshotmode.ui.TemplatesTab;
 import java.awt.Font;
+import java.util.Set;
+import javax.swing.JComponent;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-/** Burp Suite port of the Caido "Screenshot Mode" plugin. */
+/** Renders request/response pairs as report-ready screenshots. */
 public final class ScreenshotModeExtension implements BurpExtension {
 
     static final String NAME = "Screenshot Mode";
@@ -59,7 +61,7 @@ public final class ScreenshotModeExtension implements BurpExtension {
         templates.initialize();
         ScreenshotLauncher launcher = new ScreenshotLauncher(host, templates);
 
-        api.userInterface().registerSuiteTab(NAME, new TemplatesTab(templates, host));
+        registerTemplatesPanel(api, new TemplatesTab(templates, host));
         api.userInterface().registerContextMenuItemsProvider(
             new ScreenshotContextMenu(requestResponse -> open(api, launcher, requestResponse))
         );
@@ -77,25 +79,30 @@ public final class ScreenshotModeExtension implements BurpExtension {
     }
 
     private static void open(MontoyaApi api, ScreenshotLauncher launcher, HttpRequestResponse requestResponse) {
-        MessageData data;
+        launcher.open(() -> BurpMessages.toMessageData(requestResponse), error -> reportOpenError(api, error));
+    }
+
+    /**
+     * The templates are settings, so they live in Burp's settings window. Burp versions predating settings panels
+     * get a suite tab instead.
+     */
+    private static void registerTemplatesPanel(MontoyaApi api, TemplatesTab tab) {
         try {
-            data = BurpMessages.toMessageData(requestResponse);
-        } catch (RuntimeException e) {
-            reportOpenError(api, e);
-            return;
-        }
-        // Hotkey handlers may run outside the Swing thread: open the window there, still reporting failures.
-        Runnable show = () -> {
-            try {
-                launcher.open(data);
-            } catch (RuntimeException | StackOverflowError e) {
-                reportOpenError(api, e);
-            }
-        };
-        if (SwingUtilities.isEventDispatchThread()) {
-            show.run();
-        } else {
-            SwingUtilities.invokeLater(show);
+            api.userInterface().registerSettingsPanel(
+                new SettingsPanel() {
+                    @Override
+                    public JComponent uiComponent() {
+                        return tab;
+                    }
+
+                    @Override
+                    public Set<String> keywords() {
+                        return Set.of("Screenshot", "Template", "Redaction", "Highlight");
+                    }
+                }
+            );
+        } catch (Throwable e) {
+            api.userInterface().registerSuiteTab(NAME, tab);
         }
     }
 
