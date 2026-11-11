@@ -161,7 +161,9 @@ the value (for highlights, the whole line) of named headers in both messages, fo
 lines; a pattern rule matches its regex or literal in each of its `targets`. `Rule.appliesTo` decides which rules run
 on each part, off rules included.
 The URL bar is a `MessageView` too: `RuleEngine.apply` with the rules that apply to the `URL`, no header filter and no
-syntax colors. `RuleEngine.apply` also reports a `RuleStatus` per rule (matches, invalid regex, stopped early), which
+syntax colors, hidden when it has nothing to show (a response without a request has no path). The screenshot window tells the
+form what the message gives the bar (`SettingsForm.setMessageUrl`): the URL bar choice is disabled only without any
+URL, since Full URL still shows the service of a response without a request. `RuleEngine.apply` also reports a `RuleStatus` per rule (matches, invalid regex, stopped early), which
 `ContentPanel` collects by rule identity: the screenshot window shows it on each rule's line in `ui.RuleList` and
 asks before exporting when a redaction failed.
 `render.pretty` holds one formatter per body format behind `PrettyPrinter`, its only public class, writing through

@@ -367,6 +367,19 @@ class ContentPanelTest {
     }
 
     @Test
+    void hidesAnEmptyUrlBar() throws Throwable {
+        Settings settings = BuiltInTemplates.defaults();
+        settings.url = UrlMode.PATH;
+        assertFalse(
+            rendered("https://example.com:443", settings).urlBar().isVisible(),
+            "a response without a request has no path"
+        );
+        settings.url = UrlMode.FULL;
+        assertTrue(rendered("https://example.com:443", settings).urlBar().isVisible(), "but it has a service");
+        assertFalse(rendered("", settings).urlBar().isVisible(), "nor, maybe, a service");
+    }
+
+    @Test
     void recordsWhatEachRuleDidAcrossRequestResponseAndUrl() throws Throwable {
         Settings settings = new Settings();
         RedactionRule url = RedactionRule.create("abc", RuleTarget.URL, RedactionMode.REPLACE, MatchMode.STRING);

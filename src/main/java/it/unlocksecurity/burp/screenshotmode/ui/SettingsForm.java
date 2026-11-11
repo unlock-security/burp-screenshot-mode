@@ -103,6 +103,11 @@ final class SettingsForm extends JPanel {
     private JSpinner heightPixels;
     private boolean showingSize;
     private final JButton restoreAppearance = Widgets.button("Restore defaults");
+    private SegmentedControl<UrlMode> urlBar;
+    private JLabel urlBarLabel;
+    /** What the message on screen gives the URL bar: see {@link #setMessageUrl}. */
+    private boolean messageHasRequest = true;
+    private boolean messageHasUrl = true;
     private Chooser chooser = (title, message, action, safe) -> Widgets.choose(this, title, message, action, safe);
 
     /** Asks a two-option question, as {@link Widgets#choose}; replaced in tests. */
@@ -190,6 +195,32 @@ final class SettingsForm extends JPanel {
     void setMessage(HeadersTab.InMessage message) {
         headers.setMessage(message);
         updateCounts();
+    }
+
+    /**
+     * Tells the Appearance tab what the message on screen gives the URL bar. A response without a request has no path,
+     * so Path only shows no bar, but Full URL still shows the service; without a URL at all, no choice shows anything.
+     */
+    void setMessageUrl(boolean hasRequest, boolean hasUrl) {
+        messageHasRequest = hasRequest;
+        messageHasUrl = hasUrl;
+        updateUrlBar();
+    }
+
+    private void updateUrlBar() {
+        String tooltip = !messageHasUrl
+            ? "Burp has no URL for this response"
+            : !messageHasRequest
+              ? "A response without a request has no path: Path only shows no URL bar"
+              : null;
+        for (JComponent component : new JComponent[] { urlBar, urlBarLabel }) {
+            component.setEnabled(messageHasUrl);
+            component.setToolTipText(tooltip);
+        }
+    }
+
+    SegmentedControl<UrlMode> urlBar() {
+        return urlBar;
     }
 
     /**
@@ -711,11 +742,12 @@ final class SettingsForm extends JPanel {
         addRow(grid, row++, "Theme", theme, "Colors of the screenshot", false);
 
         addHeading(grid, row++, "Content");
-        SegmentedControl<UrlMode> url = Widgets.segmented(UrlMode.values(), settings.url, value -> {
+        urlBar = Widgets.segmented(UrlMode.values(), settings.url, value -> {
             settings.url = value;
             onChange.run();
         });
-        addRow(grid, row++, "URL bar", url, null, true);
+        urlBarLabel = addRow(grid, row++, "URL bar", urlBar, null, true);
+        updateUrlBar();
 
         SegmentedControl<MessageMode> messages = Widgets.segmented(MessageMode.values(), settings.messages, value -> {
             settings.messages = value;

@@ -284,7 +284,6 @@ final class ContentPanel extends JPanel {
         urlLabel.setFont(ui.deriveFont(Font.BOLD, ui.getSize2D() - 2));
         urlLabel.setForeground(palette.muted());
         urlBox.setBackground(palette.codeBackground());
-        urlHeader.setVisible(only == null ? settings.url != UrlMode.HIDDEN : only == RuleTarget.URL);
         urlLabel.setText(settings.url == UrlMode.PATH ? "Path" : "URL");
         Decorated decoratedUrl = decorate(
             data.url() == null ? "" : data.url(),
@@ -296,6 +295,10 @@ final class ContentPanel extends JPanel {
             // Cut after the rules ran, so only already redacted text can show: rules match the same in both modes.
             decoratedUrl = decoratedUrl.from(pathStart(decoratedUrl.text()));
         }
+        // An empty bar says nothing: a response without a request has no path, and maybe no URL at all.
+        urlHeader.setVisible(
+            only == null ? settings.url != UrlMode.HIDDEN && !decoratedUrl.text().isEmpty() : only == RuleTarget.URL
+        );
         url.render(decoratedUrl, List.of(), palette, mono);
         url.setBackground(palette.codeBackground());
 

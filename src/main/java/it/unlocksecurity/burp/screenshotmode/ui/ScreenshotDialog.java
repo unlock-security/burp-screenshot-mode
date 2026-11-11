@@ -438,6 +438,7 @@ final class ScreenshotDialog extends JDialog {
             host.editorFont().get(),
             HeadersTab.InMessage.of(data)
         );
+        form.setMessageUrl(data.requestText() != null, data.url() != null && !data.url().isEmpty());
         form.setUndo(() -> undo(false));
         form.tabs().setSelectedIndex(selectedTab);
         form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
