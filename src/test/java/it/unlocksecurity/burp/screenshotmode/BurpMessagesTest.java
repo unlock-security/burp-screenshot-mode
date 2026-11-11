@@ -2,11 +2,14 @@ package it.unlocksecurity.burp.screenshotmode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import burp.api.montoya.core.ByteArray;
+import burp.api.montoya.http.HttpService;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.message.responses.HttpResponse;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.render.MessageText;
 import java.lang.reflect.Proxy;
@@ -56,6 +59,34 @@ class BurpMessagesTest {
         assertEquals(BurpMessages.key(URL, bytes(request)), data.key());
     }
 
+    @Test
+    void readsAResponseWithoutARequest() {
+        byte[] response = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
+
+        MessageData data = BurpMessages.toMessageData(responseOnly(bytes(response), service()));
+
+        assertNull(data.requestText(), "no request to show");
+        assertEquals("HTTP/1.1 200 OK\nContent-Length: 0\n\n", data.responseText());
+        assertEquals(response.length, data.responseLength());
+        assertEquals("https://example.com:443", data.url(), "the service, with no path");
+        assertEquals(BurpMessages.responseKey(data.url(), bytes(response)), data.key());
+        assertNotEquals(
+            BurpMessages.key(data.url(), bytes(response)),
+            data.key(),
+            "not the key of a request with the same bytes"
+        );
+    }
+
+    @Test
+    void aResponseWithoutARequestOrServiceHasNoUrl() {
+        byte[] response = "HTTP/1.1 204 No Content\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
+
+        MessageData data = BurpMessages.toMessageData(responseOnly(bytes(response), null));
+
+        assertEquals("", data.url());
+        assertNull(data.requestText());
+    }
+
     private static byte[] body(int length, byte fill) {
         byte[] head = "POST /upload HTTP/1.1\r\nHost: example.com\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
         byte[] bytes = new byte[length];
@@ -98,6 +129,36 @@ class BurpMessagesTest {
                 switch (method) {
                     case "request" -> request;
                     case "timingData" -> Optional.empty();
+                    default -> null;
+                }
+        );
+    }
+
+    private static HttpRequestResponse responseOnly(ByteArray responseBytes, HttpService service) {
+        HttpResponse response = proxy(HttpResponse.class, (method, args) ->
+            method.equals("toByteArray") ? responseBytes : null
+        );
+        return proxy(
+            HttpRequestResponse.class,
+            (method, args) ->
+                switch (method) {
+                    case "response" -> response;
+                    case "hasResponse" -> true;
+                    case "httpService" -> service;
+                    case "timingData" -> Optional.empty();
+                    default -> null;
+                }
+        );
+    }
+
+    private static HttpService service() {
+        return proxy(
+            HttpService.class,
+            (method, args) ->
+                switch (method) {
+                    case "secure" -> true;
+                    case "host" -> "example.com";
+                    case "port" -> 443;
                     default -> null;
                 }
         );

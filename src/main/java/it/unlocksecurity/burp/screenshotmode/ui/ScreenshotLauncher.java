@@ -1,5 +1,7 @@
 package it.unlocksecurity.burp.screenshotmode.ui;
 
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
+import it.unlocksecurity.burp.screenshotmode.model.Settings;
 import it.unlocksecurity.burp.screenshotmode.model.Template;
 import it.unlocksecurity.burp.screenshotmode.render.MessageData;
 import it.unlocksecurity.burp.screenshotmode.storage.TemplateStore;
@@ -68,12 +70,21 @@ public final class ScreenshotLauncher {
             return;
         }
         close();
-        SessionState state = states.computeIfAbsent(data.key(), key -> {
-            Template template = store.getDefaultTemplate();
-            return new SessionState(template.settings.copy(), template.id);
-        });
+        SessionState state = states.computeIfAbsent(data.key(), key -> newSession(store.getDefaultTemplate(), data));
         current = new ScreenshotDialog(host.owner().get(), host, store, state, data);
         current.setVisible(true);
+    }
+
+    /**
+     * The default template's settings, showing only the response of a message that has no request: for this message
+     * only, so the window says they differ from the template.
+     */
+    static SessionState newSession(Template template, MessageData data) {
+        Settings settings = template.settings.copy();
+        if (data.requestText() == null && data.responseText() != null) {
+            settings.messages = MessageMode.RESPONSE;
+        }
+        return new SessionState(settings, template.id);
     }
 
     public void close() {

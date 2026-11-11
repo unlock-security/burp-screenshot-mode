@@ -37,7 +37,10 @@ final class ScreenshotContextMenu implements ContextMenuItemsProvider {
         return List.of(item);
     }
 
-    /** The message in the editor, or the one selected row; none with several rows selected. */
+    /**
+     * The message in the editor, or the one selected row, which may have only a response; none with several rows
+     * selected.
+     */
     static Optional<HttpRequestResponse> target(
         Optional<MessageEditorHttpRequestResponse> editor,
         List<HttpRequestResponse> selected
@@ -47,7 +50,7 @@ final class ScreenshotContextMenu implements ContextMenuItemsProvider {
         }
         List<HttpRequestResponse> rows = selected
             .stream()
-            .filter(item -> item != null && item.request() != null)
+            .filter(item -> item != null && (item.request() != null || item.hasResponse()))
             .toList();
         return rows.size() == 1 ? Optional.of(rows.get(0)) : Optional.empty();
     }

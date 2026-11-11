@@ -136,10 +136,12 @@ Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
   only when shorter than the panel's minimum height.
 - `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record, copying out of Burp
   only the part of each message that can be shown. Its `key` (SHA-256 of URL + request bytes, read a chunk at a time)
-  identifies "the same message" across invocations. It runs off the EDT: `ScreenshotLauncher.open(read, failed)` reads
+  identifies "the same message" across invocations. A message can have a response and no request: its `requestText`
+  is `null`, its URL is the service alone (or empty), its key hashes the response (`responseKey`), and
+  `ScreenshotLauncher.newSession` opens it showing only the response, for that message only. It runs off the EDT: `ScreenshotLauncher.open(read, failed)` reads
   the message through `Widgets.inBackground` and opens the window for the latest read only.
 - `ScreenshotContextMenu` picks the target message (editor content wins over table selection; a table offers it only
-  for one selected row, for the menu and the hotkey alike).
+  for one selected row, with a request or a response, for the menu and the hotkey alike).
 
 Everything else (`model`, `storage`, `render`, `ui`) depends only on plain Java/Swing. `ui.Host` is the record of
 suppliers/consumers (fonts, dark theme, owner window, logging, preferences) the UI needs from Burp. This is what lets
