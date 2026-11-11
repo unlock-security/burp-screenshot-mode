@@ -16,8 +16,8 @@ import java.util.HexFormat;
 import java.util.Optional;
 
 /**
- * Converts Montoya request/response pairs into {@link MessageData}. Hashing and copying a large message takes a
- * while: call it off the Swing thread.
+ * Converts Montoya request/response pairs, or a response alone, into {@link MessageData}. Hashing and copying a large
+ * message takes a while: call it off the Swing thread.
  */
 final class BurpMessages {
 
@@ -30,7 +30,7 @@ final class BurpMessages {
         HttpRequest request = requestResponse.request();
         HttpResponse response = requestResponse.response();
         String url = url(request, requestResponse.httpService());
-        ByteArray requestBytes = request.toByteArray();
+        ByteArray requestBytes = request == null ? null : request.toByteArray();
         ByteArray responseBytes = response == null ? null : response.toByteArray();
 
         Long roundtrip = null;
@@ -48,9 +48,9 @@ final class BurpMessages {
         }
 
         return new MessageData(
-            key(url, requestBytes),
+            requestBytes != null ? key(url, requestBytes) : responseKey(url, responseBytes),
             url,
-            text(requestBytes),
+            requestBytes == null ? null : text(requestBytes),
             responseBytes == null ? null : text(responseBytes),
             responseBytes == null ? null : responseBytes.length(),
             roundtrip,
@@ -58,20 +58,23 @@ final class BurpMessages {
         );
     }
 
-    /** Same shape as the Caido plugin: scheme://host:port/path?query, with the port always shown. */
+    /**
+     * scheme://host:port/path?query, with the port always shown. Without a request there is no path: the service
+     * alone, or nothing when Burp doesn't know it either.
+     */
     private static String url(HttpRequest request, HttpService service) {
-        if (service == null) {
+        if (service == null && request != null) {
             service = request.httpService();
         }
         String path;
         try {
-            path = request.path();
+            path = request == null ? "" : request.path();
         } catch (RuntimeException e) {
             path = "";
         }
         if (service == null) {
             try {
-                return request.url();
+                return request == null ? "" : request.url();
             } catch (RuntimeException e) {
                 return path;
             }
@@ -97,13 +100,25 @@ final class BurpMessages {
 
     /** The whole request counts, so an edited body is another message, but it is copied a chunk at a time. */
     static String key(String url, ByteArray request) {
+        return hash(url, (byte) 0, request);
+    }
+
+    /**
+     * Identifies a message that has no request by its response, which can't be taken for a request with the same
+     * bytes.
+     */
+    static String responseKey(String url, ByteArray response) {
+        return hash(url, (byte) 1, response);
+    }
+
+    private static String hash(String url, byte separator, ByteArray message) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             digest.update(url.getBytes(StandardCharsets.UTF_8));
-            digest.update((byte) 0);
-            int length = request.length();
+            digest.update(separator);
+            int length = message == null ? 0 : message.length();
             for (int start = 0; start < length; start += HASH_CHUNK) {
-                digest.update(request.subArray(start, Math.min(length, start + HASH_CHUNK)).getBytes());
+                digest.update(message.subArray(start, Math.min(length, start + HASH_CHUNK)).getBytes());
             }
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException e) {

@@ -29,20 +29,36 @@ class ScreenshotContextMenuTest {
         assertEquals(Optional.empty(), ScreenshotContextMenu.target(Optional.empty(), List.of()));
     }
 
+    @Test
+    void takesARowWithOnlyAResponse() {
+        HttpRequestResponse responseOnly = message(null, true);
+
+        assertEquals(Optional.of(responseOnly), ScreenshotContextMenu.target(Optional.empty(), List.of(responseOnly)));
+    }
+
+    @Test
+    void skipsARowWithNeitherMessage() {
+        assertEquals(Optional.empty(), ScreenshotContextMenu.target(Optional.empty(), List.of(message(null, false))));
+    }
+
     /** A message with a request, as a table row of Burp's has. */
     private static HttpRequestResponse message() {
-        HttpRequest request = proxy(HttpRequest.class, null);
-        return proxy(HttpRequestResponse.class, request);
+        return message(proxy(HttpRequest.class, null, false), true);
+    }
+
+    private static HttpRequestResponse message(HttpRequest request, boolean hasResponse) {
+        return proxy(HttpRequestResponse.class, request, hasResponse);
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> type, HttpRequest request) {
+    private static <T> T proxy(Class<T> type, HttpRequest request, boolean hasResponse) {
         return (T) Proxy.newProxyInstance(
             type.getClassLoader(),
             new Class<?>[] { type },
             (self, method, args) ->
                 switch (method.getName()) {
                     case "request" -> request;
+                    case "hasResponse" -> hasResponse;
                     case "equals" -> self == args[0];
                     case "hashCode" -> System.identityHashCode(self);
                     case "toString" -> type.getSimpleName();

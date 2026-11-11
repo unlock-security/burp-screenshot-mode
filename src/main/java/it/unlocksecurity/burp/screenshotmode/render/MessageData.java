@@ -6,6 +6,8 @@ import java.time.ZonedDateTime;
  * Everything the screenshot needs from a request/response pair, decoupled from the Montoya API.
  *
  * @param key            identifies the message across invocations, to restore per-message screenshot state
+ * @param url            the service alone without a request, empty when Burp doesn't know it either
+ * @param requestText    {@code null} when there is no request, only a response
  * @param responseText   {@code null} when there is no response
  * @param responseLength response size in bytes, {@code null} when there is no response
  * @param roundtripMillis {@code null} when Burp has no timing data

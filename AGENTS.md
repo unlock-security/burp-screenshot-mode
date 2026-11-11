@@ -136,18 +136,21 @@ Package root: `src/main/java/it/unlocksecurity/burp/screenshotmode/`.
   only when shorter than the panel's minimum height.
 - `BurpMessages` converts `HttpRequestResponse` into the Burp-free `render.MessageData` record, copying out of Burp
   only the part of each message that can be shown. Its `key` (SHA-256 of URL + request bytes, read a chunk at a time)
-  identifies "the same message" across invocations. It runs off the EDT: `ScreenshotLauncher.open(read, failed)` reads
+  identifies "the same message" across invocations. A message can have a response and no request: its `requestText`
+  is `null`, its URL is the service alone (or empty), its key hashes the response (`responseKey`), and
+  the window shows only its response (`ContentPanel.shownMessages`) without changing `Settings.messages`, so Revert,
+  template switching and Update template keep working on the template's own choice. It runs off the EDT: `ScreenshotLauncher.open(read, failed)` reads
   the message through `Widgets.inBackground` and opens the window for the latest read only.
 - `ScreenshotContextMenu` picks the target message (editor content wins over table selection; a table offers it only
-  for one selected row, for the menu and the hotkey alike).
+  for one selected row, with a request or a response, for the menu and the hotkey alike).
 
 Everything else (`model`, `storage`, `render`, `ui`) depends only on plain Java/Swing. `ui.Host` is the record of
 suppliers/consumers (fonts, dark theme, owner window, logging, preferences) the UI needs from Burp. This is what lets
 tests construct the full UI and render images without Burp — keep new Burp dependencies behind `Host` or
 `PreferenceStore`.
 
-**Rendering pipeline** (per message half, in `ui.ContentPanel`; a half that `Settings.messages` leaves out is not
-rendered at all, so its rules report nothing):
+**Rendering pipeline** (per message half, in `ui.ContentPanel`; a half that `ContentPanel.shownMessages` leaves out
+is not rendered at all, so its rules report nothing):
 `MessageText.fromBytes` (UTF-8 with ISO-8859-1 fallback, `\n` line breaks, truncation) →
 `pretty.PrettyPrinter.format` (only in Pretty view; runs first so it still sees `Content-Type`; only adds line breaks
 and indentation) →
@@ -159,7 +162,9 @@ the value (for highlights, the whole line) of named headers in both messages, fo
 lines; a pattern rule matches its regex or literal in each of its `targets`. `Rule.appliesTo` decides which rules run
 on each part, off rules included.
 The URL bar is a `MessageView` too: `RuleEngine.apply` with the rules that apply to the `URL`, no header filter and no
-syntax colors. `RuleEngine.apply` also reports a `RuleStatus` per rule (matches, invalid regex, stopped early), which
+syntax colors, hidden when it has nothing to show (a response without a request has no path). The screenshot window tells the
+form what the message has (`SettingsForm.setMessageParts`): without a request, Messages shows Response and is disabled,
+with Layout; the URL bar choice is disabled only without any URL, since Full URL still shows the service. `RuleEngine.apply` also reports a `RuleStatus` per rule (matches, invalid regex, stopped early), which
 `ContentPanel` collects by rule identity: the screenshot window shows it on each rule's line in `ui.RuleList` and
 asks before exporting when a redaction failed.
 `render.pretty` holds one formatter per body format behind `PrettyPrinter`, its only public class, writing through

@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
@@ -284,7 +285,6 @@ final class ContentPanel extends JPanel {
         urlLabel.setFont(ui.deriveFont(Font.BOLD, ui.getSize2D() - 2));
         urlLabel.setForeground(palette.muted());
         urlBox.setBackground(palette.codeBackground());
-        urlHeader.setVisible(only == null ? settings.url != UrlMode.HIDDEN : only == RuleTarget.URL);
         urlLabel.setText(settings.url == UrlMode.PATH ? "Path" : "URL");
         Decorated decoratedUrl = decorate(
             data.url() == null ? "" : data.url(),
@@ -296,13 +296,18 @@ final class ContentPanel extends JPanel {
             // Cut after the rules ran, so only already redacted text can show: rules match the same in both modes.
             decoratedUrl = decoratedUrl.from(pathStart(decoratedUrl.text()));
         }
+        // An empty bar says nothing: a response without a request has no path, and maybe no URL at all.
+        urlHeader.setVisible(
+            only == null ? settings.url != UrlMode.HIDDEN && !decoratedUrl.text().isEmpty() : only == RuleTarget.URL
+        );
         url.render(decoratedUrl, List.of(), palette, mono);
         url.setBackground(palette.codeBackground());
 
         // A message left out of the screenshot is not rendered, so its rules match nothing there and can't fail. A
         // single part is shown with every part rendered, for the statuses of all the rules it edits.
-        boolean request = only == null ? settings.messages.shows(RuleTarget.REQUEST) : only == RuleTarget.REQUEST;
-        boolean response = only == null ? settings.messages.shows(RuleTarget.RESPONSE) : only == RuleTarget.RESPONSE;
+        MessageMode shown = shownMessages(data, settings);
+        boolean request = only == null ? shown.shows(RuleTarget.REQUEST) : only == RuleTarget.REQUEST;
+        boolean response = only == null ? shown.shows(RuleTarget.RESPONSE) : only == RuleTarget.RESPONSE;
         if (request || only != null) {
             renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
         }
@@ -398,6 +403,14 @@ final class ContentPanel extends JPanel {
                 ui
             );
         }
+    }
+
+    /**
+     * The messages the screenshot shows: the response alone when there is no request, whatever the settings say, so
+     * that a template saved from this window doesn't show only responses from then on.
+     */
+    static MessageMode shownMessages(MessageData data, Settings settings) {
+        return data.requestText() == null ? MessageMode.RESPONSE : settings.messages;
     }
 
     /** The parts the last render showed only the start of, because they were too long. */

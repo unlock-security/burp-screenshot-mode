@@ -39,7 +39,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -103,6 +102,15 @@ final class SettingsForm extends JPanel {
     private JSpinner heightPixels;
     private boolean showingSize;
     private final JButton restoreAppearance = Widgets.button("Restore defaults");
+    private SegmentedControl<UrlMode> urlBar;
+    private JLabel urlBarLabel;
+    private SegmentedControl<MessageMode> messages;
+    private JLabel messagesLabel;
+    private SegmentedControl<Disposition> layout;
+    private JLabel layoutLabel;
+    /** What the message on screen has: see {@link #setMessageParts}. */
+    private boolean messageHasRequest = true;
+    private boolean messageHasUrl = true;
     private Chooser chooser = (title, message, action, safe) -> Widgets.choose(this, title, message, action, safe);
 
     /** Asks a two-option question, as {@link Widgets#choose}; replaced in tests. */
@@ -190,6 +198,58 @@ final class SettingsForm extends JPanel {
     void setMessage(HeadersTab.InMessage message) {
         headers.setMessage(message);
         updateCounts();
+    }
+
+    /**
+     * Tells the Appearance tab what the message on screen has. A response without a request shows alone, whatever the
+     * settings say, so Messages shows Response and is disabled, with Layout. It has no path, so Path only shows no URL
+     * bar, but Full URL still shows the service; without a URL at all, no URL bar choice shows anything.
+     */
+    void setMessageParts(boolean hasRequest, boolean hasUrl) {
+        messageHasRequest = hasRequest;
+        messageHasUrl = hasUrl;
+        updateMessageParts();
+    }
+
+    private void updateMessageParts() {
+        String urlTooltip = !messageHasUrl
+            ? "Burp has no URL for this response"
+            : !messageHasRequest
+              ? "A response without a request has no path: Path only shows no URL bar"
+              : null;
+        enable(messageHasUrl, urlTooltip, urlBar, urlBarLabel);
+
+        // Only shown, never stored: settings.messages keeps the template's choice for the next message.
+        messages.setValue(messageHasRequest ? settings.messages : MessageMode.RESPONSE);
+        enable(
+            messageHasRequest,
+            messageHasRequest ? "The request, the response or both" : "This message has no request, only a response",
+            messages,
+            messagesLabel
+        );
+        // Kept, not reset, while one message is shown: showing both again brings back the layout chosen before.
+        boolean both = messageHasRequest && settings.messages == MessageMode.BOTH;
+        layout.setEnabled(both);
+        layoutLabel.setEnabled(both);
+    }
+
+    private static void enable(boolean enabled, String tooltip, JComponent... components) {
+        for (JComponent component : components) {
+            component.setEnabled(enabled);
+            component.setToolTipText(tooltip);
+        }
+    }
+
+    SegmentedControl<UrlMode> urlBar() {
+        return urlBar;
+    }
+
+    SegmentedControl<MessageMode> messages() {
+        return messages;
+    }
+
+    SegmentedControl<Disposition> layoutControl() {
+        return layout;
     }
 
     /**
@@ -685,11 +745,11 @@ final class SettingsForm extends JPanel {
             false
         );
 
-        SegmentedControl<Disposition> layout = Widgets.segmented(Disposition.values(), settings.disposition, value -> {
+        layout = Widgets.segmented(Disposition.values(), settings.disposition, value -> {
             settings.disposition = value;
             onChange.run();
         });
-        JLabel layoutLabel = addRow(
+        layoutLabel = addRow(
             grid,
             row++,
             "Layout",
@@ -697,12 +757,6 @@ final class SettingsForm extends JPanel {
             "Request and response side by side, or one above the other, when both are shown",
             false
         );
-        // Kept, not reset, while one message is shown: showing both again brings back the layout chosen before.
-        Consumer<MessageMode> enableLayout = messages -> {
-            layout.setEnabled(messages == MessageMode.BOTH);
-            layoutLabel.setEnabled(messages == MessageMode.BOTH);
-        };
-        enableLayout.accept(settings.messages);
 
         SegmentedControl<ThemeMode> theme = Widgets.segmented(ThemeMode.values(), settings.theme, value -> {
             settings.theme = value;
@@ -711,18 +765,19 @@ final class SettingsForm extends JPanel {
         addRow(grid, row++, "Theme", theme, "Colors of the screenshot", false);
 
         addHeading(grid, row++, "Content");
-        SegmentedControl<UrlMode> url = Widgets.segmented(UrlMode.values(), settings.url, value -> {
+        urlBar = Widgets.segmented(UrlMode.values(), settings.url, value -> {
             settings.url = value;
             onChange.run();
         });
-        addRow(grid, row++, "URL bar", url, null, true);
+        urlBarLabel = addRow(grid, row++, "URL bar", urlBar, null, true);
 
-        SegmentedControl<MessageMode> messages = Widgets.segmented(MessageMode.values(), settings.messages, value -> {
+        messages = Widgets.segmented(MessageMode.values(), settings.messages, value -> {
             settings.messages = value;
-            enableLayout.accept(value);
+            updateMessageParts();
             onChange.run();
         });
-        addRow(grid, row++, "Messages", messages, "The request, the response or both", false);
+        messagesLabel = addRow(grid, row++, "Messages", messages, "The request, the response or both", false);
+        updateMessageParts();
 
         SegmentedControl<Boolean> lineNumbers = new SegmentedControl<>(
             new Boolean[] { true, false },
