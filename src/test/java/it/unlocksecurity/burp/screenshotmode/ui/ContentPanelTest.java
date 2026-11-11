@@ -367,6 +367,23 @@ class ContentPanelTest {
     }
 
     @Test
+    void showsAResponseWithoutARequestAlone() throws Throwable {
+        Settings settings = BuiltInTemplates.defaults();
+        settings.messages = MessageMode.BOTH;
+        MessageData data = new MessageData("key", "https://example.com:443", null, "HTTP/1.1 200 OK\n", 0, null, null);
+        ContentPanel[] content = new ContentPanel[1];
+        onEdt(() -> {
+            content[0] = new ContentPanel();
+            content[0].render(data, settings, Palette.LIGHT, FONT, FONT, null, null);
+        });
+
+        assertFalse(content[0].requestPane().isVisible(), "no \"No request\" placeholder");
+        assertTrue(content[0].responsePane().isVisible());
+        assertEquals(MessageMode.RESPONSE, ContentPanel.shownMessages(data, settings));
+        assertEquals(MessageMode.BOTH, settings.messages, "the settings are left as they are");
+    }
+
+    @Test
     void hidesAnEmptyUrlBar() throws Throwable {
         Settings settings = BuiltInTemplates.defaults();
         settings.url = UrlMode.PATH;

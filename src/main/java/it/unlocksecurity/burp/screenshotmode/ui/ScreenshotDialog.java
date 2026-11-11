@@ -438,7 +438,7 @@ final class ScreenshotDialog extends JDialog {
             host.editorFont().get(),
             HeadersTab.InMessage.of(data)
         );
-        form.setMessageUrl(data.requestText() != null, data.url() != null && !data.url().isEmpty());
+        form.setMessageParts(data.requestText() != null, data.url() != null && !data.url().isEmpty());
         form.setUndo(() -> undo(false));
         form.tabs().setSelectedIndex(selectedTab);
         form.tabs().addChangeListener(event -> selectedTab = form.tabs().getSelectedIndex());
@@ -807,7 +807,7 @@ final class ScreenshotDialog extends JDialog {
             data.requestText(),
             url.copyText(0, url.text().length()),
             data.responseText(),
-            state.settings.messages
+            ContentPanel.shownMessages(data, state.settings)
         );
         chooser.setSelectedFile(ImageCapture.freeFile(chooser.getCurrentDirectory(), name));
         return Widgets.chooseSaveFile(this, chooser, "png");

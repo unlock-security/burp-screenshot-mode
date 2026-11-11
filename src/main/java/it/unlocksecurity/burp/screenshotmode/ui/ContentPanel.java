@@ -2,6 +2,7 @@ package it.unlocksecurity.burp.screenshotmode.ui;
 
 import it.unlocksecurity.burp.screenshotmode.model.Disposition;
 import it.unlocksecurity.burp.screenshotmode.model.HeaderCatalog;
+import it.unlocksecurity.burp.screenshotmode.model.MessageMode;
 import it.unlocksecurity.burp.screenshotmode.model.Rule;
 import it.unlocksecurity.burp.screenshotmode.model.RuleTarget;
 import it.unlocksecurity.burp.screenshotmode.model.Settings;
@@ -304,8 +305,9 @@ final class ContentPanel extends JPanel {
 
         // A message left out of the screenshot is not rendered, so its rules match nothing there and can't fail. A
         // single part is shown with every part rendered, for the statuses of all the rules it edits.
-        boolean request = only == null ? settings.messages.shows(RuleTarget.REQUEST) : only == RuleTarget.REQUEST;
-        boolean response = only == null ? settings.messages.shows(RuleTarget.RESPONSE) : only == RuleTarget.RESPONSE;
+        MessageMode shown = shownMessages(data, settings);
+        boolean request = only == null ? shown.shows(RuleTarget.REQUEST) : only == RuleTarget.REQUEST;
+        boolean response = only == null ? shown.shows(RuleTarget.RESPONSE) : only == RuleTarget.RESPONSE;
         if (request || only != null) {
             renderPane(requestPane, data.requestText(), RuleTarget.REQUEST, settings, palette, mono, ui);
         }
@@ -401,6 +403,14 @@ final class ContentPanel extends JPanel {
                 ui
             );
         }
+    }
+
+    /**
+     * The messages the screenshot shows: the response alone when there is no request, whatever the settings say, so
+     * that a template saved from this window doesn't show only responses from then on.
+     */
+    static MessageMode shownMessages(MessageData data, Settings settings) {
+        return data.requestText() == null ? MessageMode.RESPONSE : settings.messages;
     }
 
     /** The parts the last render showed only the start of, because they were too long. */
